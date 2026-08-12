@@ -1,3 +1,4 @@
+import gc
 import shutil
 import tempfile
 import unittest
@@ -54,6 +55,9 @@ class RetrievalAgentTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.vector_store.close()
+        del self.agent
+        del self.vector_store
+        gc.collect()
         shutil.rmtree(self.temporary_directory)
 
     def test_collection_stores_chunks_and_preserves_metadata(self) -> None:
@@ -137,3 +141,17 @@ class RetrievalAgentTests(unittest.TestCase):
         )
         self.assertEqual(results[0]["page_number"], 3)
         self.assertEqual(results[0]["source"], "persistent.pdf")
+
+    def test_delete_document_removes_all_chroma_records(self) -> None:
+        self.agent.index_document(
+            "document-to-delete",
+            "delete.pdf",
+            [make_chunk(1, 0, "Cats are mammals and popular pets.")],
+        )
+
+        self.agent.delete_document("document-to-delete")
+
+        self.assertEqual(
+            self.vector_store.count_document_chunks("document-to-delete"),
+            0,
+        )

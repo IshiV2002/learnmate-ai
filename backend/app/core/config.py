@@ -5,6 +5,8 @@ from pathlib import Path
 BACKEND_DIRECTORY = Path(__file__).resolve().parents[2]
 UPLOAD_DIRECTORY = BACKEND_DIRECTORY / "uploads"
 CHROMA_DATA_DIRECTORY = BACKEND_DIRECTORY / "chroma_data"
+DATA_DIRECTORY = BACKEND_DIRECTORY / "data"
+SQLITE_DATABASE_PATH = DATA_DIRECTORY / "learnmate.db"
 
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 CHROMA_COLLECTION_NAME = "learnmate_documents"

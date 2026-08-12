@@ -223,3 +223,6 @@ backend/uploads/*
 
 # LearnMate AI local ChromaDB data
 backend/chroma_data/
+
+# LearnMate AI local SQLite data
+backend/data/
