@@ -1,8 +1,12 @@
 from pathlib import Path, PurePosixPath
+from threading import Lock
 from uuid import uuid4
 
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from pydantic import BaseModel, Field, field_validator
+from starlette.concurrency import run_in_threadpool
 
+from app.agents.retrieval_agent import RetrievalAgent, RetrievalAgentError
 from app.core.config import MAX_UPLOAD_SIZE_BYTES, UPLOAD_DIRECTORY
 from app.services.pdf_service import PDFExtractionError, extract_pdf_pages
 from app.services.text_processing_service import chunk_pages
@@ -12,6 +16,44 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 
 ALLOWED_PDF_CONTENT_TYPES = {"application/pdf", "application/x-pdf"}
 PDF_SIGNATURE = b"%PDF-"
+
+_retrieval_agent: RetrievalAgent | None = None
+_retrieval_agent_lock = Lock()
+
+
+class DocumentSearchRequest(BaseModel):
+    """Validated input for a document semantic search."""
+
+    document_id: str
+    query: str
+    top_k: int = Field(default=3, ge=1, le=10)
+
+    @field_validator("document_id", "query")
+    @classmethod
+    def value_must_not_be_blank(cls, value: str) -> str:
+        cleaned_value = value.strip()
+
+        if not cleaned_value:
+            raise ValueError("Value cannot be empty.")
+
+        return cleaned_value
+
+
+def get_retrieval_agent() -> RetrievalAgent:
+    """Create one reusable Retrieval Agent when it is first needed."""
+    global _retrieval_agent
+
+    if _retrieval_agent is None:
+        with _retrieval_agent_lock:
+            if _retrieval_agent is None:
+                try:
+                    _retrieval_agent = RetrievalAgent()
+                except Exception as error:
+                    raise RetrievalAgentError(
+                        "The Retrieval Agent could not be initialized."
+                    ) from error
+
+    return _retrieval_agent
 
 
 def _safe_display_filename(filename: str | None) -> str:
@@ -117,15 +159,71 @@ async def upload_document(file: UploadFile = File(...)) -> dict[str, object]:
         ) from error
 
     chunks = chunk_pages(pages)
+
+    if not chunks:
+        try:
+            stored_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "The PDF contains no extractable text. "
+                "Scanned or image-only PDFs are not currently supported."
+            ),
+        )
+
     pages_with_text = len({chunk["page_number"] for chunk in chunks})
+    document_id = str(uuid4())
+
+    try:
+        await run_in_threadpool(
+            get_retrieval_agent().index_document,
+            document_id,
+            original_filename,
+            chunks,
+        )
+    except RetrievalAgentError as error:
+        try:
+            stored_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="The PDF was processed but could not be indexed.",
+        ) from error
 
     return {
-        "message": "PDF uploaded and processed successfully",
+        "message": "PDF uploaded, processed, and indexed successfully",
         "document": {
+            "document_id": document_id,
             "original_filename": original_filename,
             "page_count": len(pages),
             "pages_with_text": pages_with_text,
             "chunk_count": len(chunks),
             "file_size_bytes": len(file_content),
         },
+    }
+
+
+@router.post("/search")
+def search_documents(request: DocumentSearchRequest) -> dict[str, object]:
+    """Search the selected indexed document using semantic similarity."""
+    try:
+        results = get_retrieval_agent().search(
+            document_id=request.document_id,
+            query=request.query,
+            top_k=request.top_k,
+        )
+    except RetrievalAgentError as error:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="The semantic search could not be completed.",
+        ) from error
+
+    return {
+        "query": request.query,
+        "results": results,
     }
