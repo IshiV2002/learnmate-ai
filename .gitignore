@@ -220,3 +220,6 @@ __marimo__/
 # LearnMate AI local uploads
 backend/uploads/*
 !backend/uploads/.gitkeep
+
+# LearnMate AI local ChromaDB data
+backend/chroma_data/
