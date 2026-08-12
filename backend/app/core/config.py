@@ -11,6 +11,12 @@ SQLITE_DATABASE_PATH = DATA_DIRECTORY / "learnmate.db"
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 CHROMA_COLLECTION_NAME = "learnmate_documents"
 
+# Only the local Vite development servers may call this API from a browser.
+FRONTEND_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
 DEFAULT_MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
 
 # Text chunks use words because this is simple to understand and inspect.
