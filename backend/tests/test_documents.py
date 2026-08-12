@@ -308,6 +308,33 @@ class DocumentSearchApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 422)
 
+    def test_local_frontend_origin_is_allowed_by_cors(self) -> None:
+        response = self.client.options(
+            "/documents",
+            headers={
+                "Origin": "http://localhost:5173",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.headers["access-control-allow-origin"],
+            "http://localhost:5173",
+        )
+
+    def test_unknown_frontend_origin_is_not_allowed_by_cors(self) -> None:
+        response = self.client.options(
+            "/documents",
+            headers={
+                "Origin": "https://untrusted.example",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+
+        self.assertNotEqual(response.status_code, 200)
+        self.assertNotIn("access-control-allow-origin", response.headers)
+
     def test_empty_document_id_is_rejected(self) -> None:
         response = self.client.post(
             "/documents/search",
