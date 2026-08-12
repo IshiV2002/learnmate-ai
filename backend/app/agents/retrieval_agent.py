@@ -71,3 +71,12 @@ class RetrievalAgent:
             raise RetrievalAgentError(
                 "The semantic search could not be completed."
             ) from error
+
+    def delete_document(self, document_id: str) -> None:
+        """Remove every indexed chunk belonging to one document."""
+        try:
+            self.vector_store_service.delete_document(document_id)
+        except Exception as error:
+            raise RetrievalAgentError(
+                "The document could not be removed from semantic search."
+            ) from error
