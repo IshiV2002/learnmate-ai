@@ -65,6 +65,7 @@ class DocumentUploadTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(document_metadata["original_filename"], "lecture.pdf")
         self.assertEqual(document_metadata["page_count"], 1)
         self.assertEqual(document_metadata["pages_with_text"], 1)
+        self.assertEqual(document_metadata["chunk_count"], 1)
         self.assertEqual(document_metadata["file_size_bytes"], len(pdf_content))
         self.assertNotIn("stored_filename", document_metadata)
         self.assertNotIn("pages", response)
