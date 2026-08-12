@@ -5,6 +5,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile, status
 
 from app.core.config import MAX_UPLOAD_SIZE_BYTES, UPLOAD_DIRECTORY
 from app.services.pdf_service import PDFExtractionError, extract_pdf_pages
+from app.services.text_processing_service import chunk_pages
 
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -115,7 +116,8 @@ async def upload_document(file: UploadFile = File(...)) -> dict[str, object]:
             detail=str(error),
         ) from error
 
-    pages_with_text = sum(1 for page in pages if page["text"].strip())
+    chunks = chunk_pages(pages)
+    pages_with_text = len({chunk["page_number"] for chunk in chunks})
 
     return {
         "message": "PDF uploaded and processed successfully",
@@ -123,6 +125,7 @@ async def upload_document(file: UploadFile = File(...)) -> dict[str, object]:
             "original_filename": original_filename,
             "page_count": len(pages),
             "pages_with_text": pages_with_text,
+            "chunk_count": len(chunks),
             "file_size_bytes": len(file_content),
         },
     }
