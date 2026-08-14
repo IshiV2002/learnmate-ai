@@ -66,3 +66,29 @@ export function deleteDocument(documentId) {
     method: "DELETE",
   });
 }
+
+export function analyzeQuizSubmission(payload) {
+  return apiRequest("/recommendations/analyze", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getRecommendation(recommendationId) {
+  return apiRequest("/recommendations/" + encodeURIComponent(recommendationId));
+}
+
+export function getStudentRecommendations(studentId) {
+  return apiRequest(
+    "/recommendations/student/" + encodeURIComponent(studentId),
+  );
+}
+
+export function getTutorHandoff(recommendationId) {
+  return apiRequest(
+    "/recommendations/" + encodeURIComponent(recommendationId) + "/tutor-handoff",
+  );
+}

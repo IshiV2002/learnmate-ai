@@ -4,15 +4,19 @@ from pathlib import Path
 from threading import Lock
 
 from app.core.config import SQLITE_DATABASE_PATH
-from app.database.models import DocumentRecord
+from app.database.models import (
+    DocumentRecord,
+    QuizAttemptRecord,
+    RecommendationRecord,
+)
 
 
 class DocumentDatabaseError(Exception):
-    """Raised when document metadata cannot be read or changed."""
+    """Raised when document, quiz, or recommendation data cannot be read or changed."""
 
 
 class DocumentDatabase:
-    """Store document metadata in a small local SQLite database."""
+    """Store document metadata, quiz attempts, and recommendations in local SQLite."""
 
     def __init__(self, database_path: Path = SQLITE_DATABASE_PATH) -> None:
         self.database_path = database_path
@@ -20,7 +24,7 @@ class DocumentDatabase:
         self._initialization_lock = Lock()
 
     def initialize(self) -> None:
-        """Create the database and documents table once when first needed."""
+        """Create database tables and indexes once when first needed."""
         if self._initialized:
             return
 
@@ -47,9 +51,74 @@ class DocumentDatabase:
                             )
                             """
                         )
+                        connection.execute(
+                            """
+                            CREATE TABLE IF NOT EXISTS quiz_attempts (
+                                attempt_id TEXT PRIMARY KEY,
+                                student_id TEXT NOT NULL,
+                                document_id TEXT NOT NULL,
+                                quiz_id TEXT NOT NULL,
+                                quiz_title TEXT NOT NULL,
+                                total_questions INTEGER NOT NULL,
+                                score INTEGER NOT NULL,
+                                time_spent_seconds INTEGER NOT NULL,
+                                submission_data_json TEXT NOT NULL,
+                                created_at TEXT NOT NULL
+                            )
+                            """
+                        )
+                        connection.execute(
+                            """
+                            CREATE INDEX IF NOT EXISTS idx_quiz_attempts_student
+                            ON quiz_attempts(student_id)
+                            """
+                        )
+                        connection.execute(
+                            """
+                            CREATE INDEX IF NOT EXISTS idx_quiz_attempts_document
+                            ON quiz_attempts(document_id)
+                            """
+                        )
+                        connection.execute(
+                            """
+                            CREATE TABLE IF NOT EXISTS recommendations (
+                                recommendation_id TEXT PRIMARY KEY,
+                                attempt_id TEXT NOT NULL,
+                                student_id TEXT NOT NULL,
+                                document_id TEXT NOT NULL,
+                                overall_score_percentage REAL NOT NULL,
+                                mastery_level TEXT NOT NULL,
+                                summary TEXT NOT NULL,
+                                topic_mastery_json TEXT NOT NULL,
+                                knowledge_gaps_json TEXT NOT NULL,
+                                action_items_json TEXT NOT NULL,
+                                tutor_handoff_json TEXT NOT NULL,
+                                created_at TEXT NOT NULL,
+                                FOREIGN KEY(attempt_id) REFERENCES quiz_attempts(attempt_id)
+                            )
+                            """
+                        )
+                        connection.execute(
+                            """
+                            CREATE INDEX IF NOT EXISTS idx_recommendations_student
+                            ON recommendations(student_id)
+                            """
+                        )
+                        connection.execute(
+                            """
+                            CREATE INDEX IF NOT EXISTS idx_recommendations_document
+                            ON recommendations(document_id)
+                            """
+                        )
+                        connection.execute(
+                            """
+                            CREATE INDEX IF NOT EXISTS idx_recommendations_attempt
+                            ON recommendations(attempt_id)
+                            """
+                        )
             except (OSError, sqlite3.Error) as error:
                 raise DocumentDatabaseError(
-                    "The document database could not be initialized."
+                    "The learning database could not be initialized."
                 ) from error
 
             self._initialized = True
@@ -73,6 +142,42 @@ class DocumentDatabase:
             file_size_bytes=row["file_size_bytes"],
             created_at=row["created_at"],
         )
+
+    @staticmethod
+    def _row_to_quiz_attempt(row: sqlite3.Row) -> QuizAttemptRecord:
+        return QuizAttemptRecord(
+            attempt_id=row["attempt_id"],
+            student_id=row["student_id"],
+            document_id=row["document_id"],
+            quiz_id=row["quiz_id"],
+            quiz_title=row["quiz_title"],
+            total_questions=row["total_questions"],
+            score=row["score"],
+            time_spent_seconds=row["time_spent_seconds"],
+            submission_data_json=row["submission_data_json"],
+            created_at=row["created_at"],
+        )
+
+    @staticmethod
+    def _row_to_recommendation(row: sqlite3.Row) -> RecommendationRecord:
+        return RecommendationRecord(
+            recommendation_id=row["recommendation_id"],
+            attempt_id=row["attempt_id"],
+            student_id=row["student_id"],
+            document_id=row["document_id"],
+            overall_score_percentage=float(row["overall_score_percentage"]),
+            mastery_level=row["mastery_level"],
+            summary=row["summary"],
+            topic_mastery_json=row["topic_mastery_json"],
+            knowledge_gaps_json=row["knowledge_gaps_json"],
+            action_items_json=row["action_items_json"],
+            tutor_handoff_json=row["tutor_handoff_json"],
+            created_at=row["created_at"],
+        )
+
+    # -----------------------------------------------------------------
+    # Document Operations
+    # -----------------------------------------------------------------
 
     def create_document(self, document: DocumentRecord) -> None:
         """Insert metadata after the PDF has been indexed in ChromaDB."""
@@ -158,3 +263,191 @@ class DocumentDatabase:
             ) from error
 
         return cursor.rowcount > 0
+
+    # -----------------------------------------------------------------
+    # Quiz Attempt Operations
+    # -----------------------------------------------------------------
+
+    def save_quiz_attempt(self, attempt: QuizAttemptRecord) -> None:
+        """Persist a student's quiz attempt and question responses."""
+        try:
+            with closing(self._connect()) as connection:
+                with connection:
+                    connection.execute(
+                        """
+                        INSERT INTO quiz_attempts (
+                            attempt_id,
+                            student_id,
+                            document_id,
+                            quiz_id,
+                            quiz_title,
+                            total_questions,
+                            score,
+                            time_spent_seconds,
+                            submission_data_json,
+                            created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            attempt.attempt_id,
+                            attempt.student_id,
+                            attempt.document_id,
+                            attempt.quiz_id,
+                            attempt.quiz_title,
+                            attempt.total_questions,
+                            attempt.score,
+                            attempt.time_spent_seconds,
+                            attempt.submission_data_json,
+                            attempt.created_at,
+                        ),
+                    )
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The quiz attempt could not be saved."
+            ) from error
+
+    def get_quiz_attempt(self, attempt_id: str) -> QuizAttemptRecord | None:
+        """Retrieve a quiz attempt by its unique attempt ID."""
+        try:
+            with closing(self._connect()) as connection:
+                row = connection.execute(
+                    "SELECT * FROM quiz_attempts WHERE attempt_id = ?",
+                    (attempt_id,),
+                ).fetchone()
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The quiz attempt could not be read."
+            ) from error
+
+        if row is None:
+            return None
+
+        return self._row_to_quiz_attempt(row)
+
+    def list_student_quiz_attempts(
+        self, student_id: str
+    ) -> list[QuizAttemptRecord]:
+        """Retrieve all quiz attempts submitted by a student."""
+        try:
+            with closing(self._connect()) as connection:
+                rows = connection.execute(
+                    """
+                    SELECT * FROM quiz_attempts
+                    WHERE student_id = ?
+                    ORDER BY created_at DESC
+                    """,
+                    (student_id,),
+                ).fetchall()
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The student's quiz attempts could not be listed."
+            ) from error
+
+        return [self._row_to_quiz_attempt(row) for row in rows]
+
+    # -----------------------------------------------------------------
+    # Recommendation Operations
+    # -----------------------------------------------------------------
+
+    def save_recommendation(self, recommendation: RecommendationRecord) -> None:
+        """Save a generated recommendation record."""
+        try:
+            with closing(self._connect()) as connection:
+                with connection:
+                    connection.execute(
+                        """
+                        INSERT INTO recommendations (
+                            recommendation_id,
+                            attempt_id,
+                            student_id,
+                            document_id,
+                            overall_score_percentage,
+                            mastery_level,
+                            summary,
+                            topic_mastery_json,
+                            knowledge_gaps_json,
+                            action_items_json,
+                            tutor_handoff_json,
+                            created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            recommendation.recommendation_id,
+                            recommendation.attempt_id,
+                            recommendation.student_id,
+                            recommendation.document_id,
+                            recommendation.overall_score_percentage,
+                            recommendation.mastery_level,
+                            recommendation.summary,
+                            recommendation.topic_mastery_json,
+                            recommendation.knowledge_gaps_json,
+                            recommendation.action_items_json,
+                            recommendation.tutor_handoff_json,
+                            recommendation.created_at,
+                        ),
+                    )
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The recommendation could not be saved."
+            ) from error
+
+    def get_recommendation(
+        self, recommendation_id: str
+    ) -> RecommendationRecord | None:
+        """Retrieve a specific recommendation by its ID."""
+        try:
+            with closing(self._connect()) as connection:
+                row = connection.execute(
+                    "SELECT * FROM recommendations WHERE recommendation_id = ?",
+                    (recommendation_id,),
+                ).fetchone()
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The recommendation could not be read."
+            ) from error
+
+        if row is None:
+            return None
+
+        return self._row_to_recommendation(row)
+
+    def get_recommendation_by_attempt(
+        self, attempt_id: str
+    ) -> RecommendationRecord | None:
+        """Retrieve recommendation linked to a specific quiz attempt."""
+        try:
+            with closing(self._connect()) as connection:
+                row = connection.execute(
+                    "SELECT * FROM recommendations WHERE attempt_id = ?",
+                    (attempt_id,),
+                ).fetchone()
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The attempt recommendation could not be read."
+            ) from error
+
+        if row is None:
+            return None
+
+        return self._row_to_recommendation(row)
+
+    def list_student_recommendations(
+        self, student_id: str
+    ) -> list[RecommendationRecord]:
+        """List all recommendations generated for a student, newest first."""
+        try:
+            with closing(self._connect()) as connection:
+                rows = connection.execute(
+                    """
+                    SELECT * FROM recommendations
+                    WHERE student_id = ?
+                    ORDER BY created_at DESC
+                    """,
+                    (student_id,),
+                ).fetchall()
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The student recommendations could not be listed."
+            ) from error
+
+        return [self._row_to_recommendation(row) for row in rows]
