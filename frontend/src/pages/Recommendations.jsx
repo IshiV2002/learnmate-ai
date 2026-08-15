@@ -122,21 +122,42 @@ const PRESET_QUIZZES = [
   },
 ];
 
-export default function Recommendations({ onLaunchTutor = null }) {
+export default function Recommendations({ initialSubmission, initialRecommendation, onLaunchTutor = null }) {
   const [documents, setDocuments] = useState([]);
-  const [selectedDocId, setSelectedDocId] = useState("");
-  const [studentId, setStudentId] = useState("student_demo_01");
+  const [selectedDocId, setSelectedDocId] = useState(initialSubmission?.document_id || "");
+  const [studentId, setStudentId] = useState(initialSubmission?.student_id || "student_demo_01");
   const [selectedPreset, setSelectedPreset] = useState(PRESET_QUIZZES[0]);
-  const [activeQuestions, setActiveQuestions] = useState(PRESET_QUIZZES[0].questions);
+  const [activeQuestions, setActiveQuestions] = useState(
+    initialSubmission?.questions || PRESET_QUIZZES[0].questions
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [recommendationResult, setRecommendationResult] = useState(null);
+  const [recommendationResult, setRecommendationResult] = useState(initialRecommendation || null);
   const [errorMessage, setErrorMessage] = useState("");
   const [showTutorModal, setShowTutorModal] = useState(false);
-  const [activeTab, setActiveTab] = useState("take_quiz"); // "take_quiz" | "dashboard"
+  const [activeTab, setActiveTab] = useState(initialRecommendation || initialSubmission ? "dashboard" : "take_quiz");
 
   useEffect(() => {
     loadDocuments();
-  }, []);
+    if (initialRecommendation) {
+      setRecommendationResult(initialRecommendation);
+      setActiveTab("dashboard");
+    } else if (initialSubmission) {
+      analyzeExternalSubmission(initialSubmission);
+    }
+  }, [initialRecommendation, initialSubmission]);
+
+  async function analyzeExternalSubmission(submission) {
+    setIsSubmitting(true);
+    try {
+      const res = await analyzeQuizSubmission(submission);
+      setRecommendationResult(res);
+      setActiveTab("dashboard");
+    } catch (err) {
+      setErrorMessage(err?.message || "Failed to analyze quiz submission.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   async function loadDocuments() {
     try {

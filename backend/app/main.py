@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.documents import router as documents_router
+from app.api.quizzes import router as quizzes_router
 from app.api.recommendations import router as recommendations_router
 from app.api.tutor import router as tutor_router
 from app.core.config import FRONTEND_ORIGINS
@@ -16,6 +17,7 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 app.include_router(documents_router)
+app.include_router(quizzes_router)
 app.include_router(recommendations_router)
 app.include_router(tutor_router)
 

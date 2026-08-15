@@ -334,3 +334,161 @@ class TutorSessionResponse(BaseModel):
     created_at: str
     updated_at: str
 
+
+# =====================================================================
+# Quiz Generation & Evaluation Data Models & Schemas
+# =====================================================================
+
+
+@dataclass(frozen=True)
+class QuizRecord:
+    """Persisted quiz generated from lecture document context."""
+
+    quiz_id: str
+    document_id: str
+    title: str
+    topic: str
+    total_questions: int
+    difficulty: str
+    questions_json: str
+    created_at: str
+
+    def to_dict(self, include_solutions: bool = True) -> dict[str, Any]:
+        """Return the quiz dictionary, optionally omitting answers for active test-takers."""
+        data = asdict(self)
+        try:
+            questions = json.loads(self.questions_json)
+            if not include_solutions:
+                for q in questions:
+                    q.pop("correct_answer", None)
+                    q.pop("explanation", None)
+                    q.pop("rubric", None)
+            data["questions"] = questions
+        except Exception:
+            data["questions"] = []
+        return data
+
+
+class QuizQuestionItem(BaseModel):
+    """Structured question definition with Bloom's taxonomy & lecture citations."""
+
+    question_id: str = Field(..., description="Unique question ID, e.g. q1")
+    topic: str = Field(..., description="Topic or concept tag")
+    difficulty: Literal["easy", "medium", "hard"] = Field(
+        default="medium", description="Difficulty tier"
+    )
+    cognitive_level: Literal["recall", "understanding", "application", "analysis"] = (
+        Field(default="understanding", description="Bloom's taxonomy cognitive level")
+    )
+    question_type: Literal["mcq", "short_answer", "true_false"] = Field(
+        default="mcq", description="Format of the question"
+    )
+    question_text: str = Field(..., description="Question statement")
+    options: list[str] = Field(
+        default_factory=list,
+        description="List of choices for MCQ/True-False questions",
+    )
+    correct_answer: str = Field(..., description="Ground truth answer or model response")
+    explanation: str = Field(
+        default="", description="Pedagogical explanation of why this answer is correct"
+    )
+    rubric: str = Field(
+        default="",
+        description="Grading criteria/rubric keywords for open-ended questions",
+    )
+    source_page: int | None = Field(
+        default=None, description="PDF page number reference"
+    )
+    source_chunk_index: int | None = Field(
+        default=None, description="Vector store chunk index"
+    )
+
+
+class QuizGenerationRequest(BaseModel):
+    """Input payload to dynamically generate a quiz from lecture context."""
+
+    document_id: str = Field(..., min_length=1, description="Associated document ID")
+    topic: str | None = Field(
+        default=None, description="Optional topic focus filter (e.g. 'Inverted Index')"
+    )
+    title: str | None = Field(
+        default=None, description="Optional custom quiz title"
+    )
+    num_questions: int = Field(
+        default=5, ge=1, le=15, description="Number of questions to synthesize"
+    )
+    difficulty: Literal["easy", "medium", "hard", "mixed"] = Field(
+        default="mixed", description="Target difficulty distribution"
+    )
+    question_types: list[Literal["mcq", "short_answer", "true_false"]] = Field(
+        default_factory=lambda: ["mcq"],
+        description="Desired question formats",
+    )
+
+    @field_validator("document_id")
+    @classmethod
+    def clean_document_id(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("document_id cannot be blank.")
+        return cleaned
+
+
+class StudentAnswerItem(BaseModel):
+    """Single question response submitted by student."""
+
+    question_id: str = Field(..., description="ID matching the quiz question")
+    answer_text: str = Field(..., description="Student's selected or written answer")
+
+
+class QuizEvaluationRequest(BaseModel):
+    """Submission payload containing student answers for grading."""
+
+    student_id: str = Field(
+        default="student_default", min_length=1, max_length=100, description="Student ID"
+    )
+    time_spent_seconds: int = Field(
+        default=0, ge=0, description="Total time spent on quiz in seconds"
+    )
+    answers: list[StudentAnswerItem] = Field(
+        ..., min_length=1, description="List of submitted answers"
+    )
+
+
+class QuestionEvaluationResult(BaseModel):
+    """Graded result and pedagogical feedback for one question."""
+
+    question_id: str
+    topic: str
+    difficulty: str
+    cognitive_level: str
+    question_type: str
+    question_text: str
+    student_answer: str
+    correct_answer: str
+    is_correct: bool
+    score: float
+    max_score: float
+    explanation: str
+    feedback: str
+    source_page: int | None = None
+
+
+class QuizEvaluationResponse(BaseModel):
+    """Complete grading report with score breakdown and recommendation bridge."""
+
+    quiz_id: str
+    attempt_id: str
+    student_id: str
+    document_id: str
+    quiz_title: str
+    total_questions: int
+    score: float
+    max_possible_score: float
+    score_percentage: float
+    time_spent_seconds: int
+    created_at: str
+    results: list[QuestionEvaluationResult]
+    submission_payload: QuizSubmissionRequest
+    recommendation: RecommendationResponse | None = None
+

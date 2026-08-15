@@ -93,6 +93,66 @@ export function getTutorHandoff(recommendationId) {
   );
 }
 
+// ---------------------------------------------------------------------
+// Quiz Agent API Endpoints
+// ---------------------------------------------------------------------
+
+export function generateQuiz(payload) {
+  return apiRequest("/quizzes/generate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getQuiz(quizId, includeSolutions = false) {
+  const query = includeSolutions ? "?include_solutions=true" : "";
+  return apiRequest("/quizzes/" + encodeURIComponent(quizId) + query);
+}
+
+export function getDocumentQuizzes(documentId) {
+  return apiRequest("/quizzes/document/" + encodeURIComponent(documentId));
+}
+
+export function listAllQuizzes() {
+  return apiRequest("/quizzes");
+}
+
+export function submitQuizEvaluation(quizId, payload) {
+  return apiRequest("/quizzes/" + encodeURIComponent(quizId) + "/evaluate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function evaluateAndRecommendQuiz(quizId, payload) {
+  return apiRequest(
+    "/quizzes/" + encodeURIComponent(quizId) + "/evaluate-and-recommend",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function deleteQuiz(quizId) {
+  return apiRequest("/quizzes/" + encodeURIComponent(quizId), {
+    method: "DELETE",
+  });
+}
+
+// ---------------------------------------------------------------------
+// Tutor Agent API Endpoints
+// ---------------------------------------------------------------------
+
 export function startTutorSession(payload) {
   return apiRequest("/tutor/session/start", {
     method: "POST",
