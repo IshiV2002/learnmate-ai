@@ -149,3 +149,41 @@ export function deleteQuiz(quizId) {
   });
 }
 
+// ---------------------------------------------------------------------
+// Tutor Agent API Endpoints
+// ---------------------------------------------------------------------
+
+export function startTutorSession(payload) {
+  return apiRequest("/tutor/session/start", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function sendTutorMessage(payload) {
+  return apiRequest("/tutor/chat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getTutorSession(sessionId) {
+  return apiRequest("/tutor/session/" + encodeURIComponent(sessionId));
+}
+
+export function getStudentTutorSessions(studentId) {
+  return apiRequest("/tutor/student/" + encodeURIComponent(studentId));
+}
+
+export function deleteTutorSession(sessionId) {
+  return apiRequest("/tutor/session/" + encodeURIComponent(sessionId), {
+    method: "DELETE",
+  });
+}
+

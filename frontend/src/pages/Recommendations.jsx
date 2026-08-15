@@ -122,7 +122,7 @@ const PRESET_QUIZZES = [
   },
 ];
 
-export default function Recommendations({ initialSubmission, initialRecommendation }) {
+export default function Recommendations({ initialSubmission, initialRecommendation, onLaunchTutor = null }) {
   const [documents, setDocuments] = useState([]);
   const [selectedDocId, setSelectedDocId] = useState(initialSubmission?.document_id || "");
   const [studentId, setStudentId] = useState(initialSubmission?.student_id || "student_demo_01");
@@ -464,13 +464,28 @@ export default function Recommendations({ initialSubmission, initialRecommendati
                 </div>
               </div>
 
-              <button
-                type="button"
-                className="btn-tutor-launch"
-                onClick={() => setShowTutorModal(true)}
-              >
-                💬 Open AI Tutor Socratic Handoff Package
-              </button>
+              <div className="tutor-cta-button-row">
+                <button
+                  type="button"
+                  className="btn-tutor-launch"
+                  onClick={() => {
+                    if (onLaunchTutor) {
+                      onLaunchTutor(recommendationResult.tutor_handoff);
+                    } else {
+                      setShowTutorModal(true);
+                    }
+                  }}
+                >
+                  🚀 Launch Remedial Tutoring Session
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary btn-sm"
+                  onClick={() => setShowTutorModal(true)}
+                >
+                  📜 View Inter-Agent JSON Contract
+                </button>
+              </div>
             </div>
           </div>
 
@@ -613,6 +628,18 @@ export default function Recommendations({ initialSubmission, initialRecommendati
               <button
                 type="button"
                 className="btn-primary"
+                onClick={() => {
+                  setShowTutorModal(false);
+                  if (onLaunchTutor) {
+                    onLaunchTutor(recommendationResult.tutor_handoff);
+                  }
+                }}
+              >
+                🚀 Start Remedial Tutoring Now
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
                 onClick={() => setShowTutorModal(false)}
               >
                 Close Contract Viewer

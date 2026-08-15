@@ -217,6 +217,125 @@ class RecommendationResponse(BaseModel):
 
 
 # =====================================================================
+# Tutor Agent Dataclasses and Pydantic Schemas
+# =====================================================================
+
+
+@dataclass(frozen=True)
+class TutorSessionRecord:
+    """Metadata for one active or archived AI tutoring session."""
+
+    session_id: str
+    student_id: str
+    document_id: str
+    recommendation_id: str | None
+    topic_focus: str
+    mode: str
+    created_at: str
+    updated_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert dataclass to dictionary."""
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class TutorMessageRecord:
+    """Individual conversational turn in a tutoring session."""
+
+    message_id: str
+    session_id: str
+    role: str  # 'student', 'tutor', or 'system'
+    content: str
+    citations_json: str
+    created_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert dataclass to dictionary with parsed citations."""
+        data = asdict(self)
+        try:
+            data["citations"] = json.loads(self.citations_json)
+        except Exception:
+            data["citations"] = []
+        return data
+
+
+class TutorSessionInitRequest(BaseModel):
+    """Payload to start a new Socratic or Step-by-Step tutoring session."""
+
+    student_id: str = Field(..., min_length=1, max_length=100, description="Student ID")
+    document_id: str = Field(..., min_length=1, description="Associated document ID")
+    recommendation_id: str | None = Field(
+        default=None, description="Optional recommendation ID to auto-load handoff"
+    )
+    mode: Literal["socratic", "step_by_step", "concept_check"] = Field(
+        default="socratic", description="Teaching pedagogical mode"
+    )
+    topic_focus: str | None = Field(
+        default=None, description="Optional primary topic or concept to focus on"
+    )
+
+    @field_validator("student_id", "document_id")
+    @classmethod
+    def clean_strings(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Identifier field cannot be empty.")
+        return cleaned
+
+
+class TutorChatRequest(BaseModel):
+    """Payload sent by student during an active chat turn."""
+
+    session_id: str = Field(..., min_length=1, description="Active session ID")
+    message: str = Field(..., min_length=1, max_length=4000, description="Student's query or answer")
+    mode: Literal["socratic", "step_by_step", "concept_check"] | None = Field(
+        default=None, description="Optional override for pedagogical mode"
+    )
+
+    @field_validator("session_id", "message")
+    @classmethod
+    def clean_text(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Field cannot be empty.")
+        return cleaned
+
+
+class TutorChatResponse(BaseModel):
+    """Structured response from the Tutor Agent."""
+
+    session_id: str
+    message_id: str
+    reply: str
+    mode: str
+    citations: list[dict[str, Any]] = Field(
+        default_factory=list, description="Grounding lecture citations and page numbers"
+    )
+    suggested_followups: list[str] = Field(
+        default_factory=list, description="Interactive quick-reply prompt options for student"
+    )
+    concept_check_question: str | None = Field(
+        default=None, description="Optional comprehension check question"
+    )
+    created_at: str
+
+
+class TutorSessionResponse(BaseModel):
+    """Full session details with chat history."""
+
+    session_id: str
+    student_id: str
+    document_id: str
+    recommendation_id: str | None
+    topic_focus: str
+    mode: str
+    messages: list[dict[str, Any]]
+    created_at: str
+    updated_at: str
+
+
+# =====================================================================
 # Quiz Generation & Evaluation Data Models & Schemas
 # =====================================================================
 
