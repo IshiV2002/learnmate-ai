@@ -8,6 +8,8 @@ from app.database.models import (
     DocumentRecord,
     QuizAttemptRecord,
     RecommendationRecord,
+    TutorMessageRecord,
+    TutorSessionRecord,
 )
 
 
@@ -116,6 +118,51 @@ class DocumentDatabase:
                             ON recommendations(attempt_id)
                             """
                         )
+                        connection.execute(
+                            """
+                            CREATE TABLE IF NOT EXISTS tutor_sessions (
+                                session_id TEXT PRIMARY KEY,
+                                student_id TEXT NOT NULL,
+                                document_id TEXT NOT NULL,
+                                recommendation_id TEXT,
+                                topic_focus TEXT NOT NULL,
+                                mode TEXT NOT NULL,
+                                created_at TEXT NOT NULL,
+                                updated_at TEXT NOT NULL
+                            )
+                            """
+                        )
+                        connection.execute(
+                            """
+                            CREATE INDEX IF NOT EXISTS idx_tutor_sessions_student
+                            ON tutor_sessions(student_id)
+                            """
+                        )
+                        connection.execute(
+                            """
+                            CREATE INDEX IF NOT EXISTS idx_tutor_sessions_document
+                            ON tutor_sessions(document_id)
+                            """
+                        )
+                        connection.execute(
+                            """
+                            CREATE TABLE IF NOT EXISTS tutor_messages (
+                                message_id TEXT PRIMARY KEY,
+                                session_id TEXT NOT NULL,
+                                role TEXT NOT NULL,
+                                content TEXT NOT NULL,
+                                citations_json TEXT NOT NULL,
+                                created_at TEXT NOT NULL,
+                                FOREIGN KEY(session_id) REFERENCES tutor_sessions(session_id)
+                            )
+                            """
+                        )
+                        connection.execute(
+                            """
+                            CREATE INDEX IF NOT EXISTS idx_tutor_messages_session
+                            ON tutor_messages(session_id)
+                            """
+                        )
             except (OSError, sqlite3.Error) as error:
                 raise DocumentDatabaseError(
                     "The learning database could not be initialized."
@@ -172,6 +219,30 @@ class DocumentDatabase:
             knowledge_gaps_json=row["knowledge_gaps_json"],
             action_items_json=row["action_items_json"],
             tutor_handoff_json=row["tutor_handoff_json"],
+            created_at=row["created_at"],
+        )
+
+    @staticmethod
+    def _row_to_tutor_session(row: sqlite3.Row) -> TutorSessionRecord:
+        return TutorSessionRecord(
+            session_id=row["session_id"],
+            student_id=row["student_id"],
+            document_id=row["document_id"],
+            recommendation_id=row["recommendation_id"],
+            topic_focus=row["topic_focus"],
+            mode=row["mode"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    @staticmethod
+    def _row_to_tutor_message(row: sqlite3.Row) -> TutorMessageRecord:
+        return TutorMessageRecord(
+            message_id=row["message_id"],
+            session_id=row["session_id"],
+            role=row["role"],
+            content=row["content"],
+            citations_json=row["citations_json"],
             created_at=row["created_at"],
         )
 
@@ -451,3 +522,182 @@ class DocumentDatabase:
             ) from error
 
         return [self._row_to_recommendation(row) for row in rows]
+
+    # -----------------------------------------------------------------
+    # Tutor Session & Message Operations
+    # -----------------------------------------------------------------
+
+    def create_tutor_session(self, session: TutorSessionRecord) -> None:
+        """Persist a new AI tutor session."""
+        try:
+            with closing(self._connect()) as connection:
+                with connection:
+                    connection.execute(
+                        """
+                        INSERT INTO tutor_sessions (
+                            session_id,
+                            student_id,
+                            document_id,
+                            recommendation_id,
+                            topic_focus,
+                            mode,
+                            created_at,
+                            updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            session.session_id,
+                            session.student_id,
+                            session.document_id,
+                            session.recommendation_id,
+                            session.topic_focus,
+                            session.mode,
+                            session.created_at,
+                            session.updated_at,
+                        ),
+                    )
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The tutor session could not be created."
+            ) from error
+
+    def get_tutor_session(self, session_id: str) -> TutorSessionRecord | None:
+        """Retrieve a tutor session by session ID."""
+        try:
+            with closing(self._connect()) as connection:
+                row = connection.execute(
+                    "SELECT * FROM tutor_sessions WHERE session_id = ?",
+                    (session_id,),
+                ).fetchone()
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The tutor session could not be read."
+            ) from error
+
+        if row is None:
+            return None
+
+        return self._row_to_tutor_session(row)
+
+    def list_student_tutor_sessions(
+        self, student_id: str
+    ) -> list[TutorSessionRecord]:
+        """List all tutor sessions for a student, newest first."""
+        try:
+            with closing(self._connect()) as connection:
+                rows = connection.execute(
+                    """
+                    SELECT * FROM tutor_sessions
+                    WHERE student_id = ?
+                    ORDER BY updated_at DESC, created_at DESC
+                    """,
+                    (student_id,),
+                ).fetchall()
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The student's tutor sessions could not be listed."
+            ) from error
+
+        return [self._row_to_tutor_session(row) for row in rows]
+
+    def update_tutor_session_activity(
+        self, session_id: str, updated_at: str, mode: str | None = None
+    ) -> None:
+        """Update last active timestamp and optionally mode for a tutor session."""
+        try:
+            with closing(self._connect()) as connection:
+                with connection:
+                    if mode:
+                        connection.execute(
+                            """
+                            UPDATE tutor_sessions
+                            SET updated_at = ?, mode = ?
+                            WHERE session_id = ?
+                            """,
+                            (updated_at, mode, session_id),
+                        )
+                    else:
+                        connection.execute(
+                            """
+                            UPDATE tutor_sessions
+                            SET updated_at = ?
+                            WHERE session_id = ?
+                            """,
+                            (updated_at, session_id),
+                        )
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The tutor session activity could not be updated."
+            ) from error
+
+    def delete_tutor_session(self, session_id: str) -> bool:
+        """Delete a tutor session and its associated chat messages."""
+        try:
+            with closing(self._connect()) as connection:
+                with connection:
+                    connection.execute(
+                        "DELETE FROM tutor_messages WHERE session_id = ?",
+                        (session_id,),
+                    )
+                    cursor = connection.execute(
+                        "DELETE FROM tutor_sessions WHERE session_id = ?",
+                        (session_id,),
+                    )
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The tutor session could not be deleted."
+            ) from error
+
+        return cursor.rowcount > 0
+
+    def save_tutor_message(self, message: TutorMessageRecord) -> None:
+        """Persist a message turn within a tutor session."""
+        try:
+            with closing(self._connect()) as connection:
+                with connection:
+                    connection.execute(
+                        """
+                        INSERT INTO tutor_messages (
+                            message_id,
+                            session_id,
+                            role,
+                            content,
+                            citations_json,
+                            created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            message.message_id,
+                            message.session_id,
+                            message.role,
+                            message.content,
+                            message.citations_json,
+                            message.created_at,
+                        ),
+                    )
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The tutor message could not be saved."
+            ) from error
+
+    def get_session_messages(
+        self, session_id: str
+    ) -> list[TutorMessageRecord]:
+        """Retrieve all messages in chronological order for a session."""
+        try:
+            with closing(self._connect()) as connection:
+                rows = connection.execute(
+                    """
+                    SELECT * FROM tutor_messages
+                    WHERE session_id = ?
+                    ORDER BY created_at ASC, rowid ASC
+                    """,
+                    (session_id,),
+                ).fetchall()
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The session messages could not be listed."
+            ) from error
+
+        return [self._row_to_tutor_message(row) for row in rows]
+
