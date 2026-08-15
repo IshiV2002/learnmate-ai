@@ -7,6 +7,7 @@ from app.core.config import SQLITE_DATABASE_PATH
 from app.database.models import (
     DocumentRecord,
     QuizAttemptRecord,
+    QuizRecord,
     RecommendationRecord,
 )
 
@@ -49,6 +50,27 @@ class DocumentDatabase:
                                 file_size_bytes INTEGER NOT NULL,
                                 created_at TEXT NOT NULL
                             )
+                            """
+                        )
+                        connection.execute(
+                            """
+                            CREATE TABLE IF NOT EXISTS quizzes (
+                                quiz_id TEXT PRIMARY KEY,
+                                document_id TEXT NOT NULL,
+                                title TEXT NOT NULL,
+                                topic TEXT NOT NULL,
+                                total_questions INTEGER NOT NULL,
+                                difficulty TEXT NOT NULL,
+                                questions_json TEXT NOT NULL,
+                                created_at TEXT NOT NULL,
+                                FOREIGN KEY(document_id) REFERENCES documents(document_id)
+                            )
+                            """
+                        )
+                        connection.execute(
+                            """
+                            CREATE INDEX IF NOT EXISTS idx_quizzes_document
+                            ON quizzes(document_id)
                             """
                         )
                         connection.execute(
@@ -140,6 +162,19 @@ class DocumentDatabase:
             pages_with_text=row["pages_with_text"],
             chunk_count=row["chunk_count"],
             file_size_bytes=row["file_size_bytes"],
+            created_at=row["created_at"],
+        )
+
+    @staticmethod
+    def _row_to_quiz(row: sqlite3.Row) -> QuizRecord:
+        return QuizRecord(
+            quiz_id=row["quiz_id"],
+            document_id=row["document_id"],
+            title=row["title"],
+            topic=row["topic"],
+            total_questions=row["total_questions"],
+            difficulty=row["difficulty"],
+            questions_json=row["questions_json"],
             created_at=row["created_at"],
         )
 
@@ -260,6 +295,114 @@ class DocumentDatabase:
         except (OSError, sqlite3.Error) as error:
             raise DocumentDatabaseError(
                 "The document metadata could not be deleted."
+            ) from error
+
+        return cursor.rowcount > 0
+
+    # -----------------------------------------------------------------
+    # Quiz Operations
+    # -----------------------------------------------------------------
+
+    def save_quiz(self, quiz: QuizRecord) -> None:
+        """Persist a synthesized quiz and its question definitions."""
+        try:
+            with closing(self._connect()) as connection:
+                with connection:
+                    connection.execute(
+                        """
+                        INSERT INTO quizzes (
+                            quiz_id,
+                            document_id,
+                            title,
+                            topic,
+                            total_questions,
+                            difficulty,
+                            questions_json,
+                            created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            quiz.quiz_id,
+                            quiz.document_id,
+                            quiz.title,
+                            quiz.topic,
+                            quiz.total_questions,
+                            quiz.difficulty,
+                            quiz.questions_json,
+                            quiz.created_at,
+                        ),
+                    )
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The quiz could not be saved."
+            ) from error
+
+    def get_quiz(self, quiz_id: str) -> QuizRecord | None:
+        """Retrieve a specific quiz by its unique quiz ID."""
+        try:
+            with closing(self._connect()) as connection:
+                row = connection.execute(
+                    "SELECT * FROM quizzes WHERE quiz_id = ?",
+                    (quiz_id,),
+                ).fetchone()
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The quiz could not be read."
+            ) from error
+
+        if row is None:
+            return None
+
+        return self._row_to_quiz(row)
+
+    def list_document_quizzes(self, document_id: str) -> list[QuizRecord]:
+        """List all quizzes generated for a specific document."""
+        try:
+            with closing(self._connect()) as connection:
+                rows = connection.execute(
+                    """
+                    SELECT * FROM quizzes
+                    WHERE document_id = ?
+                    ORDER BY created_at DESC
+                    """,
+                    (document_id,),
+                ).fetchall()
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The document quizzes could not be listed."
+            ) from error
+
+        return [self._row_to_quiz(row) for row in rows]
+
+    def list_all_quizzes(self) -> list[QuizRecord]:
+        """List all generated quizzes across all documents, newest first."""
+        try:
+            with closing(self._connect()) as connection:
+                rows = connection.execute(
+                    """
+                    SELECT * FROM quizzes
+                    ORDER BY created_at DESC
+                    """
+                ).fetchall()
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The quizzes could not be listed."
+            ) from error
+
+        return [self._row_to_quiz(row) for row in rows]
+
+    def delete_quiz(self, quiz_id: str) -> bool:
+        """Delete a generated quiz from the database."""
+        try:
+            with closing(self._connect()) as connection:
+                with connection:
+                    cursor = connection.execute(
+                        "DELETE FROM quizzes WHERE quiz_id = ?",
+                        (quiz_id,),
+                    )
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The quiz could not be deleted."
             ) from error
 
         return cursor.rowcount > 0
