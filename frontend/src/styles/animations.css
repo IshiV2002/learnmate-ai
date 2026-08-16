@@ -1,0 +1,46 @@
+@keyframes lm-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes lm-aurora-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(2.5rem, -1rem, 0) scale(1.08);
+  }
+}
+
+@keyframes lm-node-pulse {
+  0%,
+  100% {
+    opacity: 0.28;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 0.72;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes lm-status-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(125 211 199 / 0%);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgb(125 211 199 / 9%);
+  }
+}
+
+.app-page-frame {
+  animation: lm-page-enter 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}

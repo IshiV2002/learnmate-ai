@@ -1,0 +1,76 @@
+html {
+  background: var(--color-canvas);
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  color: var(--color-text);
+  background:
+    radial-gradient(circle at 82% -12%, rgb(90 77 160 / 18%), transparent 31rem),
+    radial-gradient(circle at 14% 94%, rgb(37 119 111 / 13%), transparent 34rem),
+    var(--color-canvas);
+  font-family: var(--font-sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+::selection {
+  color: #06110f;
+  background: var(--color-accent);
+}
+
+.app-content .page-container,
+.app-content .recommendation-page,
+.app-content .tutor-page-layout {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 30px clamp(18px, 3vw, 44px) 64px;
+}
+
+.app-content :where(h1, h2, h3, h4, strong) {
+  color: var(--color-text);
+}
+
+.app-content :where(p, small, label, dt) {
+  color: var(--color-text-muted);
+}
+
+.app-content a {
+  color: var(--color-accent);
+}
+
+@media (max-width: 720px) {
+  .app-content .page-container,
+  .app-content .recommendation-page,
+  .app-content .tutor-page-layout {
+    padding: 22px 16px 48px;
+  }
+}
