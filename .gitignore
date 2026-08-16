@@ -216,3 +216,20 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# LearnMate AI local uploads
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# LearnMate AI local ChromaDB data
+backend/chroma_data/
+
+# LearnMate AI local SQLite data
+backend/data/
+
+# LearnMate AI frontend generated and local files
+frontend/node_modules/
+frontend/dist/
+frontend/.env*
+!frontend/.env.example
+frontend/package-lock.json
