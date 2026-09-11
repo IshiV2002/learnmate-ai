@@ -92,6 +92,38 @@
   line-height: 1.7;
 }
 
+.auth-story-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  align-items: center;
+  margin: -14px 0 30px;
+}
+
+.auth-story-actions button {
+  min-height: 42px;
+  padding: 0 16px;
+  border: 1px solid rgb(125 211 199 / 28%);
+  border-radius: 12px;
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+  font-weight: 780;
+  transition: border-color var(--transition-fast), background var(--transition-fast), transform var(--transition-fast);
+}
+
+.auth-story-actions button:hover {
+  border-color: var(--color-accent);
+  background: rgb(125 211 199 / 17%);
+  transform: translateY(-1px);
+}
+
+.auth-story-actions span {
+  max-width: 270px;
+  color: var(--color-text-subtle);
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
 .auth-agent-map {
   display: grid;
   max-width: 650px;

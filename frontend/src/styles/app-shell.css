@@ -353,6 +353,10 @@
   gap: 10px;
 }
 
+.topbar-plans-button {
+  color: var(--color-accent);
+}
+
 .topbar-user {
   display: flex;
   align-items: center;
@@ -466,6 +470,12 @@
 
   .topbar-actions .ui-badge {
     display: none;
+  }
+
+  .topbar-plans-button {
+    min-height: 36px;
+    padding-inline: 10px;
+    font-size: 0.72rem;
   }
 
   .topbar-user-copy {
