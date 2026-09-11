@@ -5,7 +5,7 @@ import MobileNavigation from "./MobileNavigation.jsx";
 import Sidebar from "./Sidebar.jsx";
 import TopBar from "./TopBar.jsx";
 
-function AppShell({ children, currentPage, onLogout, onNavigate, user }) {
+function AppShell({ children, currentPage, onLogout, onNavigate, onViewPlans, user }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const contentRef = useRef(null);
   const previousPage = useRef(currentPage);
@@ -35,6 +35,7 @@ function AppShell({ children, currentPage, onLogout, onNavigate, user }) {
           currentPage={currentPage}
           onLogout={onLogout}
           onOpenMenu={() => setMobileMenuOpen(true)}
+          onViewPlans={onViewPlans}
           user={user}
         />
         <main className="app-content" id="main-content" ref={contentRef} tabIndex={-1}>

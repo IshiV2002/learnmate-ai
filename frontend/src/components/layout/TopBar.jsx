@@ -3,7 +3,7 @@ import Button from "../ui/Button.jsx";
 import Icon from "../ui/Icon.jsx";
 import { getNavigationItem } from "./navigation.js";
 
-function TopBar({ currentPage, onLogout, onOpenMenu, user }) {
+function TopBar({ currentPage, onLogout, onOpenMenu, onViewPlans, user }) {
   const page = getNavigationItem(currentPage);
 
   return (
@@ -22,6 +22,7 @@ function TopBar({ currentPage, onLogout, onOpenMenu, user }) {
       </div>
 
       <div className="topbar-actions">
+        <Button className="topbar-plans-button" onClick={onViewPlans}>Plans</Button>
         <Badge tone="accent">
           <span className="system-dot" aria-hidden="true" />
           Multi-agent learning
