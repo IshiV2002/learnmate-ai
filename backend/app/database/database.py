@@ -485,23 +485,58 @@ class DocumentDatabase:
     def delete_document(
         self, document_id: str, user_id: str | None = None
     ) -> bool:
-        """Delete one document, optionally checking its authenticated owner."""
+        """Delete an owned document and all learning records derived from it."""
         try:
             with closing(self._connect()) as connection:
                 with connection:
                     if user_id is None:
-                        cursor = connection.execute(
-                            "DELETE FROM documents WHERE document_id = ?",
+                        owned_document = connection.execute(
+                            "SELECT 1 FROM documents WHERE document_id = ?",
                             (document_id,),
-                        )
+                        ).fetchone()
                     else:
-                        cursor = connection.execute(
+                        owned_document = connection.execute(
                             """
-                            DELETE FROM documents
+                            SELECT 1 FROM documents
                             WHERE document_id = ? AND user_id = ?
                             """,
                             (document_id, user_id),
+                        ).fetchone()
+
+                    if owned_document is None:
+                        return False
+
+                    # Delete dependent private learning data in foreign-key-safe order.
+                    connection.execute(
+                        """
+                        DELETE FROM tutor_messages
+                        WHERE session_id IN (
+                            SELECT session_id FROM tutor_sessions
+                            WHERE document_id = ?
                         )
+                        """,
+                        (document_id,),
+                    )
+                    connection.execute(
+                        "DELETE FROM tutor_sessions WHERE document_id = ?",
+                        (document_id,),
+                    )
+                    connection.execute(
+                        "DELETE FROM recommendations WHERE document_id = ?",
+                        (document_id,),
+                    )
+                    connection.execute(
+                        "DELETE FROM quiz_attempts WHERE document_id = ?",
+                        (document_id,),
+                    )
+                    connection.execute(
+                        "DELETE FROM quizzes WHERE document_id = ?",
+                        (document_id,),
+                    )
+                    cursor = connection.execute(
+                        "DELETE FROM documents WHERE document_id = ?",
+                        (document_id,),
+                    )
         except (OSError, sqlite3.Error) as error:
             raise DocumentDatabaseError(
                 "The document metadata could not be deleted."

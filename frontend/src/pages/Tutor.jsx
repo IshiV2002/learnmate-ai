@@ -247,6 +247,9 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
             <p className="tutor-subtitle">
               Pedagogical conversational learning grounded strictly in your course lecture materials.
             </p>
+            <p className="tutor-subtitle">
+              AI-generated explanations can be imperfect. Verify important academic information against the cited pages.
+            </p>
           </div>
 
           <div className="tutor-action-group">
@@ -541,7 +544,7 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
           </div>
 
           <p className="evidence-desc">
-            Passages retrieved via the <strong>Retrieval Agent</strong> semantic search to prevent hallucination.
+            Passages retrieved via the <strong>Retrieval Agent</strong> semantic search reduce hallucination risk, but do not guarantee correctness.
           </p>
 
           <div className="citations-feed">

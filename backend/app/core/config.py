@@ -14,6 +14,10 @@ SQLITE_DATABASE_PATH = DATA_DIRECTORY / "learnmate.db"
 
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 CHROMA_COLLECTION_NAME = "learnmate_documents"
+GEMINI_MODEL_NAME = os.getenv(
+    "LEARNMATE_GEMINI_MODEL_NAME",
+    "gemini-2.5-flash",
+).strip() or "gemini-2.5-flash"
 
 # Only the local Vite development servers may call this API from a browser.
 FRONTEND_ORIGINS = [

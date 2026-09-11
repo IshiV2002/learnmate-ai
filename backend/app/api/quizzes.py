@@ -81,7 +81,8 @@ async def generate_quiz(
     try:
         agent = get_quiz_agent()
         quiz_record = await run_in_threadpool(agent.generate_quiz, request)
-        return quiz_record.to_dict(include_solutions=True)
+        # Answers stay server-side until the learner submits the quiz.
+        return quiz_record.to_dict(include_solutions=False)
     except QuizAgentError as error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -102,6 +103,12 @@ async def get_quiz(
     ),
 ) -> dict[str, Any]:
     """Retrieve quiz questions and parameters."""
+    if include_solutions:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Quiz solutions are available only in the evaluation response after submission.",
+        )
+
     try:
         agent = get_quiz_agent()
         quiz = await run_in_threadpool(agent.get_quiz, quiz_id)
@@ -125,7 +132,7 @@ async def get_quiz(
             detail=f"Quiz with ID '{quiz_id}' not found.",
         )
 
-    return quiz.to_dict(include_solutions=include_solutions)
+    return quiz.to_dict(include_solutions=False)
 
 
 @router.get(
@@ -219,7 +226,7 @@ async def evaluate_quiz_submission(
     except Exception as error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred during quiz evaluation: {error}",
+            detail="An unexpected error occurred during quiz evaluation.",
         ) from error
 
 
@@ -265,7 +272,7 @@ async def evaluate_and_recommend(
     except Exception as error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to complete multi-agent evaluation and recommendation: {error}",
+            detail="The quiz evaluation and recommendation workflow could not be completed.",
         ) from error
 
 

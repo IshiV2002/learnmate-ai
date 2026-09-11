@@ -238,6 +238,9 @@ export default function Recommendations({ initialSubmission, initialRecommendati
           Analyzes student assessment mistake logs, computes granular topic mastery,
           provides explainable pedagogical justifications, and synthesizes Socratic review packages for the Tutor Agent.
         </p>
+        <p className="header-subtitle">
+          These suggestions describe evidence from the current quiz, not a permanent judgment of your ability.
+        </p>
 
         <div className="mode-toggle-bar">
           <button
@@ -398,7 +401,7 @@ export default function Recommendations({ initialSubmission, initialRecommendati
 
             <div className="score-details-section">
               <div className="mastery-badge-pill">
-                Mastery Level: <strong>{recommendationResult.mastery_level}</strong>
+                Current assessment signal: <strong>{recommendationResult.mastery_level}</strong>
               </div>
               <h2 className="report-quiz-title">{selectedPreset.title}</h2>
               <div className="summary-quote-box">
@@ -499,7 +502,7 @@ export default function Recommendations({ initialSubmission, initialRecommendati
 
             {recommendationResult.knowledge_gaps.length === 0 ? (
               <div className="empty-gaps-box">
-                🎉 No knowledge gaps identified! Full conceptual mastery achieved across all topics.
+                No gaps were detected in this quiz attempt. This result does not prove complete mastery.
               </div>
             ) : (
               <div className="knowledge-gaps-grid">
@@ -513,7 +516,7 @@ export default function Recommendations({ initialSubmission, initialRecommendati
                         {gap.severity} GAP
                       </span>
                       <span className="confidence-pill">
-                        Diagnosis Confidence: {Math.round(gap.confidence_score * 100)}%
+                        Evidence strength: {Math.round(gap.confidence_score * 100)}%
                       </span>
                     </div>
 

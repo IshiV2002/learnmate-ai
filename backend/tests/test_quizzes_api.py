@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,6 +15,24 @@ from tests.auth_helpers import make_test_user
 
 
 TEST_USER = make_test_user("quiz-test-user")
+
+
+class MockRetrievalAgent:
+    """Return course evidence so API tests exercise grounded quiz generation."""
+
+    def search(self, document_id: str, query: str, top_k: int = 4) -> list[dict]:
+        return [
+            {
+                "page_number": 2,
+                "chunk_index": 0,
+                "source": "ir_scoring.pdf",
+                "text": (
+                    "Cosine similarity compares normalized document vectors, while "
+                    "TF-IDF represents the importance of terms in those vectors."
+                ),
+                "distance": 0.08,
+            }
+        ]
 
 
 class QuizzesAPITests(unittest.TestCase):
@@ -40,7 +59,7 @@ class QuizzesAPITests(unittest.TestCase):
 
         self.test_quiz_agent = quizzes.QuizAgent(
             database=self.database,
-            retrieval_agent=None,
+            retrieval_agent=MockRetrievalAgent(),  # type: ignore[arg-type]
         )
         self.test_rec_agent = recommendations.RecommendationAgent(
             database=self.database,
@@ -88,6 +107,8 @@ class QuizzesAPITests(unittest.TestCase):
         self.assertTrue(data["quiz_id"].startswith("quiz_"))
         self.assertEqual(data["document_id"], "doc_api_test_01")
         self.assertEqual(len(data["questions"]), 3)
+        self.assertNotIn("correct_answer", data["questions"][0])
+        self.assertNotIn("explanation", data["questions"][0])
 
     def test_get_quiz_hides_answers_by_default(self) -> None:
         # 1. Generate
@@ -107,12 +128,9 @@ class QuizzesAPITests(unittest.TestCase):
         self.assertNotIn("correct_answer", data["questions"][0])
         self.assertNotIn("explanation", data["questions"][0])
 
-        # 3. Get with solutions
+        # 3. Solutions cannot be requested before submission.
         get_sol_res = self.client.get(f"/quizzes/{quiz_id}?include_solutions=true")
-        self.assertEqual(get_sol_res.status_code, 200)
-        sol_data = get_sol_res.json()
-        self.assertIn("correct_answer", sol_data["questions"][0])
-        self.assertIn("explanation", sol_data["questions"][0])
+        self.assertEqual(get_sol_res.status_code, 403)
 
     def test_list_document_quizzes_endpoint(self) -> None:
         self.client.post(
@@ -134,7 +152,9 @@ class QuizzesAPITests(unittest.TestCase):
         )
         quiz_data = gen_res.json()
         quiz_id = quiz_data["quiz_id"]
-        q1 = quiz_data["questions"][0]
+        stored_quiz = self.database.get_quiz(quiz_id)
+        self.assertIsNotNone(stored_quiz)
+        q1 = json.loads(stored_quiz.questions_json)[0]
 
         eval_res = self.client.post(
             f"/quizzes/{quiz_id}/evaluate",

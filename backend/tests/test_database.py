@@ -10,7 +10,10 @@ from app.database.database import DocumentDatabase, DocumentDatabaseError
 from app.database.models import (
     DocumentRecord,
     QuizAttemptRecord,
+    QuizRecord,
     RecommendationRecord,
+    TutorMessageRecord,
+    TutorSessionRecord,
     UserRecord,
 )
 
@@ -196,6 +199,67 @@ class DocumentDatabaseTests(unittest.TestCase):
         self.assertTrue(self.database.delete_document("document-1"))
         self.assertIsNone(self.database.get_document("document-1"))
         self.assertFalse(self.database.delete_document("document-1"))
+
+    def test_delete_document_removes_derived_private_learning_records(self) -> None:
+        document_id = "document-with-learning-data"
+        created_at = "2026-01-01T00:00:00+00:00"
+        self.database.create_document(make_record(document_id, created_at))
+        quiz = QuizRecord(
+            quiz_id="quiz-delete",
+            document_id=document_id,
+            title="Delete test",
+            topic="Cleanup",
+            total_questions=1,
+            difficulty="easy",
+            questions_json="[]",
+            created_at=created_at,
+        )
+        attempt = make_quiz_attempt(
+            "attempt-delete",
+            "student-delete",
+            document_id,
+            created_at,
+        )
+        recommendation = make_recommendation(
+            "recommendation-delete",
+            attempt.attempt_id,
+            attempt.student_id,
+            document_id,
+            created_at,
+        )
+        session = TutorSessionRecord(
+            session_id="session-delete",
+            student_id=attempt.student_id,
+            document_id=document_id,
+            recommendation_id=recommendation.recommendation_id,
+            topic_focus="Cleanup",
+            mode="socratic",
+            created_at=created_at,
+            updated_at=created_at,
+        )
+        message = TutorMessageRecord(
+            message_id="message-delete",
+            session_id=session.session_id,
+            role="tutor",
+            content="Derived private content",
+            citations_json="[]",
+            created_at=created_at,
+        )
+        self.database.save_quiz(quiz)
+        self.database.save_quiz_attempt(attempt)
+        self.database.save_recommendation(recommendation)
+        self.database.create_tutor_session(session)
+        self.database.save_tutor_message(message)
+
+        self.assertTrue(self.database.delete_document(document_id))
+
+        self.assertIsNone(self.database.get_quiz(quiz.quiz_id))
+        self.assertIsNone(self.database.get_quiz_attempt(attempt.attempt_id))
+        self.assertIsNone(
+            self.database.get_recommendation(recommendation.recommendation_id)
+        )
+        self.assertIsNone(self.database.get_tutor_session(session.session_id))
+        self.assertEqual(self.database.get_session_messages(session.session_id), [])
 
     def test_save_and_retrieve_quiz_attempt(self) -> None:
         attempt = make_quiz_attempt("att_1", "student_a", "doc_1", "2026-01-01T00:00:00+00:00")
