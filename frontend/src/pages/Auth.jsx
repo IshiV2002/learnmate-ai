@@ -11,7 +11,7 @@ const initialValues = {
   confirmPassword: "",
 };
 
-function Auth({ onAuthenticated }) {
+function Auth({ onAuthenticated, onViewPlans }) {
   const [mode, setMode] = useState("login");
   const [values, setValues] = useState(initialValues);
   const [showPassword, setShowPassword] = useState(false);
@@ -88,6 +88,10 @@ function Auth({ onAuthenticated }) {
           Upload trusted material, learn with grounded tutoring, test your
           understanding, and receive transparent study guidance.
         </p>
+        <div className="auth-story-actions">
+          <button onClick={onViewPlans} type="button">Explore proposed plans</button>
+          <span>No payment or subscription is required in this prototype.</span>
+        </div>
         <div className="auth-agent-map" aria-label="LearnMate agent capabilities">
           {[
             ["01", "Retrieval", "Finds relevant sections with page references"],
