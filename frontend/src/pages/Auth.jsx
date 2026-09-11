@@ -89,7 +89,7 @@ function Auth({ onAuthenticated, onViewPlans }) {
           understanding, and receive transparent study guidance.
         </p>
         <div className="auth-story-actions">
-          <button onClick={onViewPlans} type="button">Explore proposed plans</button>
+          <button onClick={onViewPlans} type="button">Explore plans</button>
           <span>No payment or subscription is required in this prototype.</span>
         </div>
         <div className="auth-agent-map" aria-label="LearnMate agent capabilities">
