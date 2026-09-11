@@ -1,8 +1,12 @@
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 
 BACKEND_DIRECTORY = Path(__file__).resolve().parents[2]
+load_dotenv(BACKEND_DIRECTORY / ".env")
+
 UPLOAD_DIRECTORY = BACKEND_DIRECTORY / "uploads"
 CHROMA_DATA_DIRECTORY = BACKEND_DIRECTORY / "chroma_data"
 DATA_DIRECTORY = BACKEND_DIRECTORY / "data"
@@ -18,6 +22,10 @@ FRONTEND_ORIGINS = [
 ]
 
 DEFAULT_MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
+DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES = 60
+
+JWT_SECRET_KEY = os.getenv("LEARNMATE_JWT_SECRET_KEY", "").strip()
+JWT_ALGORITHM = "HS256"
 
 # Text chunks use words because this is simple to understand and inspect.
 CHUNK_SIZE_WORDS = 180
@@ -56,3 +64,28 @@ def _read_max_upload_size() -> int:
 
 
 MAX_UPLOAD_SIZE_BYTES = _read_max_upload_size()
+
+
+def _read_access_token_expiry() -> int:
+    """Read the login duration while rejecting unsafe configuration values."""
+    configured_value = os.getenv(
+        "LEARNMATE_ACCESS_TOKEN_EXPIRE_MINUTES",
+        str(DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+
+    try:
+        expiry_minutes = int(configured_value)
+    except ValueError as error:
+        raise RuntimeError(
+            "LEARNMATE_ACCESS_TOKEN_EXPIRE_MINUTES must be a whole number."
+        ) from error
+
+    if expiry_minutes <= 0:
+        raise RuntimeError(
+            "LEARNMATE_ACCESS_TOKEN_EXPIRE_MINUTES must be greater than zero."
+        )
+
+    return expiry_minutes
+
+
+ACCESS_TOKEN_EXPIRE_MINUTES = _read_access_token_expiry()

@@ -6,9 +6,14 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.api import documents, quizzes, recommendations
+from app.api.auth import get_current_user
 from app.database.database import DocumentDatabase
 from app.database.models import DocumentRecord
 from app.main import app
+from tests.auth_helpers import make_test_user
+
+
+TEST_USER = make_test_user("quiz-test-user")
 
 
 class QuizzesAPITests(unittest.TestCase):
@@ -29,6 +34,7 @@ class QuizzesAPITests(unittest.TestCase):
                 chunk_count=12,
                 file_size_bytes=3000,
                 created_at="2026-01-01T00:00:00+00:00",
+                user_id=TEST_USER.user_id,
             )
         )
 
@@ -54,10 +60,13 @@ class QuizzesAPITests(unittest.TestCase):
         self.database_patch.start()
         self.quiz_agent_patch.start()
         self.rec_agent_patch.start()
+        app.dependency_overrides[get_current_user] = lambda: TEST_USER
 
         self.client = TestClient(app)
 
     def tearDown(self) -> None:
+        self.client.close()
+        app.dependency_overrides.pop(get_current_user, None)
         self.database_patch.stop()
         self.quiz_agent_patch.stop()
         self.rec_agent_patch.stop()
@@ -142,7 +151,7 @@ class QuizzesAPITests(unittest.TestCase):
         )
         self.assertEqual(eval_res.status_code, 200)
         eval_data = eval_res.json()
-        self.assertEqual(eval_data["student_id"], "student_jordan")
+        self.assertEqual(eval_data["student_id"], TEST_USER.user_id)
         self.assertEqual(eval_data["score"], 1.0)
         self.assertTrue(eval_data["results"][0]["is_correct"])
 
@@ -175,5 +184,19 @@ class QuizzesAPITests(unittest.TestCase):
         self.assertEqual(eval_rec_res.status_code, 200)
         data = eval_rec_res.json()
         self.assertIsNotNone(data["recommendation"])
-        self.assertEqual(data["recommendation"]["student_id"], "student_casey")
+        self.assertEqual(data["recommendation"]["student_id"], TEST_USER.user_id)
         self.assertTrue(len(data["recommendation"]["knowledge_gaps"]) > 0)
+
+    def test_other_user_cannot_read_quiz(self) -> None:
+        generated = self.client.post(
+            "/quizzes/generate",
+            json={"document_id": "doc_api_test_01", "num_questions": 1},
+        )
+        quiz_id = generated.json()["quiz_id"]
+        app.dependency_overrides[get_current_user] = lambda: make_test_user(
+            "another-user"
+        )
+
+        response = self.client.get(f"/quizzes/{quiz_id}")
+
+        self.assertEqual(response.status_code, 404)

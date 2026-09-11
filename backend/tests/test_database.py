@@ -1,6 +1,9 @@
 import json
+import sqlite3
 import tempfile
 import unittest
+from dataclasses import replace
+from contextlib import closing
 from pathlib import Path
 
 from app.database.database import DocumentDatabase, DocumentDatabaseError
@@ -8,6 +11,7 @@ from app.database.models import (
     DocumentRecord,
     QuizAttemptRecord,
     RecommendationRecord,
+    UserRecord,
 )
 
 
@@ -21,6 +25,16 @@ def make_record(document_id: str, created_at: str) -> DocumentRecord:
         chunk_count=3,
         file_size_bytes=100,
         created_at=created_at,
+    )
+
+
+def make_user(user_id: str, email: str) -> UserRecord:
+    return UserRecord(
+        user_id=user_id,
+        full_name="Test Student",
+        email=email,
+        password_hash="$argon2id$test-hash",
+        created_at="2026-01-01T00:00:00+00:00",
     )
 
 
@@ -74,6 +88,80 @@ class DocumentDatabaseTests(unittest.TestCase):
 
         self.assertTrue(self.database_path.is_file())
         self.assertEqual(self.database.list_documents(), [])
+
+    def test_user_creation_lookup_and_unique_email(self) -> None:
+        user = make_user("user-1", "student@example.com")
+        self.database.create_user(user)
+
+        self.assertEqual(self.database.get_user_by_id("user-1"), user)
+        self.assertEqual(
+            self.database.get_user_by_email("STUDENT@example.com"),
+            user,
+        )
+
+        with self.assertRaises(DocumentDatabaseError):
+            self.database.create_user(
+                make_user("user-2", "student@example.com")
+            )
+
+    def test_document_queries_can_be_restricted_to_owner(self) -> None:
+        first = make_user("user-1", "first@example.com")
+        second = make_user("user-2", "second@example.com")
+        self.database.create_user(first)
+        self.database.create_user(second)
+        first_document = replace(
+            make_record("first", "2026-01-01T00:00:00+00:00"),
+            user_id=first.user_id,
+        )
+        second_document = replace(
+            make_record("second", "2026-02-01T00:00:00+00:00"),
+            user_id=second.user_id,
+        )
+        self.database.create_document(first_document)
+        self.database.create_document(second_document)
+
+        self.assertEqual(self.database.list_documents(first.user_id), [first_document])
+        self.assertIsNone(self.database.get_document("second", first.user_id))
+        self.assertFalse(self.database.delete_document("second", first.user_id))
+
+    def test_existing_database_is_migrated_without_assigning_legacy_documents(self) -> None:
+        with closing(sqlite3.connect(self.database_path)) as connection:
+            with connection:
+                connection.execute(
+                    """
+                    CREATE TABLE documents (
+                        document_id TEXT PRIMARY KEY,
+                        original_filename TEXT NOT NULL,
+                        stored_filename TEXT NOT NULL,
+                        page_count INTEGER NOT NULL,
+                        pages_with_text INTEGER NOT NULL,
+                        chunk_count INTEGER NOT NULL,
+                        file_size_bytes INTEGER NOT NULL,
+                        created_at TEXT NOT NULL
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    INSERT INTO documents VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "legacy",
+                        "legacy.pdf",
+                        "legacy.stored.pdf",
+                        1,
+                        1,
+                        1,
+                        100,
+                        "2026-01-01T00:00:00+00:00",
+                    ),
+                )
+
+        migrated_database = DocumentDatabase(self.database_path)
+        migrated_database.initialize()
+
+        self.assertIsNotNone(migrated_database.get_document("legacy"))
+        self.assertEqual(migrated_database.list_documents("new-user"), [])
 
     def test_document_creation_and_primary_key_uniqueness(self) -> None:
         record = make_record("document-1", "2026-01-01T00:00:00+00:00")

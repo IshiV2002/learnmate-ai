@@ -5,7 +5,7 @@ import MobileNavigation from "./MobileNavigation.jsx";
 import Sidebar from "./Sidebar.jsx";
 import TopBar from "./TopBar.jsx";
 
-function AppShell({ children, currentPage, onNavigate }) {
+function AppShell({ children, currentPage, onLogout, onNavigate, user }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const contentRef = useRef(null);
   const previousPage = useRef(currentPage);
@@ -31,7 +31,12 @@ function AppShell({ children, currentPage, onNavigate }) {
       <Sidebar currentPage={currentPage} onNavigate={handleNavigate} />
 
       <div className="app-workspace">
-        <TopBar currentPage={currentPage} onOpenMenu={() => setMobileMenuOpen(true)} />
+        <TopBar
+          currentPage={currentPage}
+          onLogout={onLogout}
+          onOpenMenu={() => setMobileMenuOpen(true)}
+          user={user}
+        />
         <main className="app-content" id="main-content" ref={contentRef} tabIndex={-1}>
           <div className="app-page-frame" key={currentPage}>{children}</div>
         </main>

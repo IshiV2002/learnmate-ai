@@ -5,6 +5,7 @@ import {
   getStudentRecommendations,
   getTutorHandoff,
 } from "../services/api.js";
+import { useAuth } from "../auth/AuthContext.jsx";
 
 const PRESET_QUIZZES = [
   {
@@ -123,9 +124,10 @@ const PRESET_QUIZZES = [
 ];
 
 export default function Recommendations({ initialSubmission, initialRecommendation, onLaunchTutor = null }) {
+  const { user } = useAuth();
   const [documents, setDocuments] = useState([]);
   const [selectedDocId, setSelectedDocId] = useState(initialSubmission?.document_id || "");
-  const [studentId, setStudentId] = useState(initialSubmission?.student_id || "student_demo_01");
+  const studentId = user.user_id;
   const [selectedPreset, setSelectedPreset] = useState(PRESET_QUIZZES[0]);
   const [activeQuestions, setActiveQuestions] = useState(
     initialSubmission?.questions || PRESET_QUIZZES[0].questions
@@ -205,7 +207,7 @@ export default function Recommendations({ initialSubmission, initialRecommendati
     }
 
     const payload = {
-      student_id: studentId.trim() || "student_demo_01",
+      student_id: studentId,
       document_id: targetDocId,
       quiz_id: selectedPreset.id,
       quiz_title: selectedPreset.title,
@@ -271,9 +273,8 @@ export default function Recommendations({ initialSubmission, initialRecommendati
                 <label>Student Identifier</label>
                 <input
                   type="text"
-                  value={studentId}
-                  onChange={(e) => setStudentId(e.target.value)}
-                  placeholder="e.g. student_ravin_2026"
+                  value={user.full_name}
+                  readOnly
                   className="input-field"
                 />
               </div>

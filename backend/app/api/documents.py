@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 from starlette.concurrency import run_in_threadpool
 
 from app.agents.retrieval_agent import RetrievalAgent, RetrievalAgentError
+from app.api.auth import CurrentUser
 from app.core.config import MAX_UPLOAD_SIZE_BYTES, UPLOAD_DIRECTORY
 from app.database.database import DocumentDatabase, DocumentDatabaseError
 from app.database.models import DocumentRecord
@@ -171,7 +172,10 @@ def _database_error_response(error: DocumentDatabaseError) -> HTTPException:
 
 
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
-async def upload_document(file: UploadFile = File(...)) -> dict[str, object]:
+async def upload_document(
+    current_user: CurrentUser,
+    file: UploadFile = File(...),
+) -> dict[str, object]:
     """Validate, save, and extract page-level text from one uploaded PDF."""
     try:
         original_filename = _safe_display_filename(file.filename)
@@ -251,6 +255,7 @@ async def upload_document(file: UploadFile = File(...)) -> dict[str, object]:
         chunk_count=len(chunks),
         file_size_bytes=len(file_content),
         created_at=datetime.now(timezone.utc).isoformat(),
+        user_id=current_user.user_id,
     )
 
     try:
@@ -286,10 +291,16 @@ async def upload_document(file: UploadFile = File(...)) -> dict[str, object]:
 
 
 @router.post("/search")
-def search_documents(request: DocumentSearchRequest) -> dict[str, object]:
+def search_documents(
+    request: DocumentSearchRequest,
+    current_user: CurrentUser,
+) -> dict[str, object]:
     """Search the selected indexed document using semantic similarity."""
     try:
-        document = get_document_database().get_document(request.document_id)
+        document = get_document_database().get_document(
+            request.document_id,
+            current_user.user_id,
+        )
     except DocumentDatabaseError as error:
         raise _database_error_response(error) from error
 
@@ -318,10 +329,10 @@ def search_documents(request: DocumentSearchRequest) -> dict[str, object]:
 
 
 @router.get("")
-def list_documents() -> list[dict[str, str | int]]:
-    """List all local documents; user ownership is not available yet."""
+def list_documents(current_user: CurrentUser) -> list[dict[str, str | int]]:
+    """List only knowledge sources owned by the signed-in user."""
     try:
-        records = get_document_database().list_documents()
+        records = get_document_database().list_documents(current_user.user_id)
     except DocumentDatabaseError as error:
         raise _database_error_response(error) from error
 
@@ -329,10 +340,16 @@ def list_documents() -> list[dict[str, str | int]]:
 
 
 @router.get("/{document_id}")
-def get_document(document_id: str) -> dict[str, str | int]:
+def get_document(
+    document_id: str,
+    current_user: CurrentUser,
+) -> dict[str, str | int]:
     """Return public metadata for one locally stored document."""
     try:
-        record = get_document_database().get_document(document_id)
+        record = get_document_database().get_document(
+            document_id,
+            current_user.user_id,
+        )
     except DocumentDatabaseError as error:
         raise _database_error_response(error) from error
 
@@ -346,12 +363,15 @@ def get_document(document_id: str) -> dict[str, str | int]:
 
 
 @router.delete("/{document_id}")
-def delete_document(document_id: str) -> dict[str, str]:
+def delete_document(
+    document_id: str,
+    current_user: CurrentUser,
+) -> dict[str, str]:
     """Remove a document from ChromaDB, local storage, and then SQLite."""
     database = get_document_database()
 
     try:
-        record = database.get_document(document_id)
+        record = database.get_document(document_id, current_user.user_id)
     except DocumentDatabaseError as error:
         raise _database_error_response(error) from error
 
@@ -382,7 +402,10 @@ def delete_document(document_id: str) -> dict[str, str]:
         ) from error
 
     try:
-        metadata_deleted = database.delete_document(document_id)
+        metadata_deleted = database.delete_document(
+            document_id,
+            current_user.user_id,
+        )
     except DocumentDatabaseError as error:
         raise _database_error_response(error) from error
 
