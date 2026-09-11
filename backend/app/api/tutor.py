@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, status
 from starlette.concurrency import run_in_threadpool
 
 from app.agents.tutor_agent import TutorAgent, TutorAgentError
+from app.api.auth import CurrentUser
 from app.api.documents import get_document_database, get_retrieval_agent
 from app.database.models import (
     TutorChatRequest,
@@ -54,12 +55,25 @@ def get_tutor_agent() -> TutorAgent:
 )
 async def start_tutor_session(
     request: TutorSessionInitRequest,
+    current_user: CurrentUser,
 ) -> TutorSessionResponse:
     """Initialize an AI tutoring session for a document or from a recommendation handoff."""
     try:
+        if get_document_database().get_document(
+            request.document_id, current_user.user_id
+        ) is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Document not found.",
+            )
+        request = request.model_copy(
+            update={"student_id": current_user.user_id}
+        )
         agent = get_tutor_agent()
         session = await run_in_threadpool(agent.start_session, request)
         return session
+    except HTTPException:
+        raise
     except TutorAgentError as error:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -79,12 +93,23 @@ async def start_tutor_session(
 )
 async def send_chat_message(
     request: TutorChatRequest,
+    current_user: CurrentUser,
 ) -> TutorChatResponse:
     """Send student question/answer to the Tutor Agent and receive grounded Socratic explanation with citations."""
     try:
         agent = get_tutor_agent()
+        session = await run_in_threadpool(
+            agent.get_session_history, request.session_id
+        )
+        if session is None or session.student_id != current_user.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Tutor session '{request.session_id}' not found.",
+            )
         response = await run_in_threadpool(agent.respond, request)
         return response
+    except HTTPException:
+        raise
     except TutorAgentError as error:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -104,6 +129,7 @@ async def send_chat_message(
 )
 async def get_tutor_session(
     session_id: str,
+    current_user: CurrentUser,
 ) -> TutorSessionResponse:
     """Retrieve full conversation history and metadata for an active or archived tutoring session."""
     try:
@@ -115,7 +141,7 @@ async def get_tutor_session(
             detail="Could not retrieve tutor session history.",
         ) from error
 
-    if session is None:
+    if session is None or session.student_id != current_user.user_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Tutor session '{session_id}' not found.",
@@ -130,12 +156,20 @@ async def get_tutor_session(
 )
 async def list_student_tutor_sessions(
     student_id: str,
+    current_user: CurrentUser,
 ) -> list[dict[str, Any]]:
     """List all AI tutoring sessions conducted by a student."""
     try:
+        if student_id != current_user.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You cannot access another user's tutor sessions.",
+            )
         agent = get_tutor_agent()
         sessions = await run_in_threadpool(agent.list_student_sessions, student_id)
         return [s.to_dict() for s in sessions]
+    except HTTPException:
+        raise
     except Exception as error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -149,11 +183,20 @@ async def list_student_tutor_sessions(
 )
 async def delete_tutor_session(
     session_id: str,
+    current_user: CurrentUser,
 ) -> dict[str, Any]:
     """Delete a tutor session and its message records."""
     try:
         agent = get_tutor_agent()
+        session = await run_in_threadpool(agent.get_session_history, session_id)
+        if session is None or session.student_id != current_user.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Tutor session '{session_id}' not found.",
+            )
         deleted = await run_in_threadpool(agent.delete_session, session_id)
+    except HTTPException:
+        raise
     except Exception as error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

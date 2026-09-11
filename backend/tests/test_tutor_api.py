@@ -7,9 +7,14 @@ from fastapi.testclient import TestClient
 
 from app.agents.tutor_agent import TutorAgent
 from app.api import documents, tutor
+from app.api.auth import get_current_user
 from app.database.database import DocumentDatabase
 from app.database.models import DocumentRecord
 from app.main import app
+from tests.auth_helpers import make_test_user
+
+
+TEST_USER = make_test_user("student_test_01")
 
 
 class MockRetrievalAgent:
@@ -45,6 +50,7 @@ class TutorAPITests(unittest.TestCase):
                 chunk_count=12,
                 file_size_bytes=4096,
                 created_at="2026-01-01T00:00:00+00:00",
+                user_id=TEST_USER.user_id,
             )
         )
 
@@ -63,10 +69,13 @@ class TutorAPITests(unittest.TestCase):
         )
         self.database_patch.start()
         self.tutor_agent_patch.start()
+        app.dependency_overrides[get_current_user] = lambda: TEST_USER
 
         self.client = TestClient(app)
 
     def tearDown(self) -> None:
+        self.client.close()
+        app.dependency_overrides.pop(get_current_user, None)
         self.database_patch.stop()
         self.tutor_agent_patch.stop()
         self.temporary_directory.cleanup()
@@ -141,7 +150,7 @@ class TutorAPITests(unittest.TestCase):
             },
         )
 
-        res = self.client.get("/tutor/student/student_multi")
+        res = self.client.get(f"/tutor/student/{TEST_USER.user_id}")
         self.assertEqual(res.status_code, 200)
         sessions = res.json()
         self.assertEqual(len(sessions), 2)
@@ -161,3 +170,20 @@ class TutorAPITests(unittest.TestCase):
 
         get_res = self.client.get(f"/tutor/session/{session_id}")
         self.assertEqual(get_res.status_code, 404)
+
+    def test_other_user_cannot_read_tutor_session(self) -> None:
+        created = self.client.post(
+            "/tutor/session/start",
+            json={
+                "student_id": "spoofed-user",
+                "document_id": "doc_ethics_01",
+            },
+        )
+        session_id = created.json()["session_id"]
+        app.dependency_overrides[get_current_user] = lambda: make_test_user(
+            "another-user"
+        )
+
+        response = self.client.get(f"/tutor/session/{session_id}")
+
+        self.assertEqual(response.status_code, 404)

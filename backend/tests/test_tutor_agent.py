@@ -209,3 +209,24 @@ class TutorAgentTests(unittest.TestCase):
                     message="Hello!",
                 )
             )
+
+    def test_tutor_declines_when_course_evidence_is_unavailable(self) -> None:
+        agent = TutorAgent(database=self.database, retrieval_agent=None)
+        session = agent.start_session(
+            TutorSessionInitRequest(
+                student_id="student_99",
+                document_id="doc_vsm_01",
+                topic_focus="Unsupported Topic",
+            )
+        )
+
+        response = agent.respond(
+            TutorChatRequest(
+                session_id=session.session_id,
+                message="Explain a topic that is not supported by this PDF.",
+            )
+        )
+
+        self.assertEqual(response.citations, [])
+        self.assertIn("could not find enough supporting text", response.reply)
+        self.assertIn("will not invent", response.reply)

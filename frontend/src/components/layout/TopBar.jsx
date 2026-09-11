@@ -3,7 +3,7 @@ import Button from "../ui/Button.jsx";
 import Icon from "../ui/Icon.jsx";
 import { getNavigationItem } from "./navigation.js";
 
-function TopBar({ currentPage, onOpenMenu }) {
+function TopBar({ currentPage, onLogout, onOpenMenu, user }) {
   const page = getNavigationItem(currentPage);
 
   return (
@@ -26,6 +26,16 @@ function TopBar({ currentPage, onOpenMenu }) {
           <span className="system-dot" aria-hidden="true" />
           Multi-agent learning
         </Badge>
+        <div className="topbar-user">
+          <span className="topbar-avatar" aria-hidden="true">
+            {user.full_name.charAt(0).toUpperCase()}
+          </span>
+          <span className="topbar-user-copy">
+            <strong>{user.full_name}</strong>
+            <small>Private workspace</small>
+          </span>
+        </div>
+        <Button onClick={onLogout}>Sign out</Button>
       </div>
     </header>
   );
