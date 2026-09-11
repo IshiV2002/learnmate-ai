@@ -353,6 +353,45 @@
   gap: 10px;
 }
 
+.topbar-user {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-left: 10px;
+  border-left: 1px solid var(--color-border);
+}
+
+.topbar-avatar {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid rgb(125 211 199 / 24%);
+  border-radius: 11px;
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.topbar-user-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.topbar-user-copy strong {
+  max-width: 150px;
+  overflow: hidden;
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-user-copy small {
+  color: var(--color-text-subtle);
+  font-size: 0.65rem;
+}
+
 .mobile-menu-button {
   display: none;
 }
@@ -427,6 +466,15 @@
 
   .topbar-actions .ui-badge {
     display: none;
+  }
+
+  .topbar-user-copy {
+    display: none;
+  }
+
+  .topbar-user {
+    padding-left: 0;
+    border-left: 0;
   }
 
   .topbar-title {

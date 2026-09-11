@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from starlette.concurrency import run_in_threadpool
 
 from app.agents.quiz_agent import QuizAgent, QuizAgentError
+from app.api.auth import CurrentUser
 from app.api.documents import get_document_database, get_retrieval_agent
 from app.api.recommendations import get_recommendation_agent
 from app.database.database import DocumentDatabaseError
@@ -53,13 +54,18 @@ def get_quiz_agent() -> QuizAgent:
 )
 async def generate_quiz(
     request: QuizGenerationRequest,
+    current_user: CurrentUser,
 ) -> dict[str, Any]:
     """Synthesize a multi-question quiz anchored to the document's indexed semantic context."""
     db = get_document_database()
 
     # Validate that document exists
     try:
-        doc = await run_in_threadpool(db.get_document, request.document_id)
+        doc = await run_in_threadpool(
+            db.get_document,
+            request.document_id,
+            current_user.user_id,
+        )
     except DocumentDatabaseError as error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -75,7 +81,8 @@ async def generate_quiz(
     try:
         agent = get_quiz_agent()
         quiz_record = await run_in_threadpool(agent.generate_quiz, request)
-        return quiz_record.to_dict(include_solutions=True)
+        # Answers stay server-side until the learner submits the quiz.
+        return quiz_record.to_dict(include_solutions=False)
     except QuizAgentError as error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -89,12 +96,19 @@ async def generate_quiz(
 )
 async def get_quiz(
     quiz_id: str,
+    current_user: CurrentUser,
     include_solutions: bool = Query(
         default=False,
         description="Set to true to include correct answers and explanations (e.g. for post-test review)",
     ),
 ) -> dict[str, Any]:
     """Retrieve quiz questions and parameters."""
+    if include_solutions:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Quiz solutions are available only in the evaluation response after submission.",
+        )
+
     try:
         agent = get_quiz_agent()
         quiz = await run_in_threadpool(agent.get_quiz, quiz_id)
@@ -110,7 +124,15 @@ async def get_quiz(
             detail=f"Quiz with ID '{quiz_id}' not found.",
         )
 
-    return quiz.to_dict(include_solutions=include_solutions)
+    if get_document_database().get_document(
+        quiz.document_id, current_user.user_id
+    ) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Quiz with ID '{quiz_id}' not found.",
+        )
+
+    return quiz.to_dict(include_solutions=False)
 
 
 @router.get(
@@ -119,8 +141,17 @@ async def get_quiz(
 )
 async def list_document_quizzes(
     document_id: str,
+    current_user: CurrentUser,
 ) -> list[dict[str, Any]]:
     """List all quizzes created for a specific lecture PDF."""
+    if get_document_database().get_document(
+        document_id, current_user.user_id
+    ) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
+        )
+
     try:
         agent = get_quiz_agent()
         quizzes = await run_in_threadpool(agent.list_document_quizzes, document_id)
@@ -136,12 +167,20 @@ async def list_document_quizzes(
     "",
     summary="List All Generated Quizzes",
 )
-async def list_all_quizzes() -> list[dict[str, Any]]:
+async def list_all_quizzes(
+    current_user: CurrentUser,
+) -> list[dict[str, Any]]:
     """List all quizzes created in the system."""
     try:
         agent = get_quiz_agent()
         quizzes = await run_in_threadpool(agent.list_all_quizzes)
-        return [q.to_dict(include_solutions=False) for q in quizzes]
+        database = get_document_database()
+        return [
+            quiz.to_dict(include_solutions=False)
+            for quiz in quizzes
+            if database.get_document(quiz.document_id, current_user.user_id)
+            is not None
+        ]
     except Exception as error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -157,14 +196,28 @@ async def list_all_quizzes() -> list[dict[str, Any]]:
 async def evaluate_quiz_submission(
     quiz_id: str,
     submission: QuizEvaluationRequest,
+    current_user: CurrentUser,
 ) -> QuizEvaluationResponse:
     """Evaluate student answers against the quiz rubric, compute scores, and save the attempt."""
     try:
         agent = get_quiz_agent()
+        quiz = await run_in_threadpool(agent.get_quiz, quiz_id)
+        if quiz is None or get_document_database().get_document(
+            quiz.document_id, current_user.user_id
+        ) is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Quiz with ID '{quiz_id}' not found.",
+            )
+        submission = submission.model_copy(
+            update={"student_id": current_user.user_id}
+        )
         response = await run_in_threadpool(
             agent.evaluate_quiz, quiz_id, submission
         )
         return response
+    except HTTPException:
+        raise
     except QuizAgentError as error:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -173,7 +226,7 @@ async def evaluate_quiz_submission(
     except Exception as error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred during quiz evaluation: {error}",
+            detail="An unexpected error occurred during quiz evaluation.",
         ) from error
 
 
@@ -185,10 +238,22 @@ async def evaluate_quiz_submission(
 async def evaluate_and_recommend(
     quiz_id: str,
     submission: QuizEvaluationRequest,
+    current_user: CurrentUser,
 ) -> QuizEvaluationResponse:
     """Evaluate answers and immediately run multi-agent gap analysis and study recommendations."""
     try:
         quiz_agent = get_quiz_agent()
+        quiz = await run_in_threadpool(quiz_agent.get_quiz, quiz_id)
+        if quiz is None or get_document_database().get_document(
+            quiz.document_id, current_user.user_id
+        ) is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Quiz with ID '{quiz_id}' not found.",
+            )
+        submission = submission.model_copy(
+            update={"student_id": current_user.user_id}
+        )
         rec_agent = get_recommendation_agent()
         response = await run_in_threadpool(
             quiz_agent.evaluate_and_recommend,
@@ -197,6 +262,8 @@ async def evaluate_and_recommend(
             rec_agent,
         )
         return response
+    except HTTPException:
+        raise
     except QuizAgentError as error:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -205,7 +272,7 @@ async def evaluate_and_recommend(
     except Exception as error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to complete multi-agent evaluation and recommendation: {error}",
+            detail="The quiz evaluation and recommendation workflow could not be completed.",
         ) from error
 
 
@@ -213,11 +280,24 @@ async def evaluate_and_recommend(
     "/{quiz_id}",
     summary="Delete Quiz",
 )
-async def delete_quiz(quiz_id: str) -> dict[str, str]:
+async def delete_quiz(
+    quiz_id: str,
+    current_user: CurrentUser,
+) -> dict[str, str]:
     """Delete a generated quiz."""
     try:
         db = get_document_database()
+        quiz = await run_in_threadpool(db.get_quiz, quiz_id)
+        if quiz is None or db.get_document(
+            quiz.document_id, current_user.user_id
+        ) is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Quiz with ID '{quiz_id}' not found.",
+            )
         existed = await run_in_threadpool(db.delete_quiz, quiz_id)
+    except HTTPException:
+        raise
     except Exception as error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

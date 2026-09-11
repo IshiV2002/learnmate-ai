@@ -7,9 +7,11 @@ import {
   startTutorSession,
   deleteTutorSession,
 } from "../services/api.js";
+import { useAuth } from "../auth/AuthContext.jsx";
 
 export default function Tutor({ initialHandoff = null, onClearHandoff = null }) {
-  const [studentId, setStudentId] = useState("student_demo_01");
+  const { user } = useAuth();
+  const studentId = user.user_id;
   const [documents, setDocuments] = useState([]);
   const [selectedDocId, setSelectedDocId] = useState("");
   const [topicFocus, setTopicFocus] = useState("");
@@ -62,9 +64,6 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
       if (initialHandoff.target_topics && initialHandoff.target_topics.length > 0) {
         setTopicFocus(initialHandoff.target_topics[0]);
       }
-      if (initialHandoff.student_id) {
-        setStudentId(initialHandoff.student_id);
-      }
       // Auto-start remedial session
       initSessionFromHandoff(initialHandoff);
     }
@@ -91,7 +90,7 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
     setError(null);
     try {
       const payload = {
-        student_id: handoff.student_id || studentId,
+        student_id: studentId,
         document_id: handoff.document_id,
         recommendation_id: handoff.recommendation_id,
         mode: "socratic",
@@ -126,7 +125,7 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
 
     try {
       const payload = {
-        student_id: studentId.trim() || "student_demo_01",
+        student_id: studentId,
         document_id: selectedDocId,
         mode: mode,
         topic_focus: topicFocus.trim() || null,
@@ -248,6 +247,9 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
             <p className="tutor-subtitle">
               Pedagogical conversational learning grounded strictly in your course lecture materials.
             </p>
+            <p className="tutor-subtitle">
+              AI-generated explanations can be imperfect. Verify important academic information against the cited pages.
+            </p>
           </div>
 
           <div className="tutor-action-group">
@@ -272,12 +274,11 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
         {/* Configuration Row */}
         <div className="tutor-config-grid">
           <div className="form-group">
-            <label>👤 Student ID</label>
+            <label>👤 Signed-in learner</label>
             <input
               type="text"
-              value={studentId}
-              onChange={(e) => setStudentId(e.target.value)}
-              placeholder="e.g. student_demo_01"
+              value={user.full_name}
+              readOnly
             />
           </div>
 
@@ -543,7 +544,7 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
           </div>
 
           <p className="evidence-desc">
-            Passages retrieved via the <strong>Retrieval Agent</strong> semantic search to prevent hallucination.
+            Passages retrieved via the <strong>Retrieval Agent</strong> semantic search reduce hallucination risk, but do not guarantee correctness.
           </p>
 
           <div className="citations-feed">
@@ -579,7 +580,7 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
         <div className="modal-overlay" onClick={() => setShowHistoryModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>📜 Student Tutoring History ({studentId})</h3>
+              <h3>📜 Your Tutoring History</h3>
               <button
                 type="button"
                 className="close-modal-btn"
@@ -591,7 +592,7 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
 
             <div className="modal-body">
               {pastSessions.length === 0 ? (
-                <p className="no-data-msg">No past sessions found for student '{studentId}'.</p>
+                <p className="no-data-msg">No past tutoring sessions found.</p>
               ) : (
                 <div className="session-history-list">
                   {pastSessions.map((s) => (
