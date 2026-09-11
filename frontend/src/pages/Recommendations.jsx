@@ -516,7 +516,8 @@ export default function Recommendations({ initialSubmission, initialRecommendati
                         {gap.severity} GAP
                       </span>
                       <span className="confidence-pill">
-                        Evidence strength: {Math.round(gap.confidence_score * 100)}%
+                        Evidence: {gap.missed_questions_count} missed{" "}
+                        {gap.missed_questions_count === 1 ? "question" : "questions"}
                       </span>
                     </div>
 
