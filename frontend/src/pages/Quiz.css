@@ -470,11 +470,18 @@
   background: rgb(125 211 199 / 5%);
 }
 
+.quiz-format-pill input[type="radio"],
 .quiz-format-pill input[type="checkbox"] {
   accent-color: var(--color-accent);
   width: 16px;
   height: 16px;
   cursor: pointer;
+}
+
+.quiz-format-pill-selected {
+  border-color: var(--color-accent);
+  background: rgb(125 211 199 / 10%);
+  box-shadow: 0 0 0 1px rgb(125 211 199 / 25%);
 }
 
 .quiz-format-pill span {
