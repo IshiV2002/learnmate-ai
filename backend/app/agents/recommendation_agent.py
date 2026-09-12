@@ -153,7 +153,7 @@ class RecommendationAgent:
 
         except Exception as error:
             raise RecommendationAgentError(
-                f"Failed to generate study recommendations: {error}"
+                "Study recommendations could not be generated."
             ) from error
 
     def get_recommendation_by_id(

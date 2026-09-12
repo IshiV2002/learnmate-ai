@@ -14,12 +14,17 @@ from fastapi.testclient import TestClient
 from starlette.datastructures import Headers
 
 from app.api import documents
+from app.api.auth import get_current_user
 from app.agents.retrieval_agent import RetrievalAgent
 from app.database.database import DocumentDatabase, DocumentDatabaseError
 from app.database.models import DocumentRecord
 from app.main import app
 from app.services.pdf_service import extract_pdf_pages
 from app.services.vector_store_service import VectorStoreService
+from tests.auth_helpers import make_test_user
+
+
+TEST_USER = make_test_user()
 
 
 def create_test_pdf(page_texts: list[str]) -> bytes:
@@ -112,7 +117,7 @@ class DocumentUploadTests(unittest.IsolatedAsyncioTestCase):
         pdf_content = create_test_pdf(["LearnMate lecture notes"])
         upload = create_upload(pdf_content, "lecture.pdf", "application/pdf")
 
-        response = await documents.upload_document(upload)
+        response = await documents.upload_document(TEST_USER, upload)
         document_metadata = response["document"]
 
         self.assertEqual(
@@ -148,8 +153,8 @@ class DocumentUploadTests(unittest.IsolatedAsyncioTestCase):
             "application/pdf",
         )
 
-        first_response = await documents.upload_document(first_upload)
-        second_response = await documents.upload_document(second_upload)
+        first_response = await documents.upload_document(TEST_USER, first_upload)
+        second_response = await documents.upload_document(TEST_USER, second_upload)
 
         self.assertNotEqual(
             first_response["document"]["document_id"],
@@ -164,7 +169,7 @@ class DocumentUploadTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with self.assertRaises(HTTPException) as raised_error:
-            await documents.upload_document(upload)
+            await documents.upload_document(TEST_USER, upload)
 
         self.assertEqual(raised_error.exception.status_code, 422)
         self.assertEqual(
@@ -191,7 +196,7 @@ class DocumentUploadTests(unittest.IsolatedAsyncioTestCase):
             side_effect=DocumentDatabaseError("Test database failure"),
         ):
             with self.assertRaises(HTTPException) as raised_error:
-                await documents.upload_document(upload)
+                await documents.upload_document(TEST_USER, upload)
 
         self.assertEqual(raised_error.exception.status_code, 500)
         self.assertEqual(len(self.fake_retrieval_agent.indexed_document_ids), 1)
@@ -206,7 +211,7 @@ class DocumentUploadTests(unittest.IsolatedAsyncioTestCase):
         upload = create_upload(b"plain text", "notes.txt", "application/pdf")
 
         with self.assertRaises(HTTPException) as raised_error:
-            await documents.upload_document(upload)
+            await documents.upload_document(TEST_USER, upload)
 
         self.assertEqual(raised_error.exception.status_code, 400)
 
@@ -215,7 +220,7 @@ class DocumentUploadTests(unittest.IsolatedAsyncioTestCase):
         upload = create_upload(pdf_content, "lecture.pdf", "text/plain")
 
         with self.assertRaises(HTTPException) as raised_error:
-            await documents.upload_document(upload)
+            await documents.upload_document(TEST_USER, upload)
 
         self.assertEqual(raised_error.exception.status_code, 415)
 
@@ -223,7 +228,7 @@ class DocumentUploadTests(unittest.IsolatedAsyncioTestCase):
         upload = create_upload(b"", "empty.pdf", "application/pdf")
 
         with self.assertRaises(HTTPException) as raised_error:
-            await documents.upload_document(upload)
+            await documents.upload_document(TEST_USER, upload)
 
         self.assertEqual(raised_error.exception.status_code, 400)
 
@@ -232,7 +237,7 @@ class DocumentUploadTests(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(documents, "MAX_UPLOAD_SIZE_BYTES", 5):
             with self.assertRaises(HTTPException) as raised_error:
-                await documents.upload_document(upload)
+                await documents.upload_document(TEST_USER, upload)
 
         self.assertEqual(raised_error.exception.status_code, 413)
 
@@ -244,7 +249,7 @@ class DocumentUploadTests(unittest.IsolatedAsyncioTestCase):
             "application/pdf",
         )
 
-        response = await documents.upload_document(upload)
+        response = await documents.upload_document(TEST_USER, upload)
         document_metadata = response["document"]
         stored_files = list(self.upload_directory.glob("*.pdf"))
 
@@ -258,7 +263,7 @@ class DocumentUploadTests(unittest.IsolatedAsyncioTestCase):
         upload = create_upload(b"not a real PDF", "fake.pdf", "application/pdf")
 
         with self.assertRaises(HTTPException) as raised_error:
-            await documents.upload_document(upload)
+            await documents.upload_document(TEST_USER, upload)
 
         self.assertEqual(raised_error.exception.status_code, 400)
 
@@ -292,12 +297,14 @@ class DocumentSearchApiTests(unittest.TestCase):
             return_value=self.database,
         )
         self.database_patch.start()
+        app.dependency_overrides[get_current_user] = lambda: TEST_USER
         self.client = TestClient(app)
 
     def tearDown(self) -> None:
         self.client.close()
         self.database_patch.stop()
         self.retrieval_agent_patch.stop()
+        app.dependency_overrides.pop(get_current_user, None)
         self.temporary_directory.cleanup()
 
     def test_empty_query_is_rejected(self) -> None:
@@ -314,6 +321,7 @@ class DocumentSearchApiTests(unittest.TestCase):
             headers={
                 "Origin": "http://localhost:5173",
                 "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "Authorization",
             },
         )
 
@@ -321,6 +329,10 @@ class DocumentSearchApiTests(unittest.TestCase):
         self.assertEqual(
             response.headers["access-control-allow-origin"],
             "http://localhost:5173",
+        )
+        self.assertIn(
+            "Authorization",
+            response.headers["access-control-allow-headers"],
         )
 
     def test_unknown_frontend_origin_is_not_allowed_by_cors(self) -> None:
@@ -404,6 +416,7 @@ def make_document_record(
         chunk_count=3,
         file_size_bytes=100,
         created_at=created_at or datetime.now(timezone.utc).isoformat(),
+        user_id=TEST_USER.user_id,
     )
 
 
@@ -434,6 +447,7 @@ class DocumentManagementApiTests(unittest.TestCase):
         self.upload_directory_patch.start()
         self.database_patch.start()
         self.retrieval_agent_patch.start()
+        app.dependency_overrides[get_current_user] = lambda: TEST_USER
         self.client = TestClient(app)
 
     def tearDown(self) -> None:
@@ -441,6 +455,7 @@ class DocumentManagementApiTests(unittest.TestCase):
         self.retrieval_agent_patch.stop()
         self.database_patch.stop()
         self.upload_directory_patch.stop()
+        app.dependency_overrides.pop(get_current_user, None)
         self.temporary_directory.cleanup()
 
     def test_list_documents_returns_newest_first_without_internal_filename(self) -> None:
@@ -565,6 +580,7 @@ class DocumentWorkflowIntegrationTests(unittest.TestCase):
         self.upload_directory_patch.start()
         self.database_patch.start()
         self.retrieval_agent_patch.start()
+        app.dependency_overrides[get_current_user] = lambda: TEST_USER
         self.client = TestClient(app)
 
     def tearDown(self) -> None:
@@ -572,6 +588,7 @@ class DocumentWorkflowIntegrationTests(unittest.TestCase):
         self.retrieval_agent_patch.stop()
         self.database_patch.stop()
         self.upload_directory_patch.stop()
+        app.dependency_overrides.pop(get_current_user, None)
         self.vector_store.close()
         del self.retrieval_agent
         del self.vector_store

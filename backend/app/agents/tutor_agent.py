@@ -217,16 +217,28 @@ class TutorAgent:
             except Exception:
                 pass
 
-        # 6. Generate Response via LLM or deterministic pedagogical engine
+        # 6. Generate a response only when the selected material supplied evidence.
         active_mode = request.mode or session.mode
-        reply_text, followups, check_q = self.llm_service.generate_tutor_response(
-            topic_focus=session.topic_focus,
-            mode=active_mode,
-            pedagogical_directive=pedagogical_directive,
-            lecture_chunks=retrieved_citations,
-            history=history_for_llm,
-            student_message=request.message,
-        )
+        if not retrieved_citations:
+            reply_text = (
+                "I could not find enough supporting text in the selected course "
+                "material to answer that reliably. Please rephrase the question or "
+                "choose a topic covered by the PDF. I will not invent an unsupported answer."
+            )
+            followups = [
+                "Help me rephrase this question for the course material.",
+                "What topics from this document can we review?",
+            ]
+            check_q = None
+        else:
+            reply_text, followups, check_q = self.llm_service.generate_tutor_response(
+                topic_focus=session.topic_focus,
+                mode=active_mode,
+                pedagogical_directive=pedagogical_directive,
+                lecture_chunks=retrieved_citations,
+                history=history_for_llm,
+                student_message=request.message,
+            )
 
         # 7. Persist Tutor Message & Update Session
         tutor_msg_id = f"msg_{uuid.uuid4().hex[:12]}"

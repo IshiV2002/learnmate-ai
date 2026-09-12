@@ -6,6 +6,7 @@ from app.agents.recommendation_agent import (
     RecommendationAgent,
     RecommendationAgentError,
 )
+from app.api.auth import CurrentUser
 from app.api.documents import get_document_database, get_retrieval_agent
 from app.database.database import DocumentDatabaseError
 from app.database.models import (
@@ -56,13 +57,18 @@ def get_recommendation_agent() -> RecommendationAgent:
 )
 async def analyze_quiz_submission(
     submission: QuizSubmissionRequest,
+    current_user: CurrentUser,
 ) -> RecommendationResponse:
     """Ingest quiz submission details, perform gap analysis, and generate explainable study recommendations."""
     db = get_document_database()
 
     # Validate that the associated document exists in the system
     try:
-        doc = await run_in_threadpool(db.get_document, submission.document_id)
+        doc = await run_in_threadpool(
+            db.get_document,
+            submission.document_id,
+            current_user.user_id,
+        )
     except DocumentDatabaseError as error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -76,6 +82,9 @@ async def analyze_quiz_submission(
         )
 
     try:
+        submission = submission.model_copy(
+            update={"student_id": current_user.user_id}
+        )
         agent = get_recommendation_agent()
         response = await run_in_threadpool(agent.analyze_and_recommend, submission)
         return response
@@ -93,6 +102,7 @@ async def analyze_quiz_submission(
 )
 async def get_recommendation(
     recommendation_id: str,
+    current_user: CurrentUser,
 ) -> RecommendationResponse:
     """Retrieve full explainable recommendation analysis by recommendation ID."""
     try:
@@ -112,6 +122,12 @@ async def get_recommendation(
             detail=f"Recommendation with ID '{recommendation_id}' not found.",
         )
 
+    if recommendation.student_id != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Recommendation with ID '{recommendation_id}' not found.",
+        )
+
     return recommendation
 
 
@@ -122,6 +138,7 @@ async def get_recommendation(
 )
 async def get_recommendation_by_attempt(
     attempt_id: str,
+    current_user: CurrentUser,
 ) -> RecommendationResponse:
     """Retrieve recommendations linked directly to a specific quiz attempt ID."""
     try:
@@ -141,6 +158,12 @@ async def get_recommendation_by_attempt(
             detail=f"No recommendations found for quiz attempt '{attempt_id}'.",
         )
 
+    if recommendation.student_id != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No recommendations found for quiz attempt '{attempt_id}'.",
+        )
+
     return recommendation
 
 
@@ -151,14 +174,22 @@ async def get_recommendation_by_attempt(
 )
 async def list_student_recommendations(
     student_id: str,
+    current_user: CurrentUser,
 ) -> list[RecommendationResponse]:
     """Retrieve historical recommendations generated for a student."""
     try:
+        if student_id != current_user.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You cannot access another user's recommendations.",
+            )
         agent = get_recommendation_agent()
         recommendations = await run_in_threadpool(
             agent.get_student_recommendations, student_id
         )
         return recommendations
+    except HTTPException:
+        raise
     except Exception as error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -173,13 +204,27 @@ async def list_student_recommendations(
 )
 async def get_tutor_handoff(
     recommendation_id: str,
+    current_user: CurrentUser,
 ) -> TutorHandoffPackage:
     """Retrieve the synthesized Socratic prompt, pedagogical guidance, and cited lecture chunks for the Tutor Agent."""
     try:
         agent = get_recommendation_agent()
+        recommendation = await run_in_threadpool(
+            agent.get_recommendation_by_id, recommendation_id
+        )
+        if (
+            recommendation is None
+            or recommendation.student_id != current_user.user_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Recommendation with ID '{recommendation_id}' not found.",
+            )
         handoff = await run_in_threadpool(
             agent.get_tutor_handoff, recommendation_id
         )
+    except HTTPException:
+        raise
     except Exception as error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

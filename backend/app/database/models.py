@@ -1,7 +1,88 @@
 from dataclasses import asdict, dataclass
 import json
+import re
 from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator
+
+
+@dataclass(frozen=True)
+class UserRecord:
+    """A registered user. Password hashes must never be returned publicly."""
+
+    user_id: str
+    full_name: str
+    email: str
+    password_hash: str
+    created_at: str
+
+    def to_public_dict(self) -> dict[str, str]:
+        return {
+            "user_id": self.user_id,
+            "full_name": self.full_name,
+            "email": self.email,
+            "created_at": self.created_at,
+        }
+
+
+class SignupRequest(BaseModel):
+    """Validated account-registration details."""
+
+    full_name: str = Field(..., min_length=2, max_length=80)
+    email: str = Field(..., min_length=5, max_length=254)
+    password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("full_name")
+    @classmethod
+    def clean_full_name(cls, value: str) -> str:
+        cleaned = " ".join(value.split())
+        if len(cleaned) < 2:
+            raise ValueError("Full name must contain at least 2 characters.")
+        return cleaned
+
+    @field_validator("email")
+    @classmethod
+    def clean_email(cls, value: str) -> str:
+        cleaned = value.strip().lower()
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", cleaned):
+            raise ValueError("Enter a valid email address.")
+        return cleaned
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_strength(cls, value: str) -> str:
+        if not any(character.islower() for character in value):
+            raise ValueError("Password must include a lowercase letter.")
+        if not any(character.isupper() for character in value):
+            raise ValueError("Password must include an uppercase letter.")
+        if not any(character.isdigit() for character in value):
+            raise ValueError("Password must include a number.")
+        return value
+
+
+class LoginRequest(BaseModel):
+    """Credentials used to start an authenticated session."""
+
+    email: str = Field(..., min_length=1, max_length=254)
+    password: str = Field(..., min_length=1, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return value.strip().lower()
+
+
+class UserResponse(BaseModel):
+    user_id: str
+    full_name: str
+    email: str
+    created_at: str
+
+
+class AuthenticationResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in_seconds: int
+    user: UserResponse
 
 
 @dataclass(frozen=True)
@@ -16,11 +97,13 @@ class DocumentRecord:
     chunk_count: int
     file_size_bytes: int
     created_at: str
+    user_id: str | None = None
 
     def to_public_dict(self) -> dict[str, str | int]:
         """Return only fields that are safe for API clients to see."""
         public_record = asdict(self)
         public_record.pop("stored_filename")
+        public_record.pop("user_id")
         return public_record
 
 

@@ -232,3 +232,10 @@ frontend/node_modules/
 frontend/dist/
 frontend/.env*
 !frontend/.env.example
+frontend/package-lock.json
+
+# Local Codex and presentation artifacts
+/.codex_tmp/
+/LearnMate_AI_Mid_Evaluation.pptx
+/LearnMate_AI_Mid_Evaluation.pptx.inspect.ndjson
+/LearnMate_AI_Mid_Evaluation/
