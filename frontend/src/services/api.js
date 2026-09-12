@@ -4,6 +4,12 @@ const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL
 ).replace(/\/+$/, "");
 
+let accessToken = null;
+
+export function setApiAccessToken(token) {
+  accessToken = token || null;
+}
+
 export class ApiError extends Error {
   constructor(message, status = null) {
     super(message);
@@ -29,9 +35,14 @@ function getErrorMessage(responseBody) {
 
 async function apiRequest(path, options = {}) {
   let response;
+  const headers = new Headers(options.headers || {});
+
+  if (accessToken) {
+    headers.set("Authorization", `Bearer ${accessToken}`);
+  }
 
   try {
-    response = await fetch(API_BASE_URL + path, options);
+    response = await fetch(API_BASE_URL + path, { ...options, headers });
   } catch {
     throw new ApiError(
       "Could not connect to LearnMate. Make sure the backend is running.",
@@ -41,10 +52,33 @@ async function apiRequest(path, options = {}) {
   const responseBody = await response.json().catch(() => null);
 
   if (!response.ok) {
+    if (response.status === 401 && accessToken) {
+      window.dispatchEvent(new Event("learnmate:unauthorized"));
+    }
     throw new ApiError(getErrorMessage(responseBody), response.status);
   }
 
   return responseBody;
+}
+
+export function signup(payload) {
+  return apiRequest("/auth/signup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function login(payload) {
+  return apiRequest("/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getCurrentUser() {
+  return apiRequest("/auth/me");
 }
 
 export function getDocuments() {
@@ -145,6 +179,44 @@ export function evaluateAndRecommendQuiz(quizId, payload) {
 
 export function deleteQuiz(quizId) {
   return apiRequest("/quizzes/" + encodeURIComponent(quizId), {
+    method: "DELETE",
+  });
+}
+
+// ---------------------------------------------------------------------
+// Tutor Agent API Endpoints
+// ---------------------------------------------------------------------
+
+export function startTutorSession(payload) {
+  return apiRequest("/tutor/session/start", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function sendTutorMessage(payload) {
+  return apiRequest("/tutor/chat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getTutorSession(sessionId) {
+  return apiRequest("/tutor/session/" + encodeURIComponent(sessionId));
+}
+
+export function getStudentTutorSessions(studentId) {
+  return apiRequest("/tutor/student/" + encodeURIComponent(studentId));
+}
+
+export function deleteTutorSession(sessionId) {
+  return apiRequest("/tutor/session/" + encodeURIComponent(sessionId), {
     method: "DELETE",
   });
 }

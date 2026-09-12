@@ -9,6 +9,9 @@ from app.database.models import (
     QuizAttemptRecord,
     QuizRecord,
     RecommendationRecord,
+    TutorMessageRecord,
+    TutorSessionRecord,
+    UserRecord,
 )
 
 
@@ -40,6 +43,23 @@ class DocumentDatabase:
                     with connection:
                         connection.execute(
                             """
+                            CREATE TABLE IF NOT EXISTS users (
+                                user_id TEXT PRIMARY KEY,
+                                full_name TEXT NOT NULL,
+                                email TEXT NOT NULL UNIQUE,
+                                password_hash TEXT NOT NULL,
+                                created_at TEXT NOT NULL
+                            )
+                            """
+                        )
+                        connection.execute(
+                            """
+                            CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email
+                            ON users(email)
+                            """
+                        )
+                        connection.execute(
+                            """
                             CREATE TABLE IF NOT EXISTS documents (
                                 document_id TEXT PRIMARY KEY,
                                 original_filename TEXT NOT NULL,
@@ -48,8 +68,28 @@ class DocumentDatabase:
                                 pages_with_text INTEGER NOT NULL,
                                 chunk_count INTEGER NOT NULL,
                                 file_size_bytes INTEGER NOT NULL,
-                                created_at TEXT NOT NULL
+                                created_at TEXT NOT NULL,
+                                user_id TEXT,
+                                FOREIGN KEY(user_id) REFERENCES users(user_id)
                             )
+                            """
+                        )
+                        # Version 1 databases do not have document owners. Those
+                        # legacy rows remain unowned and hidden from signed-in users.
+                        document_columns = {
+                            row[1]
+                            for row in connection.execute(
+                                "PRAGMA table_info(documents)"
+                            ).fetchall()
+                        }
+                        if "user_id" not in document_columns:
+                            connection.execute(
+                                "ALTER TABLE documents ADD COLUMN user_id TEXT"
+                            )
+                        connection.execute(
+                            """
+                            CREATE INDEX IF NOT EXISTS idx_documents_user
+                            ON documents(user_id)
                             """
                         )
                         connection.execute(
@@ -138,6 +178,51 @@ class DocumentDatabase:
                             ON recommendations(attempt_id)
                             """
                         )
+                        connection.execute(
+                            """
+                            CREATE TABLE IF NOT EXISTS tutor_sessions (
+                                session_id TEXT PRIMARY KEY,
+                                student_id TEXT NOT NULL,
+                                document_id TEXT NOT NULL,
+                                recommendation_id TEXT,
+                                topic_focus TEXT NOT NULL,
+                                mode TEXT NOT NULL,
+                                created_at TEXT NOT NULL,
+                                updated_at TEXT NOT NULL
+                            )
+                            """
+                        )
+                        connection.execute(
+                            """
+                            CREATE INDEX IF NOT EXISTS idx_tutor_sessions_student
+                            ON tutor_sessions(student_id)
+                            """
+                        )
+                        connection.execute(
+                            """
+                            CREATE INDEX IF NOT EXISTS idx_tutor_sessions_document
+                            ON tutor_sessions(document_id)
+                            """
+                        )
+                        connection.execute(
+                            """
+                            CREATE TABLE IF NOT EXISTS tutor_messages (
+                                message_id TEXT PRIMARY KEY,
+                                session_id TEXT NOT NULL,
+                                role TEXT NOT NULL,
+                                content TEXT NOT NULL,
+                                citations_json TEXT NOT NULL,
+                                created_at TEXT NOT NULL,
+                                FOREIGN KEY(session_id) REFERENCES tutor_sessions(session_id)
+                            )
+                            """
+                        )
+                        connection.execute(
+                            """
+                            CREATE INDEX IF NOT EXISTS idx_tutor_messages_session
+                            ON tutor_messages(session_id)
+                            """
+                        )
             except (OSError, sqlite3.Error) as error:
                 raise DocumentDatabaseError(
                     "The learning database could not be initialized."
@@ -153,6 +238,16 @@ class DocumentDatabase:
         return connection
 
     @staticmethod
+    def _row_to_user(row: sqlite3.Row) -> UserRecord:
+        return UserRecord(
+            user_id=row["user_id"],
+            full_name=row["full_name"],
+            email=row["email"],
+            password_hash=row["password_hash"],
+            created_at=row["created_at"],
+        )
+
+    @staticmethod
     def _row_to_record(row: sqlite3.Row) -> DocumentRecord:
         return DocumentRecord(
             document_id=row["document_id"],
@@ -163,6 +258,7 @@ class DocumentDatabase:
             chunk_count=row["chunk_count"],
             file_size_bytes=row["file_size_bytes"],
             created_at=row["created_at"],
+            user_id=row["user_id"],
         )
 
     @staticmethod
@@ -210,6 +306,86 @@ class DocumentDatabase:
             created_at=row["created_at"],
         )
 
+    @staticmethod
+    def _row_to_tutor_session(row: sqlite3.Row) -> TutorSessionRecord:
+        return TutorSessionRecord(
+            session_id=row["session_id"],
+            student_id=row["student_id"],
+            document_id=row["document_id"],
+            recommendation_id=row["recommendation_id"],
+            topic_focus=row["topic_focus"],
+            mode=row["mode"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    @staticmethod
+    def _row_to_tutor_message(row: sqlite3.Row) -> TutorMessageRecord:
+        return TutorMessageRecord(
+            message_id=row["message_id"],
+            session_id=row["session_id"],
+            role=row["role"],
+            content=row["content"],
+            citations_json=row["citations_json"],
+            created_at=row["created_at"],
+        )
+
+    # -----------------------------------------------------------------
+    # User Operations
+    # -----------------------------------------------------------------
+
+    def create_user(self, user: UserRecord) -> None:
+        """Create a user while storing only a one-way password hash."""
+        try:
+            with closing(self._connect()) as connection:
+                with connection:
+                    connection.execute(
+                        """
+                        INSERT INTO users (
+                            user_id, full_name, email, password_hash, created_at
+                        ) VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (
+                            user.user_id,
+                            user.full_name,
+                            user.email,
+                            user.password_hash,
+                            user.created_at,
+                        ),
+                    )
+        except sqlite3.IntegrityError as error:
+            raise DocumentDatabaseError(
+                "A user with this email already exists."
+            ) from error
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError("The user could not be created.") from error
+
+    def get_user_by_email(self, email: str) -> UserRecord | None:
+        """Look up a registered user by normalized email address."""
+        try:
+            with closing(self._connect()) as connection:
+                row = connection.execute(
+                    "SELECT * FROM users WHERE email = ?",
+                    (email.strip().lower(),),
+                ).fetchone()
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError("The user could not be read.") from error
+
+        return None if row is None else self._row_to_user(row)
+
+    def get_user_by_id(self, user_id: str) -> UserRecord | None:
+        """Look up a registered user by the ID stored in a JWT subject."""
+        try:
+            with closing(self._connect()) as connection:
+                row = connection.execute(
+                    "SELECT * FROM users WHERE user_id = ?",
+                    (user_id,),
+                ).fetchone()
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError("The user could not be read.") from error
+
+        return None if row is None else self._row_to_user(row)
+
     # -----------------------------------------------------------------
     # Document Operations
     # -----------------------------------------------------------------
@@ -229,8 +405,9 @@ class DocumentDatabase:
                             pages_with_text,
                             chunk_count,
                             file_size_bytes,
-                            created_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                            created_at,
+                            user_id
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             document.document_id,
@@ -241,6 +418,7 @@ class DocumentDatabase:
                             document.chunk_count,
                             document.file_size_bytes,
                             document.created_at,
+                            document.user_id,
                         ),
                     )
         except (OSError, sqlite3.Error) as error:
@@ -248,16 +426,26 @@ class DocumentDatabase:
                 "The document metadata could not be saved."
             ) from error
 
-    def list_documents(self) -> list[DocumentRecord]:
-        """Return all documents with the newest uploads first."""
+    def list_documents(self, user_id: str | None = None) -> list[DocumentRecord]:
+        """Return documents, optionally restricted to one authenticated user."""
         try:
             with closing(self._connect()) as connection:
-                rows = connection.execute(
-                    """
-                    SELECT * FROM documents
-                    ORDER BY created_at DESC, rowid DESC
-                    """
-                ).fetchall()
+                if user_id is None:
+                    rows = connection.execute(
+                        """
+                        SELECT * FROM documents
+                        ORDER BY created_at DESC, rowid DESC
+                        """
+                    ).fetchall()
+                else:
+                    rows = connection.execute(
+                        """
+                        SELECT * FROM documents
+                        WHERE user_id = ?
+                        ORDER BY created_at DESC, rowid DESC
+                        """,
+                        (user_id,),
+                    ).fetchall()
         except (OSError, sqlite3.Error) as error:
             raise DocumentDatabaseError(
                 "The document metadata could not be listed."
@@ -265,14 +453,25 @@ class DocumentDatabase:
 
         return [self._row_to_record(row) for row in rows]
 
-    def get_document(self, document_id: str) -> DocumentRecord | None:
-        """Return one document, or None when its ID is unknown."""
+    def get_document(
+        self, document_id: str, user_id: str | None = None
+    ) -> DocumentRecord | None:
+        """Return one document, optionally checking its authenticated owner."""
         try:
             with closing(self._connect()) as connection:
-                row = connection.execute(
-                    "SELECT * FROM documents WHERE document_id = ?",
-                    (document_id,),
-                ).fetchone()
+                if user_id is None:
+                    row = connection.execute(
+                        "SELECT * FROM documents WHERE document_id = ?",
+                        (document_id,),
+                    ).fetchone()
+                else:
+                    row = connection.execute(
+                        """
+                        SELECT * FROM documents
+                        WHERE document_id = ? AND user_id = ?
+                        """,
+                        (document_id, user_id),
+                    ).fetchone()
         except (OSError, sqlite3.Error) as error:
             raise DocumentDatabaseError(
                 "The document metadata could not be read."
@@ -283,11 +482,57 @@ class DocumentDatabase:
 
         return self._row_to_record(row)
 
-    def delete_document(self, document_id: str) -> bool:
-        """Delete one metadata row and report whether it existed."""
+    def delete_document(
+        self, document_id: str, user_id: str | None = None
+    ) -> bool:
+        """Delete an owned document and all learning records derived from it."""
         try:
             with closing(self._connect()) as connection:
                 with connection:
+                    if user_id is None:
+                        owned_document = connection.execute(
+                            "SELECT 1 FROM documents WHERE document_id = ?",
+                            (document_id,),
+                        ).fetchone()
+                    else:
+                        owned_document = connection.execute(
+                            """
+                            SELECT 1 FROM documents
+                            WHERE document_id = ? AND user_id = ?
+                            """,
+                            (document_id, user_id),
+                        ).fetchone()
+
+                    if owned_document is None:
+                        return False
+
+                    # Delete dependent private learning data in foreign-key-safe order.
+                    connection.execute(
+                        """
+                        DELETE FROM tutor_messages
+                        WHERE session_id IN (
+                            SELECT session_id FROM tutor_sessions
+                            WHERE document_id = ?
+                        )
+                        """,
+                        (document_id,),
+                    )
+                    connection.execute(
+                        "DELETE FROM tutor_sessions WHERE document_id = ?",
+                        (document_id,),
+                    )
+                    connection.execute(
+                        "DELETE FROM recommendations WHERE document_id = ?",
+                        (document_id,),
+                    )
+                    connection.execute(
+                        "DELETE FROM quiz_attempts WHERE document_id = ?",
+                        (document_id,),
+                    )
+                    connection.execute(
+                        "DELETE FROM quizzes WHERE document_id = ?",
+                        (document_id,),
+                    )
                     cursor = connection.execute(
                         "DELETE FROM documents WHERE document_id = ?",
                         (document_id,),
@@ -594,3 +839,198 @@ class DocumentDatabase:
             ) from error
 
         return [self._row_to_recommendation(row) for row in rows]
+
+    # -----------------------------------------------------------------
+    # Tutor Session & Message Operations
+    # -----------------------------------------------------------------
+
+    def create_tutor_session(self, session: TutorSessionRecord) -> None:
+        """Persist a new AI tutor session."""
+        try:
+            with closing(self._connect()) as connection:
+                with connection:
+                    connection.execute(
+                        """
+                        INSERT INTO tutor_sessions (
+                            session_id,
+                            student_id,
+                            document_id,
+                            recommendation_id,
+                            topic_focus,
+                            mode,
+                            created_at,
+                            updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            session.session_id,
+                            session.student_id,
+                            session.document_id,
+                            session.recommendation_id,
+                            session.topic_focus,
+                            session.mode,
+                            session.created_at,
+                            session.updated_at,
+                        ),
+                    )
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The tutor session could not be created."
+            ) from error
+
+    def get_tutor_session(self, session_id: str) -> TutorSessionRecord | None:
+        """Retrieve a tutor session by session ID."""
+        try:
+            with closing(self._connect()) as connection:
+                row = connection.execute(
+                    "SELECT * FROM tutor_sessions WHERE session_id = ?",
+                    (session_id,),
+                ).fetchone()
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The tutor session could not be read."
+            ) from error
+
+        if row is None:
+            return None
+
+        return self._row_to_tutor_session(row)
+
+    def list_student_tutor_sessions(
+        self, student_id: str
+    ) -> list[TutorSessionRecord]:
+        """List all tutor sessions for a student, newest first."""
+        try:
+            with closing(self._connect()) as connection:
+                rows = connection.execute(
+                    """
+                    SELECT * FROM tutor_sessions
+                    WHERE student_id = ?
+                    ORDER BY updated_at DESC, created_at DESC
+                    """,
+                    (student_id,),
+                ).fetchall()
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The student's tutor sessions could not be listed."
+            ) from error
+
+        return [self._row_to_tutor_session(row) for row in rows]
+
+    def update_tutor_session_activity(
+        self, session_id: str, updated_at: str, mode: str | None = None
+    ) -> None:
+        """Update last active timestamp and optionally mode for a tutor session."""
+        try:
+            with closing(self._connect()) as connection:
+                with connection:
+                    if mode:
+                        connection.execute(
+                            """
+                            UPDATE tutor_sessions
+                            SET updated_at = ?, mode = ?
+                            WHERE session_id = ?
+                            """,
+                            (updated_at, mode, session_id),
+                        )
+                    else:
+                        connection.execute(
+                            """
+                            UPDATE tutor_sessions
+                            SET updated_at = ?
+                            WHERE session_id = ?
+                            """,
+                            (updated_at, session_id),
+                        )
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The tutor session activity could not be updated."
+            ) from error
+
+    def delete_tutor_session(self, session_id: str) -> bool:
+        """Delete a tutor session and its associated chat messages."""
+        try:
+            with closing(self._connect()) as connection:
+                with connection:
+                    connection.execute(
+                        "DELETE FROM tutor_messages WHERE session_id = ?",
+                        (session_id,),
+                    )
+                    cursor = connection.execute(
+                        "DELETE FROM tutor_sessions WHERE session_id = ?",
+                        (session_id,),
+                    )
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The tutor session could not be deleted."
+            ) from error
+
+        return cursor.rowcount > 0
+
+    def save_tutor_message(self, message: TutorMessageRecord) -> None:
+        """Persist a message turn within a tutor session."""
+        try:
+            with closing(self._connect()) as connection:
+                with connection:
+                    connection.execute(
+                        """
+                        INSERT INTO tutor_messages (
+                            message_id,
+                            session_id,
+                            role,
+                            content,
+                            citations_json,
+                            created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            message.message_id,
+                            message.session_id,
+                            message.role,
+                            message.content,
+                            message.citations_json,
+                            message.created_at,
+                        ),
+                    )
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The tutor message could not be saved."
+            ) from error
+
+    def get_session_messages(
+        self, session_id: str
+    ) -> list[TutorMessageRecord]:
+        """Retrieve all messages in chronological order for a session."""
+        try:
+            with closing(self._connect()) as connection:
+                rows = connection.execute(
+                    """
+                    SELECT * FROM tutor_messages
+                    WHERE session_id = ?
+                    ORDER BY created_at ASC, rowid ASC
+                    """,
+                    (session_id,),
+                ).fetchall()
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The session messages could not be listed."
+            ) from error
+
+        return [self._row_to_tutor_message(row) for row in rows]
+
+
+_application_database: DocumentDatabase | None = None
+_application_database_lock = Lock()
+
+
+def get_application_database() -> DocumentDatabase:
+    """Return the shared database used by authentication dependencies."""
+    global _application_database
+
+    if _application_database is None:
+        with _application_database_lock:
+            if _application_database is None:
+                _application_database = DocumentDatabase()
+
+    return _application_database
+

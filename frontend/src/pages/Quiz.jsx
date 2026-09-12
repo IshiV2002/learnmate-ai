@@ -240,6 +240,9 @@ function Quiz({ onNavigateToRecommendations }) {
             Synthesize lecture-grounded assessments, test your conceptual understanding,
             and pinpoint learning gaps with automated pedagogical grading.
           </p>
+          <p>
+            AI-generated self-assessment: verify ambiguous questions against the cited PDF pages.
+          </p>
         </div>
         {viewState === "taking" && (
           <div className="quiz-timer-badge">

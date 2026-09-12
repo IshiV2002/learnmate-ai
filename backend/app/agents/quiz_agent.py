@@ -56,37 +56,41 @@ class QuizAgent:
             )
 
         # 1. Retrieve relevant lecture chunks
-        context_chunks: list[dict[str, Any]] = []
-        if self.retrieval_agent:
-            query = request.topic or "Core concepts, definitions, algorithms, and key principles"
-            try:
-                search_results = self.retrieval_agent.search(
-                    document_id=request.document_id,
-                    query=query,
-                    top_k=min(8, max(4, request.num_questions)),
-                )
-                context_chunks = [
-                    {
-                        "text": res["text"],
-                        "page_number": res["page_number"],
-                        "chunk_index": res["chunk_index"],
-                        "source": res["source"],
-                    }
-                    for res in search_results
-                ]
-            except Exception:
-                context_chunks = []
+        if self.retrieval_agent is None:
+            raise QuizAgentError(
+                "Quiz generation is unavailable because indexed course evidence "
+                "could not be retrieved. Please try again later."
+            )
 
-        # If vector search returned no chunks (or mock offline), create fallback context reference
+        query = request.topic or "Core concepts, definitions, algorithms, and key principles"
+        try:
+            search_results = self.retrieval_agent.search(
+                document_id=request.document_id,
+                query=query,
+                top_k=min(8, max(4, request.num_questions)),
+            )
+        except Exception as error:
+            raise QuizAgentError(
+                "Quiz generation is unavailable because indexed course evidence "
+                "could not be retrieved. Please try again later."
+            ) from error
+
+        context_chunks = [
+            {
+                "text": res["text"],
+                "page_number": res["page_number"],
+                "chunk_index": res["chunk_index"],
+                "source": res["source"],
+            }
+            for res in search_results
+            if res.get("text", "").strip()
+        ]
+
         if not context_chunks:
-            context_chunks = [
-                {
-                    "text": f"Lecture document: {doc.original_filename}. Subject area: {request.topic or 'Fundamental Principles'}.",
-                    "page_number": 1,
-                    "chunk_index": 0,
-                    "source": doc.original_filename,
-                }
-            ]
+            raise QuizAgentError(
+                "No supporting course text was found for this quiz. Try another "
+                "topic or upload a text-based PDF."
+            )
 
         # 2. Synthesize questions via LLM Service (with pedagogical fallback)
         try:
@@ -99,7 +103,7 @@ class QuizAgent:
             )
         except Exception as error:
             raise QuizAgentError(
-                f"Failed to generate questions from lecture context: {error}"
+                "Questions could not be generated from the retrieved course evidence."
             ) from error
 
         # 3. Validate and sanitize questions through Pydantic

@@ -5,6 +5,7 @@ import {
   getStudentRecommendations,
   getTutorHandoff,
 } from "../services/api.js";
+import { useAuth } from "../auth/AuthContext.jsx";
 
 const PRESET_QUIZZES = [
   {
@@ -122,10 +123,11 @@ const PRESET_QUIZZES = [
   },
 ];
 
-export default function Recommendations({ initialSubmission, initialRecommendation }) {
+export default function Recommendations({ initialSubmission, initialRecommendation, onLaunchTutor = null }) {
+  const { user } = useAuth();
   const [documents, setDocuments] = useState([]);
   const [selectedDocId, setSelectedDocId] = useState(initialSubmission?.document_id || "");
-  const [studentId, setStudentId] = useState(initialSubmission?.student_id || "student_demo_01");
+  const studentId = user.user_id;
   const [selectedPreset, setSelectedPreset] = useState(PRESET_QUIZZES[0]);
   const [activeQuestions, setActiveQuestions] = useState(
     initialSubmission?.questions || PRESET_QUIZZES[0].questions
@@ -205,7 +207,7 @@ export default function Recommendations({ initialSubmission, initialRecommendati
     }
 
     const payload = {
-      student_id: studentId.trim() || "student_demo_01",
+      student_id: studentId,
       document_id: targetDocId,
       quiz_id: selectedPreset.id,
       quiz_title: selectedPreset.title,
@@ -235,6 +237,9 @@ export default function Recommendations({ initialSubmission, initialRecommendati
         <p className="header-subtitle">
           Analyzes student assessment mistake logs, computes granular topic mastery,
           provides explainable pedagogical justifications, and synthesizes Socratic review packages for the Tutor Agent.
+        </p>
+        <p className="header-subtitle">
+          These suggestions describe evidence from the current quiz, not a permanent judgment of your ability.
         </p>
 
         <div className="mode-toggle-bar">
@@ -271,9 +276,8 @@ export default function Recommendations({ initialSubmission, initialRecommendati
                 <label>Student Identifier</label>
                 <input
                   type="text"
-                  value={studentId}
-                  onChange={(e) => setStudentId(e.target.value)}
-                  placeholder="e.g. student_ravin_2026"
+                  value={user.full_name}
+                  readOnly
                   className="input-field"
                 />
               </div>
@@ -397,7 +401,7 @@ export default function Recommendations({ initialSubmission, initialRecommendati
 
             <div className="score-details-section">
               <div className="mastery-badge-pill">
-                Mastery Level: <strong>{recommendationResult.mastery_level}</strong>
+                Current assessment signal: <strong>{recommendationResult.mastery_level}</strong>
               </div>
               <h2 className="report-quiz-title">{selectedPreset.title}</h2>
               <div className="summary-quote-box">
@@ -464,13 +468,28 @@ export default function Recommendations({ initialSubmission, initialRecommendati
                 </div>
               </div>
 
-              <button
-                type="button"
-                className="btn-tutor-launch"
-                onClick={() => setShowTutorModal(true)}
-              >
-                💬 Open AI Tutor Socratic Handoff Package
-              </button>
+              <div className="tutor-cta-button-row">
+                <button
+                  type="button"
+                  className="btn-tutor-launch"
+                  onClick={() => {
+                    if (onLaunchTutor) {
+                      onLaunchTutor(recommendationResult.tutor_handoff);
+                    } else {
+                      setShowTutorModal(true);
+                    }
+                  }}
+                >
+                  🚀 Launch Remedial Tutoring Session
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary btn-sm"
+                  onClick={() => setShowTutorModal(true)}
+                >
+                  📜 View Inter-Agent JSON Contract
+                </button>
+              </div>
             </div>
           </div>
 
@@ -483,7 +502,7 @@ export default function Recommendations({ initialSubmission, initialRecommendati
 
             {recommendationResult.knowledge_gaps.length === 0 ? (
               <div className="empty-gaps-box">
-                🎉 No knowledge gaps identified! Full conceptual mastery achieved across all topics.
+                No gaps were detected in this quiz attempt. This result does not prove complete mastery.
               </div>
             ) : (
               <div className="knowledge-gaps-grid">
@@ -497,7 +516,8 @@ export default function Recommendations({ initialSubmission, initialRecommendati
                         {gap.severity} GAP
                       </span>
                       <span className="confidence-pill">
-                        Diagnosis Confidence: {Math.round(gap.confidence_score * 100)}%
+                        Evidence: {gap.missed_questions_count} missed{" "}
+                        {gap.missed_questions_count === 1 ? "question" : "questions"}
                       </span>
                     </div>
 
@@ -613,6 +633,18 @@ export default function Recommendations({ initialSubmission, initialRecommendati
               <button
                 type="button"
                 className="btn-primary"
+                onClick={() => {
+                  setShowTutorModal(false);
+                  if (onLaunchTutor) {
+                    onLaunchTutor(recommendationResult.tutor_handoff);
+                  }
+                }}
+              >
+                🚀 Start Remedial Tutoring Now
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
                 onClick={() => setShowTutorModal(false)}
               >
                 Close Contract Viewer

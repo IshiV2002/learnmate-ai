@@ -36,6 +36,13 @@ class MockRetrievalAgent:
         ]
 
 
+class EmptyRetrievalAgent:
+    """Represent a successful semantic search with no supporting evidence."""
+
+    def search(self, document_id: str, query: str, top_k: int = 4) -> list[dict]:
+        return []
+
+
 class QuizAgentTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary_directory = tempfile.TemporaryDirectory()
@@ -192,3 +199,17 @@ class QuizAgentTests(unittest.TestCase):
         )
         with self.assertRaises(QuizAgentError):
             self.agent.generate_quiz(req)
+
+    def test_quiz_is_not_generated_without_retrieved_course_evidence(self) -> None:
+        agent = QuizAgent(
+            database=self.database,
+            retrieval_agent=EmptyRetrievalAgent(),  # type: ignore[arg-type]
+        )
+
+        with self.assertRaisesRegex(QuizAgentError, "No supporting course text"):
+            agent.generate_quiz(
+                QuizGenerationRequest(
+                    document_id="doc_ir_test_01",
+                    num_questions=2,
+                )
+            )

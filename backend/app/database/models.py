@@ -1,7 +1,88 @@
 from dataclasses import asdict, dataclass
 import json
+import re
 from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator
+
+
+@dataclass(frozen=True)
+class UserRecord:
+    """A registered user. Password hashes must never be returned publicly."""
+
+    user_id: str
+    full_name: str
+    email: str
+    password_hash: str
+    created_at: str
+
+    def to_public_dict(self) -> dict[str, str]:
+        return {
+            "user_id": self.user_id,
+            "full_name": self.full_name,
+            "email": self.email,
+            "created_at": self.created_at,
+        }
+
+
+class SignupRequest(BaseModel):
+    """Validated account-registration details."""
+
+    full_name: str = Field(..., min_length=2, max_length=80)
+    email: str = Field(..., min_length=5, max_length=254)
+    password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("full_name")
+    @classmethod
+    def clean_full_name(cls, value: str) -> str:
+        cleaned = " ".join(value.split())
+        if len(cleaned) < 2:
+            raise ValueError("Full name must contain at least 2 characters.")
+        return cleaned
+
+    @field_validator("email")
+    @classmethod
+    def clean_email(cls, value: str) -> str:
+        cleaned = value.strip().lower()
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", cleaned):
+            raise ValueError("Enter a valid email address.")
+        return cleaned
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_strength(cls, value: str) -> str:
+        if not any(character.islower() for character in value):
+            raise ValueError("Password must include a lowercase letter.")
+        if not any(character.isupper() for character in value):
+            raise ValueError("Password must include an uppercase letter.")
+        if not any(character.isdigit() for character in value):
+            raise ValueError("Password must include a number.")
+        return value
+
+
+class LoginRequest(BaseModel):
+    """Credentials used to start an authenticated session."""
+
+    email: str = Field(..., min_length=1, max_length=254)
+    password: str = Field(..., min_length=1, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return value.strip().lower()
+
+
+class UserResponse(BaseModel):
+    user_id: str
+    full_name: str
+    email: str
+    created_at: str
+
+
+class AuthenticationResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in_seconds: int
+    user: UserResponse
 
 
 @dataclass(frozen=True)
@@ -16,11 +97,13 @@ class DocumentRecord:
     chunk_count: int
     file_size_bytes: int
     created_at: str
+    user_id: str | None = None
 
     def to_public_dict(self) -> dict[str, str | int]:
         """Return only fields that are safe for API clients to see."""
         public_record = asdict(self)
         public_record.pop("stored_filename")
+        public_record.pop("user_id")
         return public_record
 
 
@@ -214,6 +297,125 @@ class RecommendationResponse(BaseModel):
     knowledge_gaps: list[KnowledgeGap]
     action_items: list[StudyActionItem]
     tutor_handoff: TutorHandoffPackage
+
+
+# =====================================================================
+# Tutor Agent Dataclasses and Pydantic Schemas
+# =====================================================================
+
+
+@dataclass(frozen=True)
+class TutorSessionRecord:
+    """Metadata for one active or archived AI tutoring session."""
+
+    session_id: str
+    student_id: str
+    document_id: str
+    recommendation_id: str | None
+    topic_focus: str
+    mode: str
+    created_at: str
+    updated_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert dataclass to dictionary."""
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class TutorMessageRecord:
+    """Individual conversational turn in a tutoring session."""
+
+    message_id: str
+    session_id: str
+    role: str  # 'student', 'tutor', or 'system'
+    content: str
+    citations_json: str
+    created_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert dataclass to dictionary with parsed citations."""
+        data = asdict(self)
+        try:
+            data["citations"] = json.loads(self.citations_json)
+        except Exception:
+            data["citations"] = []
+        return data
+
+
+class TutorSessionInitRequest(BaseModel):
+    """Payload to start a new Socratic or Step-by-Step tutoring session."""
+
+    student_id: str = Field(..., min_length=1, max_length=100, description="Student ID")
+    document_id: str = Field(..., min_length=1, description="Associated document ID")
+    recommendation_id: str | None = Field(
+        default=None, description="Optional recommendation ID to auto-load handoff"
+    )
+    mode: Literal["socratic", "step_by_step", "concept_check"] = Field(
+        default="socratic", description="Teaching pedagogical mode"
+    )
+    topic_focus: str | None = Field(
+        default=None, description="Optional primary topic or concept to focus on"
+    )
+
+    @field_validator("student_id", "document_id")
+    @classmethod
+    def clean_strings(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Identifier field cannot be empty.")
+        return cleaned
+
+
+class TutorChatRequest(BaseModel):
+    """Payload sent by student during an active chat turn."""
+
+    session_id: str = Field(..., min_length=1, description="Active session ID")
+    message: str = Field(..., min_length=1, max_length=4000, description="Student's query or answer")
+    mode: Literal["socratic", "step_by_step", "concept_check"] | None = Field(
+        default=None, description="Optional override for pedagogical mode"
+    )
+
+    @field_validator("session_id", "message")
+    @classmethod
+    def clean_text(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Field cannot be empty.")
+        return cleaned
+
+
+class TutorChatResponse(BaseModel):
+    """Structured response from the Tutor Agent."""
+
+    session_id: str
+    message_id: str
+    reply: str
+    mode: str
+    citations: list[dict[str, Any]] = Field(
+        default_factory=list, description="Grounding lecture citations and page numbers"
+    )
+    suggested_followups: list[str] = Field(
+        default_factory=list, description="Interactive quick-reply prompt options for student"
+    )
+    concept_check_question: str | None = Field(
+        default=None, description="Optional comprehension check question"
+    )
+    created_at: str
+
+
+class TutorSessionResponse(BaseModel):
+    """Full session details with chat history."""
+
+    session_id: str
+    student_id: str
+    document_id: str
+    recommendation_id: str | None
+    topic_focus: str
+    mode: str
+    messages: list[dict[str, Any]]
+    created_at: str
+    updated_at: str
 
 
 # =====================================================================
