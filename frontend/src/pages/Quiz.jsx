@@ -40,7 +40,7 @@ function Quiz({ onNavigateToRecommendations }) {
   const [customTitle, setCustomTitle] = useState("");
   const [numQuestions, setNumQuestions] = useState(5);
   const [difficulty, setDifficulty] = useState("mixed");
-  const [questionTypes, setQuestionTypes] = useState(["mcq"]);
+  const [questionType, setQuestionType] = useState("mcq");
 
   // Active Quiz Playing State
   const [activeQuiz, setActiveQuiz] = useState(null);
@@ -140,22 +140,12 @@ function Quiz({ onNavigateToRecommendations }) {
     };
   }, [viewState]);
 
-  function toggleQuestionType(type) {
-    setQuestionTypes((prev) => {
-      if (prev.includes(type)) {
-        if (prev.length === 1) return prev; // keep at least one
-        return prev.filter((t) => t !== type);
-      }
-      return [...prev, type];
-    });
-  }
-
   // Generate a new quiz with AI
   async function handleGenerateQuiz(e) {
     e.preventDefault();
     const validationError = validateQuizConfig(
       selectedDocumentId,
-      questionTypes,
+      questionType,
     );
     if (validationError) {
       setErrorMessage(validationError);
@@ -175,7 +165,7 @@ function Quiz({ onNavigateToRecommendations }) {
         title: customTitle.trim() || null,
         num_questions: Number(numQuestions),
         difficulty: difficulty,
-        question_types: questionTypes,
+        question_types: [questionType],
       };
 
       const generated = await generateQuiz(payload);
@@ -499,34 +489,56 @@ function Quiz({ onNavigateToRecommendations }) {
                   </div>
 
                   <div className="quiz-form-group">
-                    <label>Question Formats</label>
+                    <label>Question Format (Select One)</label>
                     <div className="quiz-formats-grid">
-                      <label className="quiz-format-pill">
+                      <label
+                        className={`quiz-format-pill ${
+                          questionType === "mcq" ? "quiz-format-pill-selected" : ""
+                        }`}
+                      >
                         <input
-                          checked={questionTypes.includes("mcq")}
+                          checked={questionType === "mcq"}
                           disabled={isGenerating}
-                          onChange={() => toggleQuestionType("mcq")}
-                          type="checkbox"
+                          name="questionFormat"
+                          onChange={() => setQuestionType("mcq")}
+                          type="radio"
+                          value="mcq"
                         />
                         <span>Multiple Choice (MCQ)</span>
                       </label>
 
-                      <label className="quiz-format-pill">
+                      <label
+                        className={`quiz-format-pill ${
+                          questionType === "true_false"
+                            ? "quiz-format-pill-selected"
+                            : ""
+                        }`}
+                      >
                         <input
-                          checked={questionTypes.includes("true_false")}
+                          checked={questionType === "true_false"}
                           disabled={isGenerating}
-                          onChange={() => toggleQuestionType("true_false")}
-                          type="checkbox"
+                          name="questionFormat"
+                          onChange={() => setQuestionType("true_false")}
+                          type="radio"
+                          value="true_false"
                         />
                         <span>True / False</span>
                       </label>
 
-                      <label className="quiz-format-pill">
+                      <label
+                        className={`quiz-format-pill ${
+                          questionType === "short_answer"
+                            ? "quiz-format-pill-selected"
+                            : ""
+                        }`}
+                      >
                         <input
-                          checked={questionTypes.includes("short_answer")}
+                          checked={questionType === "short_answer"}
                           disabled={isGenerating}
-                          onChange={() => toggleQuestionType("short_answer")}
-                          type="checkbox"
+                          name="questionFormat"
+                          onChange={() => setQuestionType("short_answer")}
+                          type="radio"
+                          value="short_answer"
                         />
                         <span>Conceptual Short Answer</span>
                       </label>

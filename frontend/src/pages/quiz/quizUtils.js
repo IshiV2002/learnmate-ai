@@ -91,12 +91,18 @@ export function getScoreTier(scorePercentage) {
   };
 }
 
-export function validateQuizConfig(documentId, questionTypes) {
+export function validateQuizConfig(documentId, questionType) {
   if (!documentId || typeof documentId !== "string" || !documentId.trim()) {
     return "Please select a target lecture PDF.";
   }
-  if (!Array.isArray(questionTypes) || questionTypes.length === 0) {
-    return "Select at least one question format (MCQ, True/False, or Short Answer).";
+  const validTypes = ["mcq", "true_false", "short_answer"];
+  if (Array.isArray(questionType)) {
+    if (questionType.length === 0 || !validTypes.includes(questionType[0])) {
+      return "Select a question format (MCQ, True/False, or Short Answer).";
+    }
+  } else if (!questionType || !validTypes.includes(questionType)) {
+    return "Select a question format (MCQ, True/False, or Short Answer).";
   }
   return null;
 }
+
