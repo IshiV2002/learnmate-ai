@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   formatTime,
+  formatTrueFalseStatement,
   getDifficultyMeta,
   getQuizStats,
   getScoreTier,
@@ -16,6 +17,25 @@ test("formats seconds into MM:SS format correctly", () => {
   assert.equal(formatTime(3600), "60:00");
   assert.equal(formatTime(-5), "00:00");
   assert.equal(formatTime(null), "00:00");
+});
+
+test("cleans and structures True/False statements", () => {
+  assert.equal(
+    formatTrueFalseStatement("True or False: Inverted index stores doc IDs."),
+    "Inverted index stores doc IDs.",
+  );
+  assert.equal(
+    formatTrueFalseStatement("True/False - Term frequency reflects term importance."),
+    "Term frequency reflects term importance.",
+  );
+  assert.equal(
+    formatTrueFalseStatement("State whether the following statement is true or false: Boolean retrieval uses AND/OR operators."),
+    "Boolean retrieval uses AND/OR operators.",
+  );
+  assert.equal(
+    formatTrueFalseStatement("TF-IDF scoring penalizes common terms."),
+    "TF-IDF scoring penalizes common terms.",
+  );
 });
 
 test("computes quiz library statistics accurately", () => {

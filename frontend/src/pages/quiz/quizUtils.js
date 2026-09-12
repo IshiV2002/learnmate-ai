@@ -106,3 +106,15 @@ export function validateQuizConfig(documentId, questionType) {
   return null;
 }
 
+export function formatTrueFalseStatement(text) {
+  if (typeof text !== "string") return "";
+  let clean = text.trim();
+  // Strip common redundant preambles
+  clean = clean.replace(/^(true\s*(or|\/)\s*false\s*[:\-\—]?\s*)/i, "");
+  clean = clean.replace(
+    /^(state\s+whether\s+(the\s+following\s+statement\s+is\s+)?(true\s*(or|\/)\s*false|correct)\s*[:\-\—]?\s*)/i,
+    "",
+  );
+  clean = clean.replace(/^(statement\s*[:\-\—]?\s*)/i, "");
+  return clean.trim();
+}
