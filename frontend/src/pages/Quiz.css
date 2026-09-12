@@ -1004,6 +1004,136 @@
   gap: 12px;
 }
 
+/* -------------------------------------------------------------------------
+   True / False Question Structured Experience
+   ------------------------------------------------------------------------- */
+
+.tf-question-container {
+  display: grid;
+  gap: 18px;
+}
+
+.tf-statement-box {
+  padding: 22px 24px;
+  border: 1px solid rgb(154 140 255 / 22%);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgb(154 140 255 / 6%), rgb(125 211 199 / 4%));
+}
+
+.tf-statement-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  color: var(--color-violet);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.tf-statement-quote {
+  color: var(--color-text);
+  font-size: 1.12rem;
+  font-weight: 680;
+  line-height: 1.6;
+  margin-bottom: 0;
+}
+
+.tf-options-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.tf-option-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  align-items: center;
+  padding: 20px 22px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 16px;
+  background: rgb(255 255 255 / 2.5%);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.tf-option-card input[type="radio"] {
+  display: none;
+}
+
+.tf-option-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 12px;
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+
+.tf-option-true .tf-option-icon {
+  border: 1px solid rgb(104 217 160 / 25%);
+  color: var(--color-success);
+  background: rgb(104 217 160 / 10%);
+}
+
+.tf-option-false .tf-option-icon {
+  border: 1px solid rgb(255 143 154 / 25%);
+  color: var(--color-danger);
+  background: rgb(255 143 154 / 10%);
+}
+
+.tf-option-content strong {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+
+.tf-option-content small {
+  display: block;
+  color: var(--color-text-subtle);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.tf-option-true:hover {
+  border-color: rgb(104 217 160 / 40%);
+  background: rgb(104 217 160 / 6%);
+  transform: translateY(-2px);
+}
+
+.tf-option-false:hover {
+  border-color: rgb(255 143 154 / 40%);
+  background: rgb(255 143 154 / 6%);
+  transform: translateY(-2px);
+}
+
+.tf-option-true.tf-option-selected {
+  border-color: var(--color-success);
+  background: rgb(104 217 160 / 14%);
+  box-shadow: 0 0 0 1px var(--color-success), 0 10px 30px rgb(104 217 160 / 16%);
+}
+
+.tf-option-true.tf-option-selected .tf-option-icon {
+  color: #06110f;
+  background: var(--color-success);
+}
+
+.tf-option-false.tf-option-selected {
+  border-color: var(--color-danger);
+  background: rgb(255 143 154 / 14%);
+  box-shadow: 0 0 0 1px var(--color-danger), 0 10px 30px rgb(255 143 154 / 16%);
+}
+
+.tf-option-false.tf-option-selected .tf-option-icon {
+  color: #06110f;
+  background: var(--color-danger);
+}
+
 .option-card {
   display: grid;
   grid-template-columns: auto auto 1fr;
