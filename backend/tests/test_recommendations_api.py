@@ -6,9 +6,14 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.api import documents, recommendations
+from app.api.auth import get_current_user
 from app.database.database import DocumentDatabase
 from app.database.models import DocumentRecord
 from app.main import app
+from tests.auth_helpers import make_test_user
+
+
+TEST_USER = make_test_user("student_01")
 
 
 class RecommendationsAPITests(unittest.TestCase):
@@ -29,6 +34,7 @@ class RecommendationsAPITests(unittest.TestCase):
                 chunk_count=10,
                 file_size_bytes=2048,
                 created_at="2026-01-01T00:00:00+00:00",
+                user_id=TEST_USER.user_id,
             )
         )
 
@@ -47,10 +53,13 @@ class RecommendationsAPITests(unittest.TestCase):
         )
         self.database_patch.start()
         self.rec_agent_patch.start()
+        app.dependency_overrides[get_current_user] = lambda: TEST_USER
 
         self.client = TestClient(app)
 
     def tearDown(self) -> None:
+        self.client.close()
+        app.dependency_overrides.pop(get_current_user, None)
         self.database_patch.stop()
         self.rec_agent_patch.stop()
         self.temporary_directory.cleanup()
@@ -172,4 +181,34 @@ class RecommendationsAPITests(unittest.TestCase):
 
     def test_get_nonexistent_recommendation_returns_404(self) -> None:
         response = self.client.get("/recommendations/rec_does_not_exist")
+        self.assertEqual(response.status_code, 404)
+
+    def test_other_user_cannot_read_recommendation(self) -> None:
+        payload = {
+            "student_id": "spoofed-user",
+            "document_id": "doc_valid_1",
+            "quiz_id": "quiz_1",
+            "quiz_title": "Ownership Quiz",
+            "questions": [
+                {
+                    "question_id": "q1",
+                    "topic": "Security",
+                    "difficulty": "easy",
+                    "cognitive_level": "recall",
+                    "question_text": "What is authorization?",
+                    "selected_answer": "Access control",
+                    "correct_answer": "Access control",
+                    "is_correct": True,
+                    "explanation": "Authorization controls resource access.",
+                }
+            ],
+        }
+        created = self.client.post("/recommendations/analyze", json=payload)
+        recommendation_id = created.json()["recommendation_id"]
+        app.dependency_overrides[get_current_user] = lambda: make_test_user(
+            "another-user"
+        )
+
+        response = self.client.get(f"/recommendations/{recommendation_id}")
+
         self.assertEqual(response.status_code, 404)
