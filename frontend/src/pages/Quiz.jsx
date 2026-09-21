@@ -1,16 +1,33 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useAuth } from "../auth/AuthContext.jsx";
 import {
+  deleteQuiz,
+  evaluateAndRecommendQuiz,
   generateQuiz,
   getDocumentQuizzes,
   getDocuments,
   getQuiz,
   submitQuizEvaluation,
-  evaluateAndRecommendQuiz,
-  deleteQuiz,
 } from "../services/api.js";
+import DeleteQuizModal from "./quiz/DeleteQuizModal.jsx";
+import QuizGenerationJourney from "./quiz/QuizGenerationJourney.jsx";
+import QuizIcon from "./quiz/QuizIcon.jsx";
+import QuizSkeleton from "./quiz/QuizSkeleton.jsx";
+import {
+  formatTime,
+  getDifficultyMeta,
+  getQuizStats,
+  getScoreTier,
+  validateQuizConfig,
+} from "./quiz/quizUtils.js";
+import SavedQuizCard from "./quiz/SavedQuizCard.jsx";
+import "./Quiz.css";
 
 function Quiz({ onNavigateToRecommendations }) {
-  // Navigation & View States: 'configure' | 'taking' | 'results'
+  const { user } = useAuth();
+  const currentStudentId = user?.user_id || "student_default";
+
+  // Navigation Views: 'configure' | 'taking' | 'results'
   const [viewState, setViewState] = useState("configure");
 
   // Data States
@@ -23,67 +40,92 @@ function Quiz({ onNavigateToRecommendations }) {
   const [customTitle, setCustomTitle] = useState("");
   const [numQuestions, setNumQuestions] = useState(5);
   const [difficulty, setDifficulty] = useState("mixed");
-  const [questionTypes, setQuestionTypes] = useState(["mcq"]);
+  const [questionType, setQuestionType] = useState("mcq");
 
-  // Active Quiz State
+  // Active Quiz Playing State
   const [activeQuiz, setActiveQuiz] = useState(null);
   const [studentAnswers, setStudentAnswers] = useState({});
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [timeSpentSeconds, setTimeSpentSeconds] = useState(0);
   const timerRef = useRef(null);
 
-  // Results State
+  // Results & Evaluation State
   const [evaluationResult, setEvaluationResult] = useState(null);
 
   // Status & Loading States
   const [isLoadingDocs, setIsLoadingDocs] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationStatus, setGenerationStatus] = useState("idle");
+  const [generationTopic, setGenerationTopic] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingSaved, setIsLoadingSaved] = useState(false);
+  const [deletingQuizId, setDeletingQuizId] = useState(null);
+  const [quizPendingDelete, setQuizPendingDelete] = useState(null);
+
+  // Notifications
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  // Load documents on mount
-  useEffect(() => {
-    async function loadDocs() {
-      setIsLoadingDocs(true);
-      try {
-        const docs = await getDocuments();
-        const docList = Array.isArray(docs) ? docs : [];
-        setDocuments(docList);
-        if (docList.length > 0) {
-          setSelectedDocumentId(docList[0].document_id);
-        }
-      } catch (err) {
-        setErrorMessage(err.message || "Failed to load uploaded documents.");
-      } finally {
-        setIsLoadingDocs(false);
+  const stats = useMemo(
+    () => getQuizStats(savedQuizzes, documents),
+    [savedQuizzes, documents],
+  );
+
+  const selectedDocObj = useMemo(
+    () => documents.find((d) => d.document_id === selectedDocumentId),
+    [documents, selectedDocumentId],
+  );
+
+  // Load documents on initial mount
+  async function loadDocs(showLoading = true) {
+    if (showLoading) setIsLoadingDocs(true);
+    setErrorMessage("");
+    try {
+      const docs = await getDocuments();
+      const docList = Array.isArray(docs) ? docs : [];
+      setDocuments(docList);
+      if (docList.length > 0 && !selectedDocumentId) {
+        setSelectedDocumentId(docList[0].document_id);
       }
+      return true;
+    } catch (err) {
+      setErrorMessage(err.message || "Failed to load uploaded documents.");
+      return false;
+    } finally {
+      if (showLoading) setIsLoadingDocs(false);
     }
+  }
+
+  useEffect(() => {
     loadDocs();
   }, []);
 
   // Load saved quizzes whenever selected document changes
-  useEffect(() => {
-    if (!selectedDocumentId) {
+  async function loadSavedQuizzes(docId) {
+    if (!docId) {
       setSavedQuizzes([]);
       return;
     }
-    async function loadSaved() {
-      setIsLoadingSaved(true);
-      try {
-        const quizzes = await getDocumentQuizzes(selectedDocumentId);
-        setSavedQuizzes(Array.isArray(quizzes) ? quizzes : []);
-      } catch {
-        setSavedQuizzes([]);
-      } finally {
-        setIsLoadingSaved(false);
-      }
+    setIsLoadingSaved(true);
+    try {
+      const quizzes = await getDocumentQuizzes(docId);
+      setSavedQuizzes(Array.isArray(quizzes) ? quizzes : []);
+    } catch {
+      setSavedQuizzes([]);
+    } finally {
+      setIsLoadingSaved(false);
     }
-    loadSaved();
+  }
+
+  useEffect(() => {
+    if (selectedDocumentId) {
+      loadSavedQuizzes(selectedDocumentId);
+    } else {
+      setSavedQuizzes([]);
+    }
   }, [selectedDocumentId]);
 
-  // Timer management during active quiz
+  // Timer lifecycle during active quiz taking
   useEffect(() => {
     if (viewState === "taking") {
       setTimeSpentSeconds(0);
@@ -98,33 +140,21 @@ function Quiz({ onNavigateToRecommendations }) {
     };
   }, [viewState]);
 
-  // Format seconds into MM:SS
-  function formatTime(seconds) {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  }
-
-  // Handle Question Type Checkbox
-  function toggleQuestionType(type) {
-    setQuestionTypes((prev) => {
-      if (prev.includes(type)) {
-        if (prev.length === 1) return prev; // Keep at least one
-        return prev.filter((t) => t !== type);
-      }
-      return [...prev, type];
-    });
-  }
-
   // Generate a new quiz with AI
   async function handleGenerateQuiz(e) {
     e.preventDefault();
-    if (!selectedDocumentId) {
-      setErrorMessage("Please select a document first.");
+    const validationError = validateQuizConfig(
+      selectedDocumentId,
+      questionType,
+    );
+    if (validationError) {
+      setErrorMessage(validationError);
       return;
     }
 
     setIsGenerating(true);
+    setGenerationStatus("processing");
+    setGenerationTopic(topic.trim());
     setErrorMessage("");
     setSuccessMessage("");
 
@@ -135,17 +165,24 @@ function Quiz({ onNavigateToRecommendations }) {
         title: customTitle.trim() || null,
         num_questions: Number(numQuestions),
         difficulty: difficulty,
-        question_types: questionTypes,
+        question_types: [questionType],
       };
 
       const generated = await generateQuiz(payload);
+      setGenerationStatus("complete");
       setActiveQuiz(generated);
       setStudentAnswers({});
       setCurrentQuestionIndex(0);
       setViewState("taking");
-      setSuccessMessage("Quiz generated successfully!");
+      setSuccessMessage("Assessment generated and grounded successfully!");
+
+      // Refresh saved quizzes in background
+      loadSavedQuizzes(selectedDocumentId);
     } catch (err) {
-      setErrorMessage(err.message || "Failed to generate quiz with AI.");
+      setGenerationStatus("error");
+      setErrorMessage(
+        err.message || "Failed to generate assessment with AI agents.",
+      );
     } finally {
       setIsGenerating(false);
     }
@@ -154,6 +191,7 @@ function Quiz({ onNavigateToRecommendations }) {
   // Start taking a saved quiz
   async function handleStartSavedQuiz(quizId) {
     setErrorMessage("");
+    setSuccessMessage("");
     try {
       const quiz = await getQuiz(quizId, false);
       setActiveQuiz(quiz);
@@ -161,24 +199,34 @@ function Quiz({ onNavigateToRecommendations }) {
       setCurrentQuestionIndex(0);
       setViewState("taking");
     } catch (err) {
-      setErrorMessage(err.message || "Could not load quiz.");
+      setErrorMessage(err.message || "Could not load saved quiz.");
     }
   }
 
-  // Delete a saved quiz
-  async function handleDeleteSavedQuiz(quizId, e) {
-    e.stopPropagation();
-    if (!window.confirm("Are you sure you want to delete this quiz?")) return;
+  // Confirm delete a saved quiz
+  async function confirmDeleteQuiz() {
+    if (!quizPendingDelete) return;
+
+    const quizId = quizPendingDelete.quiz_id;
+    const title = quizPendingDelete.title || "Assessment";
+
+    setDeletingQuizId(quizId);
+    setErrorMessage("");
+    setSuccessMessage("");
+
     try {
       await deleteQuiz(quizId);
       setSavedQuizzes((prev) => prev.filter((q) => q.quiz_id !== quizId));
-      setSuccessMessage("Quiz removed.");
+      setSuccessMessage(`“${title}” was removed from your quiz library.`);
+      setQuizPendingDelete(null);
     } catch (err) {
       setErrorMessage(err.message || "Could not delete quiz.");
+      setQuizPendingDelete(null);
+    } finally {
+      setDeletingQuizId(null);
     }
   }
 
-  // Handle student selecting or typing an answer
   function handleAnswerSelect(questionId, answer) {
     setStudentAnswers((prev) => ({
       ...prev,
@@ -186,7 +234,7 @@ function Quiz({ onNavigateToRecommendations }) {
     }));
   }
 
-  // Submit quiz for evaluation
+  // Submit active quiz for evaluation
   async function handleSubmitQuiz(andRecommend = false) {
     if (!activeQuiz) return;
 
@@ -199,7 +247,7 @@ function Quiz({ onNavigateToRecommendations }) {
     }));
 
     const payload = {
-      student_id: "student_default",
+      student_id: currentStudentId,
       time_spent_seconds: timeSpentSeconds,
       answers: formattedAnswers,
     };
@@ -219,357 +267,514 @@ function Quiz({ onNavigateToRecommendations }) {
         onNavigateToRecommendations(result.recommendation);
       }
     } catch (err) {
-      setErrorMessage(err.message || "Failed to submit and evaluate quiz.");
+      setErrorMessage(err.message || "Failed to evaluate quiz submission.");
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  const selectedDocObj = documents.find(
-    (d) => d.document_id === selectedDocumentId
-  );
-
   return (
-    <div className="page-container">
-      {/* Top Header */}
-      <section className="page-heading">
-        <div>
-          <p className="eyebrow">Formative Assessment Agent</p>
-          <h1>Interactive AI Quiz Generator</h1>
-          <p>
-            Synthesize lecture-grounded assessments, test your conceptual understanding,
-            and pinpoint learning gaps with automated pedagogical grading.
+    <div className="quiz-page">
+      {/* Hero Header */}
+      <header className="quiz-hero">
+        <div className="quiz-hero-copy">
+          <p className="quiz-eyebrow">Quiz Agent · Formative Assessment</p>
+          <h1>Test understanding with lecture-grounded quizzes.</h1>
+          <p className="quiz-hero-description">
+            Synthesize Bloom-aligned assessments directly from your indexed lecture
+            materials, test conceptual mastery with instant pedagogical feedback,
+            and diagnose learning gaps.
           </p>
-          <p>
-            AI-generated self-assessment: verify ambiguous questions against the cited PDF pages.
-          </p>
-        </div>
-        {viewState === "taking" && (
-          <div className="quiz-timer-badge">
-            ⏱️ <strong>{formatTime(timeSpentSeconds)}</strong>
+          <div className="quiz-hero-trust">
+            <span>
+              <QuizIcon name="shield" size={16} /> Server-evaluated grading
+            </span>
+            <span>
+              <QuizIcon name="book" size={16} /> Page-aware citations
+            </span>
+            <span>
+              <QuizIcon name="brain" size={16} /> Bloom taxonomy mapped
+            </span>
           </div>
-        )}
-      </section>
+        </div>
+
+        <div className="quiz-assessment-map" aria-label="Assessment statistics">
+          <div className="quiz-map-visual" aria-hidden="true">
+            <span className="quiz-map-ring quiz-map-ring-one" />
+            <span className="quiz-map-ring quiz-map-ring-two" />
+            <span className="quiz-map-line quiz-map-line-one" />
+            <span className="quiz-map-line quiz-map-line-two" />
+            <span className="quiz-map-node quiz-map-node-one" />
+            <span className="quiz-map-node quiz-map-node-two" />
+            <span className="quiz-map-node quiz-map-node-three" />
+            <span className="quiz-map-core">
+              <QuizIcon name="sparkles" size={22} />
+            </span>
+          </div>
+          <div className="quiz-stat-grid">
+            <div>
+              <span>{isLoadingDocs ? "—" : stats.quizzes}</span>
+              <small>Saved Quizzes</small>
+            </div>
+            <div>
+              <span>{isLoadingDocs ? "—" : stats.documents}</span>
+              <small>Course Sources</small>
+            </div>
+            <div>
+              <span>{isLoadingDocs ? "—" : stats.questions}</span>
+              <small>Questions</small>
+            </div>
+          </div>
+        </div>
+      </header>
 
       {/* Global Notifications */}
-      {errorMessage && (
-        <div className="feedback feedback-error" role="alert">
-          <strong>Notice:</strong> {errorMessage}
-        </div>
-      )}
-      {successMessage && (
-        <div className="feedback feedback-success" role="status">
-          <strong>Success:</strong> {successMessage}
-        </div>
-      )}
+      <div className="quiz-feedback-stack" aria-live="polite">
+        {errorMessage && (
+          <div className="quiz-feedback quiz-feedback-error" role="alert">
+            <span className="quiz-feedback-icon" aria-hidden="true">
+              <QuizIcon name="close" size={17} />
+            </span>
+            <div>
+              <strong>Something needs attention</strong>
+              <p>{errorMessage}</p>
+            </div>
+            <button
+              aria-label="Dismiss error"
+              onClick={() => setErrorMessage("")}
+              type="button"
+            >
+              <QuizIcon name="close" size={16} />
+            </button>
+          </div>
+        )}
 
-      {/* VIEW 1: CONFIGURE & GENERATE */}
+        {successMessage && (
+          <div className="quiz-feedback quiz-feedback-success" role="status">
+            <span className="quiz-feedback-icon" aria-hidden="true">
+              <QuizIcon name="check" size={17} />
+            </span>
+            <div>
+              <strong>Assessment updated</strong>
+              <p>{successMessage}</p>
+            </div>
+            <button
+              aria-label="Dismiss success message"
+              onClick={() => setSuccessMessage("")}
+              type="button"
+            >
+              <QuizIcon name="close" size={16} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* VIEW 1: CONFIGURE & QUIZ LIBRARY */}
       {viewState === "configure" && (
         <>
           {isLoadingDocs ? (
-            <div className="state-card" role="status">
-              <span className="spinner" aria-hidden="true" />
-              <h3>Loading Materials...</h3>
-              <p>Fetching uploaded PDFs from the library.</p>
-            </div>
+            <section className="quiz-panel">
+              <QuizSkeleton />
+            </section>
           ) : documents.length === 0 ? (
-            <div className="state-card">
-              <span className="empty-icon" aria-hidden="true">
-                📚
-              </span>
-              <h3>No Lecture Materials Found</h3>
+            <div className="quiz-empty-state">
+              <div className="quiz-empty-visual" aria-hidden="true">
+                <span className="quiz-empty-document">
+                  <QuizIcon name="document" size={30} />
+                </span>
+                <span className="quiz-empty-node quiz-empty-node-one" />
+                <span className="quiz-empty-node quiz-empty-node-two" />
+                <span className="quiz-empty-connection" />
+              </div>
+              <p className="quiz-section-kicker">Knowledge Vault required</p>
+              <h3>No lecture materials found</h3>
               <p>
-                Please upload a lecture PDF in the <strong>Materials & Retrieval</strong> tab
-                before generating assessments.
+                Please upload a course PDF in the <strong>Knowledge Vault (Materials)</strong>{" "}
+                tab before generating personalized assessments.
               </p>
             </div>
           ) : (
-            <div className="quiz-layout-grid">
-              {/* Left Column: Generator Form */}
-              <section className="panel" aria-labelledby="quiz-gen-heading">
-                <div className="panel-heading">
+            <>
+              {/* Section 01: Configure Assessment */}
+              <section
+                className="quiz-panel"
+                aria-labelledby="quiz-config-heading"
+              >
+                <div className="quiz-section-heading">
                   <div>
-                    <h2 id="quiz-gen-heading">Configure Assessment</h2>
-                    <p>Customize topic scope, question format, and difficulty.</p>
+                    <span className="quiz-section-number">01</span>
+                    <div>
+                      <p className="quiz-section-kicker">Assessment Generator</p>
+                      <h2 id="quiz-config-heading">Synthesize a new quiz</h2>
+                    </div>
                   </div>
-                  <span className="step-badge">AI Generator</span>
+                  <span className="quiz-security-label">
+                    <QuizIcon name="shield" size={15} /> RAG Grounded Retrieval
+                  </span>
                 </div>
 
-                <form onSubmit={handleGenerateQuiz} className="quiz-config-form">
-                  <div className="form-group">
-                    <label htmlFor="doc-select">
-                      <strong>Target Lecture PDF:</strong>
-                    </label>
-                    <select
-                      id="doc-select"
-                      className="form-control"
-                      value={selectedDocumentId}
-                      onChange={(e) => setSelectedDocumentId(e.target.value)}
-                      disabled={isGenerating}
-                    >
-                      {documents.map((doc) => (
-                        <option key={doc.document_id} value={doc.document_id}>
-                          {doc.original_filename} ({doc.page_count} pages)
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="topic-input">
-                      <strong>Specific Topic / Chapter (Optional):</strong>
-                    </label>
-                    <input
-                      id="topic-input"
-                      type="text"
-                      className="form-control"
-                      placeholder="e.g. Inverted Index, TF-IDF, Vector Space Model..."
-                      value={topic}
-                      onChange={(e) => setTopic(e.target.value)}
-                      disabled={isGenerating}
-                    />
-                    <small className="form-hint">
-                      Leave blank to cover all key concepts in the document.
-                    </small>
-                  </div>
-
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label htmlFor="num-q-select">
-                        <strong>Number of Questions:</strong>
-                      </label>
+                <form className="quiz-config-form" onSubmit={handleGenerateQuiz}>
+                  <div className="quiz-form-row">
+                    <div className="quiz-form-group">
+                      <label htmlFor="doc-select">Target Lecture PDF</label>
                       <select
-                        id="num-q-select"
-                        className="form-control"
-                        value={numQuestions}
-                        onChange={(e) => setNumQuestions(Number(e.target.value))}
+                        id="doc-select"
+                        className="quiz-form-control"
                         disabled={isGenerating}
+                        onChange={(e) => setSelectedDocumentId(e.target.value)}
+                        value={selectedDocumentId}
                       >
-                        <option value={3}>3 Quick Check</option>
-                        <option value={5}>5 Standard Assessment</option>
-                        <option value={8}>8 Comprehensive</option>
-                        <option value={10}>10 Deep Mastery</option>
+                        {documents.map((doc) => (
+                          <option
+                            key={doc.document_id}
+                            value={doc.document_id}
+                          >
+                            {doc.original_filename} ({doc.page_count} pages)
+                          </option>
+                        ))}
                       </select>
                     </div>
 
-                    <div className="form-group">
-                      <label htmlFor="diff-select">
-                        <strong>Difficulty Tier:</strong>
+                    <div className="quiz-form-group">
+                      <label htmlFor="topic-input">
+                        Specific Topic / Chapter (Optional)
                       </label>
+                      <input
+                        id="topic-input"
+                        className="quiz-form-control"
+                        disabled={isGenerating}
+                        onChange={(e) => setTopic(e.target.value)}
+                        placeholder="e.g. Inverted Index, TF-IDF, Vector Space Model..."
+                        type="text"
+                        value={topic}
+                      />
+                      <small className="quiz-form-hint">
+                        Leave blank to evaluate core concepts across the entire document.
+                      </small>
+                    </div>
+                  </div>
+
+                  <div className="quiz-form-row">
+                    <div className="quiz-form-group">
+                      <label htmlFor="num-q-select">Number of Questions</label>
+                      <select
+                        id="num-q-select"
+                        className="quiz-form-control"
+                        disabled={isGenerating}
+                        onChange={(e) => setNumQuestions(Number(e.target.value))}
+                        value={numQuestions}
+                      >
+                        <option value={3}>3 Questions (Quick Check)</option>
+                        <option value={5}>5 Questions (Standard Assessment)</option>
+                        <option value={8}>8 Questions (Comprehensive Review)</option>
+                        <option value={10}>10 Questions (Deep Mastery Exam)</option>
+                      </select>
+                    </div>
+
+                    <div className="quiz-form-group">
+                      <label htmlFor="diff-select">Difficulty Tier</label>
                       <select
                         id="diff-select"
-                        className="form-control"
-                        value={difficulty}
-                        onChange={(e) => setDifficulty(e.target.value)}
+                        className="quiz-form-control"
                         disabled={isGenerating}
+                        onChange={(e) => setDifficulty(e.target.value)}
+                        value={difficulty}
                       >
-                        <option value="mixed">Mixed (Adaptive)</option>
+                        <option value="mixed">Mixed (Adaptive Scope)</option>
                         <option value="easy">Easy (Foundational Recall)</option>
-                        <option value="medium">Medium (Understanding)</option>
+                        <option value="medium">Medium (Conceptual Understanding)</option>
                         <option value="hard">Hard (Application & Analysis)</option>
                       </select>
                     </div>
                   </div>
 
-                  <div className="form-group">
-                    <label>
-                      <strong>Question Formats:</strong>
-                    </label>
-                    <div className="checkbox-group">
-                      <label className="checkbox-label">
+                  <div className="quiz-form-group">
+                    <label>Question Format (Select One)</label>
+                    <div className="quiz-formats-grid">
+                      <label
+                        className={`quiz-format-pill ${
+                          questionType === "mcq" ? "quiz-format-pill-selected" : ""
+                        }`}
+                      >
                         <input
-                          type="checkbox"
-                          checked={questionTypes.includes("mcq")}
-                          onChange={() => toggleQuestionType("mcq")}
+                          checked={questionType === "mcq"}
                           disabled={isGenerating}
+                          name="questionFormat"
+                          onChange={() => setQuestionType("mcq")}
+                          type="radio"
+                          value="mcq"
                         />
                         <span>Multiple Choice (MCQ)</span>
                       </label>
-                      <label className="checkbox-label">
+
+                      <label
+                        className={`quiz-format-pill ${
+                          questionType === "true_false"
+                            ? "quiz-format-pill-selected"
+                            : ""
+                        }`}
+                      >
                         <input
-                          type="checkbox"
-                          checked={questionTypes.includes("true_false")}
-                          onChange={() => toggleQuestionType("true_false")}
+                          checked={questionType === "true_false"}
                           disabled={isGenerating}
+                          name="questionFormat"
+                          onChange={() => setQuestionType("true_false")}
+                          type="radio"
+                          value="true_false"
                         />
                         <span>True / False</span>
                       </label>
-                      <label className="checkbox-label">
+
+                      <label
+                        className={`quiz-format-pill ${
+                          questionType === "short_answer"
+                            ? "quiz-format-pill-selected"
+                            : ""
+                        }`}
+                      >
                         <input
-                          type="checkbox"
-                          checked={questionTypes.includes("short_answer")}
-                          onChange={() => toggleQuestionType("short_answer")}
+                          checked={questionType === "short_answer"}
                           disabled={isGenerating}
+                          name="questionFormat"
+                          onChange={() => setQuestionType("short_answer")}
+                          type="radio"
+                          value="short_answer"
                         />
                         <span>Conceptual Short Answer</span>
                       </label>
                     </div>
                   </div>
 
-                  <button
-                    type="submit"
-                    className="button button-primary button-large"
-                    disabled={isGenerating || !selectedDocumentId}
-                  >
-                    {isGenerating ? (
-                      <>
-                        <span className="spinner" aria-hidden="true" />
-                        Synthesizing with Retrieval Agent...
-                      </>
-                    ) : (
-                      "✨ Generate AI Quiz"
-                    )}
-                  </button>
+                  <div className="quiz-upload-actions">
+                    <p>
+                      The Retrieval Agent grounds every question in the indexed
+                      page chunks of your selected document.
+                    </p>
+                    <div>
+                      <button
+                        className="quiz-button quiz-button-primary"
+                        disabled={isGenerating || !selectedDocumentId}
+                        type="submit"
+                      >
+                        <QuizIcon
+                          className={isGenerating ? "quiz-icon-spinning" : ""}
+                          name="sparkles"
+                          size={18}
+                        />
+                        {isGenerating
+                          ? "Synthesizing with AI Agents…"
+                          : "Generate AI Quiz"}
+                      </button>
+                    </div>
+                  </div>
                 </form>
+
+                <QuizGenerationJourney
+                  documentName={selectedDocObj?.original_filename}
+                  status={generationStatus}
+                  topic={generationTopic}
+                />
               </section>
 
-              {/* Right Column: Saved Quizzes & Summary */}
-              <section className="panel" aria-labelledby="saved-quizzes-heading">
-                <div className="panel-heading">
+              {/* Grounding Transparency Banner */}
+              <section
+                className="quiz-transparency"
+                aria-labelledby="quiz-transparency-heading"
+              >
+                <div className="quiz-transparency-icon" aria-hidden="true">
+                  <QuizIcon name="search" size={23} />
+                </div>
+                <div>
+                  <p className="quiz-section-kicker">How assessment generation works</p>
+                  <h2 id="quiz-transparency-heading">
+                    Grounded in your material, with page citations.
+                  </h2>
+                  <p>
+                    LearnMate extracts text into searchable sections and keeps page
+                    references so questions directly challenge understanding of
+                    your specific course curriculum.
+                  </p>
+                </div>
+                <div
+                  className="quiz-pipeline"
+                  aria-label="Assessment generation pipeline"
+                >
+                  <span>Lecture PDF</span>
+                  <i aria-hidden="true" />
+                  <span>Semantic Chunks</span>
+                  <i aria-hidden="true" />
+                  <span>Bloom Synthesis</span>
+                  <i aria-hidden="true" />
+                  <span>Pedagogical Grading</span>
+                </div>
+              </section>
+
+              {/* Saved Quizzes Library Section */}
+              <section
+                className="quiz-library-section"
+                aria-labelledby="quiz-library-heading"
+              >
+                <div className="quiz-library-heading">
                   <div>
-                    <h2 id="saved-quizzes-heading">Available Quizzes</h2>
+                    <p className="quiz-section-kicker">Assessment Library</p>
+                    <h2 id="quiz-library-heading">Available Quizzes</h2>
                     <p>
                       Saved assessments for{" "}
-                      <strong>{selectedDocObj?.original_filename || "selected document"}</strong>
+                      <strong>
+                        {selectedDocObj?.original_filename || "selected document"}
+                      </strong>
                     </p>
                   </div>
-                  <span className="document-count">{savedQuizzes.length}</span>
+                  <button
+                    className="quiz-button quiz-button-secondary"
+                    disabled={isLoadingSaved || isGenerating}
+                    onClick={() => loadSavedQuizzes(selectedDocumentId)}
+                    type="button"
+                  >
+                    <QuizIcon
+                      className={isLoadingSaved ? "quiz-icon-spinning" : ""}
+                      name="refresh"
+                      size={17}
+                    />
+                    Refresh library
+                  </button>
                 </div>
 
                 {isLoadingSaved ? (
-                  <div className="state-card" role="status">
-                    <span className="spinner" aria-hidden="true" />
-                    <p>Loading quizzes...</p>
-                  </div>
+                  <QuizSkeleton />
                 ) : savedQuizzes.length === 0 ? (
-                  <div className="state-card">
-                    <p>No saved quizzes yet for this document.</p>
-                    <small>Generate your first quiz using the form on the left!</small>
+                  <div className="quiz-empty-state">
+                    <div className="quiz-empty-visual" aria-hidden="true">
+                      <span className="quiz-empty-document">
+                        <QuizIcon name="sparkles" size={30} />
+                      </span>
+                      <span className="quiz-empty-node quiz-empty-node-one" />
+                      <span className="quiz-empty-node quiz-empty-node-two" />
+                      <span className="quiz-empty-connection" />
+                    </div>
+                    <p className="quiz-section-kicker">Ready for assessment</p>
+                    <h3>No saved quizzes yet for this document</h3>
+                    <p>
+                      Generate your first lecture-grounded assessment using the
+                      form above!
+                    </p>
                   </div>
                 ) : (
-                  <div className="saved-quiz-list">
+                  <div className="saved-quiz-grid">
                     {savedQuizzes.map((q) => (
-                      <div key={q.quiz_id} className="saved-quiz-card">
-                        <div className="saved-quiz-info">
-                          <h4>{q.title}</h4>
-                          <div className="quiz-meta-tags">
-                            <span className="tag tag-topic">{q.topic}</span>
-                            <span className="tag tag-questions">
-                              {q.total_questions} Questions
-                            </span>
-                            <span className={`tag tag-${q.difficulty}`}>
-                              {q.difficulty}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="saved-quiz-actions">
-                          <button
-                            type="button"
-                            className="button button-primary button-small"
-                            onClick={() => handleStartSavedQuiz(q.quiz_id)}
-                          >
-                            ▶ Take Quiz
-                          </button>
-                          <button
-                            type="button"
-                            className="button button-quiet button-small"
-                            onClick={(e) => handleDeleteSavedQuiz(q.quiz_id, e)}
-                            title="Delete Quiz"
-                          >
-                            🗑
-                          </button>
-                        </div>
-                      </div>
+                      <SavedQuizCard
+                        documentName={selectedDocObj?.original_filename}
+                        isDeleting={deletingQuizId === q.quiz_id}
+                        key={q.quiz_id}
+                        onDelete={setQuizPendingDelete}
+                        onTakeQuiz={handleStartSavedQuiz}
+                        quiz={q}
+                      />
                     ))}
                   </div>
                 )}
               </section>
-            </div>
+            </>
           )}
         </>
       )}
 
       {/* VIEW 2: ACTIVE QUIZ PLAYER */}
       {viewState === "taking" && activeQuiz && (
-        <section className="panel quiz-player-panel">
-          {/* Quiz Player Header */}
+        <section className="quiz-panel quiz-player-panel">
+          {/* Header */}
           <div className="quiz-player-header">
             <div>
               <button
-                type="button"
-                className="button button-quiet button-small"
+                className="quiz-button quiz-button-quiet quiz-button-small"
                 onClick={() => setViewState("configure")}
+                style={{ marginBottom: "12px" }}
+                type="button"
               >
-                ← Exit Quiz
+                <QuizIcon name="arrowLeft" size={15} /> Exit to Assessment Hub
               </button>
               <h2>{activeQuiz.title}</h2>
               <p className="quiz-subtitle">
-                Topic: <strong>{activeQuiz.topic}</strong> · Document:{" "}
+                Topic: <strong>{activeQuiz.topic}</strong> · Source:{" "}
                 <strong>{selectedDocObj?.original_filename}</strong>
               </p>
             </div>
-            <div className="quiz-progress-indicator">
-              <span>
-                Question <strong>{currentQuestionIndex + 1}</strong> of{" "}
-                <strong>{activeQuiz.questions?.length || 0}</strong>
-              </span>
-              <div className="progress-bar-track">
-                <div
-                  className="progress-bar-fill"
-                  style={{
-                    width: `${
-                      (((currentQuestionIndex + 1) /
-                        (activeQuiz.questions?.length || 1)) *
-                        100)
-                    }%`,
-                  }}
-                />
+
+            <div className="quiz-player-meta-badges">
+              <div className="quiz-timer-pill">
+                <QuizIcon name="clock" size={16} />
+                <span>{formatTime(timeSpentSeconds)}</span>
+              </div>
+
+              <div className="quiz-progress-box">
+                <span>
+                  Question <strong>{currentQuestionIndex + 1}</strong> of{" "}
+                  <strong>{activeQuiz.questions?.length || 0}</strong>
+                </span>
+                <div className="quiz-progress-track">
+                  <div
+                    className="quiz-progress-bar"
+                    style={{
+                      width: `${
+                        (((currentQuestionIndex + 1) /
+                          (activeQuiz.questions?.length || 1)) *
+                          100)
+                      }%`,
+                    }}
+                  />
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Question View */}
+          {/* Question Display Card */}
           {(() => {
             const q = (activeQuiz.questions || [])[currentQuestionIndex];
-            if (!q) return <p>No questions available.</p>;
+            if (!q) return <p>No questions available in this assessment.</p>;
 
             const currentAnswer = studentAnswers[q.question_id] || "";
+            const diffMeta = getDifficultyMeta(q.difficulty);
 
             return (
               <div className="question-display-card">
                 <div className="question-meta-row">
-                  <span className={`tag tag-difficulty tag-${q.difficulty}`}>
-                    {q.difficulty}
+                  <span className={`quiz-tag quiz-tag-diff-${diffMeta.shortLabel.toLowerCase()}`}>
+                    <QuizIcon name="target" size={13} />
+                    {diffMeta.shortLabel}
                   </span>
-                  <span className="tag tag-cognitive">
-                    Bloom: {q.cognitive_level}
+                  <span className="quiz-tag">
+                    <QuizIcon name="brain" size={13} />
+                    Bloom: {q.cognitive_level || "Application"}
                   </span>
-                  <span className="tag tag-topic">{q.topic}</span>
+                  <span className="quiz-tag">
+                    <QuizIcon name="layers" size={13} />
+                    {q.topic || activeQuiz.topic}
+                  </span>
                   {q.source_page && (
-                    <span className="tag tag-citation">
-                      📖 Page {q.source_page}
+                    <span className="quiz-tag quiz-tag-citation">
+                      <QuizIcon name="book" size={13} />
+                      Page {q.source_page}
                     </span>
                   )}
                 </div>
 
                 <h3 className="question-text">{q.question_text}</h3>
 
-                {/* Option Rendering by Question Type */}
                 {q.question_type === "short_answer" ? (
                   <div className="short-answer-container">
                     <label htmlFor={`input-${q.question_id}`}>
-                      <strong>Your Explanation:</strong>
+                      <strong>Your Conceptual Explanation:</strong>
                     </label>
                     <textarea
                       id={`input-${q.question_id}`}
-                      className="form-control short-answer-input"
-                      rows={4}
-                      placeholder="Type your conceptual answer here in your own words..."
-                      value={currentAnswer}
+                      className="quiz-form-control short-answer-input"
+                      disabled={isSubmitting}
                       onChange={(e) =>
                         handleAnswerSelect(q.question_id, e.target.value)
                       }
-                      disabled={isSubmitting}
+                      placeholder="Type your explanation in your own words. The AI evaluation agent will review conceptual grounding..."
+                      rows={5}
+                      value={currentAnswer}
                     />
                   </div>
                 ) : (
@@ -584,14 +789,14 @@ function Quiz({ onNavigateToRecommendations }) {
                           }`}
                         >
                           <input
-                            type="radio"
-                            name={`question-${q.question_id}`}
-                            value={opt}
                             checked={isSelected}
+                            disabled={isSubmitting}
+                            name={`question-${q.question_id}`}
                             onChange={() =>
                               handleAnswerSelect(q.question_id, opt)
                             }
-                            disabled={isSubmitting}
+                            type="radio"
+                            value={opt}
                           />
                           <span className="option-indicator">
                             {String.fromCharCode(65 + optIdx)}
@@ -609,46 +814,49 @@ function Quiz({ onNavigateToRecommendations }) {
           {/* Navigation Controls */}
           <div className="quiz-controls-row">
             <button
-              type="button"
-              className="button button-secondary"
+              className="quiz-button quiz-button-secondary"
               disabled={currentQuestionIndex === 0 || isSubmitting}
               onClick={() => setCurrentQuestionIndex((prev) => prev - 1)}
+              type="button"
             >
-              ← Previous
+              <QuizIcon name="arrowLeft" size={15} /> Previous Question
             </button>
 
             {currentQuestionIndex <
             (activeQuiz.questions?.length || 1) - 1 ? (
               <button
-                type="button"
-                className="button button-primary"
+                className="quiz-button quiz-button-primary"
                 onClick={() => setCurrentQuestionIndex((prev) => prev + 1)}
+                type="button"
               >
-                Next Question →
+                Next Question <QuizIcon name="arrowRight" size={15} />
               </button>
             ) : (
-              <div className="submit-buttons-group">
+              <div className="quiz-submit-group">
                 <button
-                  type="button"
-                  className="button button-secondary"
+                  className="quiz-button quiz-button-secondary"
                   disabled={isSubmitting}
                   onClick={() => handleSubmitQuiz(false)}
+                  type="button"
                 >
-                  {isSubmitting ? "Grading..." : "Submit & Review"}
+                  {isSubmitting ? "Evaluating…" : "Submit & Review"}
                 </button>
                 <button
-                  type="button"
-                  className="button button-primary"
+                  className="quiz-button quiz-button-primary"
                   disabled={isSubmitting}
                   onClick={() => handleSubmitQuiz(true)}
+                  type="button"
                 >
                   {isSubmitting ? (
                     <>
-                      <span className="spinner" aria-hidden="true" />
-                      Evaluating & Analyzing Gaps...
+                      <span className="quiz-processing-spinner" aria-hidden="true" />
+                      Analyzing Knowledge Gaps…
                     </>
                   ) : (
-                    "🚀 Submit & Analyze Knowledge Gaps"
+                    <>
+                      <QuizIcon name="sparkles" size={16} />
+                      Submit & Analyze Gaps
+                    </>
                   )}
                 </button>
               </div>
@@ -657,11 +865,11 @@ function Quiz({ onNavigateToRecommendations }) {
         </section>
       )}
 
-      {/* VIEW 3: RESULTS & PEDAGOGICAL FEEDBACK */}
+      {/* VIEW 3: RESULTS & PEDAGOGICAL BREAKDOWN */}
       {viewState === "results" && evaluationResult && (
         <div className="results-container">
-          {/* Score Banner */}
-          <section className="panel results-hero-panel">
+          {/* Results Hero Banner */}
+          <section className="quiz-panel results-hero-panel">
             <div className="score-badge-circle">
               <span className="score-percentage">
                 {Math.round(evaluationResult.score_percentage)}%
@@ -675,57 +883,61 @@ function Quiz({ onNavigateToRecommendations }) {
               <h2>Assessment Complete!</h2>
               <p>
                 Quiz: <strong>{evaluationResult.quiz_title}</strong> · Duration:{" "}
-                <strong>{formatTime(evaluationResult.time_spent_seconds)}</strong>
+                <strong>
+                  {formatTime(evaluationResult.time_spent_seconds)}
+                </strong>
               </p>
-              <div className="results-badge-group">
-                <span
-                  className={`status-pill ${
-                    evaluationResult.score_percentage >= 80
-                      ? "status-mastered"
-                      : evaluationResult.score_percentage >= 50
-                      ? "status-review"
-                      : "status-critical"
-                  }`}
-                >
-                  {evaluationResult.score_percentage >= 80
-                    ? "🌟 High Mastery"
-                    : evaluationResult.score_percentage >= 50
-                    ? "📖 Review Recommended"
-                    : "⚠️ Foundational Gaps Detected"}
-                </span>
-              </div>
+              {(() => {
+                const tierMeta = getScoreTier(
+                  evaluationResult.score_percentage,
+                );
+                return (
+                  <span className={`quiz-tier-pill ${tierMeta.badgeClass}`}>
+                    {tierMeta.label}
+                  </span>
+                );
+              })()}
             </div>
 
             <div className="results-hero-actions">
               <button
-                type="button"
-                className="button button-primary button-large"
+                className="quiz-button quiz-button-primary quiz-button-large"
                 onClick={() => {
                   if (onNavigateToRecommendations) {
                     onNavigateToRecommendations(
-                      evaluationResult.submission_payload
+                      evaluationResult.submission_payload,
                     );
                   }
                 }}
+                type="button"
               >
-                🎯 View AI Study Coach & Recommendations →
+                <QuizIcon name="sparkles" size={17} />
+                View AI Study Coach & Recommendations
               </button>
               <button
-                type="button"
-                className="button button-secondary"
+                className="quiz-button quiz-button-secondary"
                 onClick={() => setViewState("configure")}
+                type="button"
               >
-                🔄 New Assessment
+                <QuizIcon name="refresh" size={16} /> New Assessment
               </button>
             </div>
           </section>
 
           {/* Question Breakdown List */}
-          <section className="panel results-breakdown-panel">
-            <div className="panel-heading">
+          <section
+            className="quiz-panel results-breakdown-panel"
+            aria-labelledby="results-breakdown-heading"
+          >
+            <div className="quiz-section-heading">
               <div>
-                <h3>Question Breakdown & Pedagogical Explanations</h3>
-                <p>Review each question, your answer, and ground-truth citations.</p>
+                <span className="quiz-section-number">02</span>
+                <div>
+                  <p className="quiz-section-kicker">Pedagogical Review</p>
+                  <h2 id="results-breakdown-heading">
+                    Question Breakdown & Citations
+                  </h2>
+                </div>
               </div>
             </div>
 
@@ -734,26 +946,45 @@ function Quiz({ onNavigateToRecommendations }) {
                 <div
                   key={res.question_id}
                   className={`result-item-card ${
-                    res.is_correct ? "result-item-correct" : "result-item-incorrect"
+                    res.is_correct
+                      ? "result-item-correct"
+                      : "result-item-incorrect"
                   }`}
                 >
                   <div className="result-item-header">
-                    <span className="result-question-num">Question {idx + 1}</span>
+                    <span className="result-question-num">
+                      Question {idx + 1}
+                    </span>
                     <span
                       className={`result-verdict-pill ${
-                        res.is_correct ? "verdict-correct" : "verdict-incorrect"
+                        res.is_correct
+                          ? "verdict-correct"
+                          : "verdict-incorrect"
                       }`}
                     >
-                      {res.is_correct ? "✓ Correct (1.0 pt)" : "✗ Incorrect (0.0 pt)"}
+                      {res.is_correct
+                        ? "✓ Correct (1.0 pt)"
+                        : "✗ Incorrect (0.0 pt)"}
                     </span>
-                    <span className="tag tag-topic">{res.topic}</span>
-                    <span className={`tag tag-${res.difficulty}`}>{res.difficulty}</span>
+                    <span className="quiz-tag">
+                      <QuizIcon name="layers" size={13} />
+                      {res.topic}
+                    </span>
+                    <span className="quiz-tag">
+                      <QuizIcon name="target" size={13} />
+                      {res.difficulty}
+                    </span>
                     {res.source_page && (
-                      <span className="tag tag-citation">📖 PDF Page {res.source_page}</span>
+                      <span className="quiz-tag quiz-tag-citation">
+                        <QuizIcon name="book" size={13} />
+                        Page {res.source_page}
+                      </span>
                     )}
                   </div>
 
-                  <p className="result-question-statement">{res.question_text}</p>
+                  <p className="result-question-statement">
+                    {res.question_text}
+                  </p>
 
                   <div className="answers-comparison-box">
                     <div className="answer-row">
@@ -763,7 +994,7 @@ function Quiz({ onNavigateToRecommendations }) {
                           res.is_correct ? "text-success" : "text-danger"
                         }`}
                       >
-                        {res.student_answer || "(None)"}
+                        {res.student_answer || "(No answer provided)"}
                       </span>
                     </div>
 
@@ -779,14 +1010,14 @@ function Quiz({ onNavigateToRecommendations }) {
 
                   {res.explanation && (
                     <div className="result-explanation-box">
-                      <strong>💡 Concept Explanation:</strong>
+                      <strong>💡 Concept Explanation</strong>
                       <p>{res.explanation}</p>
                     </div>
                   )}
 
                   {res.feedback && res.feedback !== res.explanation && (
                     <div className="result-feedback-box">
-                      <strong>Teacher Feedback:</strong>
+                      <strong>Pedagogical Feedback</strong>
                       <p>{res.feedback}</p>
                     </div>
                   )}
@@ -796,6 +1027,14 @@ function Quiz({ onNavigateToRecommendations }) {
           </section>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <DeleteQuizModal
+        isDeleting={deletingQuizId === quizPendingDelete?.quiz_id}
+        onCancel={() => setQuizPendingDelete(null)}
+        onConfirm={confirmDeleteQuiz}
+        quiz={quizPendingDelete}
+      />
     </div>
   );
 }
