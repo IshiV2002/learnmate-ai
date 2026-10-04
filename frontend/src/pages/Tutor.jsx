@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   getDocuments,
   getStudentTutorSessions,
@@ -8,31 +8,59 @@ import {
   deleteTutorSession,
 } from "../services/api.js";
 import { useAuth } from "../auth/AuthContext.jsx";
+import TutorIcon from "./tutor/TutorIcon.jsx";
+import TutorSkeleton from "./tutor/TutorSkeleton.jsx";
+import DeleteSessionModal from "./tutor/DeleteSessionModal.jsx";
+import SessionHistoryModal from "./tutor/SessionHistoryModal.jsx";
+import {
+  getTutorStats,
+  getModeMeta,
+  validateSessionConfig,
+  TUTOR_MODES,
+} from "./tutor/tutorUtils.js";
+import "./Tutor.css";
 
 export default function Tutor({ initialHandoff = null, onClearHandoff = null }) {
   const { user } = useAuth();
-  const studentId = user.user_id;
+  const studentId = user?.user_id || "student_default";
+
+  // Data states
   const [documents, setDocuments] = useState([]);
   const [selectedDocId, setSelectedDocId] = useState("");
   const [topicFocus, setTopicFocus] = useState("");
   const [mode, setMode] = useState("socratic"); // 'socratic' | 'step_by_step' | 'concept_check'
 
+  // Active dialogue states
   const [currentSession, setCurrentSession] = useState(null);
   const [messages, setMessages] = useState([]);
   const [activeCitations, setActiveCitations] = useState([]);
+  const [highlightedCitationIndex, setHighlightedCitationIndex] = useState(null);
   const [suggestedFollowups, setSuggestedFollowups] = useState([]);
   const [conceptCheck, setConceptCheck] = useState(null);
 
+  // History & past sessions
   const [pastSessions, setPastSessions] = useState([]);
+  const [sessionPendingDelete, setSessionPendingDelete] = useState(null);
+  const [isDeletingSession, setIsDeletingSession] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+
+  // Interactive input & status
   const [inputMessage, setInputMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   const messagesEndRef = useRef(null);
+  const textareaRef = useRef(null);
 
-  // Scroll chat to bottom when messages update
+  // Compute workspace stats
+  const stats = useMemo(
+    () => getTutorStats(pastSessions, documents),
+    [pastSessions, documents]
+  );
+
+  // Scroll chat to bottom when messages update or loading state changes
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -41,14 +69,15 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
     scrollToBottom();
   }, [messages, loading]);
 
-  // Load available documents
+  // Load uploaded documents on initial mount
   useEffect(() => {
     async function loadDocs() {
       try {
         const docs = await getDocuments();
-        setDocuments(docs || []);
-        if (docs && docs.length > 0 && !selectedDocId) {
-          setSelectedDocId(docs[0].document_id);
+        const docList = Array.isArray(docs) ? docs : [];
+        setDocuments(docList);
+        if (docList.length > 0 && !selectedDocId) {
+          setSelectedDocId(docList[0].document_id);
         }
       } catch (err) {
         console.error("Failed to load documents:", err);
@@ -57,19 +86,18 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
     loadDocs();
   }, []);
 
-  // Handle incoming initial handoff from Recommendations tab
+  // Handle incoming initial remedial handoff from Recommendations tab
   useEffect(() => {
     if (initialHandoff && initialHandoff.document_id) {
       setSelectedDocId(initialHandoff.document_id);
       if (initialHandoff.target_topics && initialHandoff.target_topics.length > 0) {
         setTopicFocus(initialHandoff.target_topics[0]);
       }
-      // Auto-start remedial session
       initSessionFromHandoff(initialHandoff);
     }
   }, [initialHandoff]);
 
-  // Load student session list
+  // Load student past sessions
   useEffect(() => {
     if (studentId) {
       loadStudentSessions();
@@ -79,7 +107,7 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
   async function loadStudentSessions() {
     try {
       const list = await getStudentTutorSessions(studentId);
-      setPastSessions(list || []);
+      setPastSessions(Array.isArray(list) ? list : []);
     } catch (err) {
       console.warn("Could not load past sessions:", err);
     }
@@ -87,7 +115,7 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
 
   async function initSessionFromHandoff(handoff) {
     setSessionLoading(true);
-    setError(null);
+    setErrorMessage("");
     try {
       const payload = {
         student_id: studentId,
@@ -105,8 +133,9 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
       setMode(session.mode || "socratic");
       setTopicFocus(session.topic_focus || "");
       loadStudentSessions();
+      setSuccessMessage("Remedial Socratic session initialized from Recommendations.");
     } catch (err) {
-      setError(err.message || "Could not start remedial tutoring session.");
+      setErrorMessage(err.message || "Could not start remedial tutoring session.");
     } finally {
       setSessionLoading(false);
     }
@@ -114,13 +143,21 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
 
   async function handleStartNewSession(e) {
     if (e) e.preventDefault();
-    if (!selectedDocId) {
-      setError("Please select or upload a document first.");
+
+    const validation = validateSessionConfig({
+      documentId: selectedDocId,
+      mode: mode,
+      topicFocus: topicFocus,
+    });
+
+    if (!validation.isValid) {
+      setErrorMessage(validation.error);
       return;
     }
 
     setSessionLoading(true);
-    setError(null);
+    setErrorMessage("");
+    setSuccessMessage("");
     if (onClearHandoff) onClearHandoff();
 
     try {
@@ -138,9 +175,11 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
       }
       setSuggestedFollowups([]);
       setConceptCheck(null);
+      setHighlightedCitationIndex(null);
       loadStudentSessions();
+      setSuccessMessage("New Socratic dialogue session established.");
     } catch (err) {
-      setError(err.message || "Failed to start AI tutoring session.");
+      setErrorMessage(err.message || "Failed to start AI tutoring session.");
     } finally {
       setSessionLoading(false);
     }
@@ -148,7 +187,7 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
 
   async function handleSelectPastSession(sessionId) {
     setSessionLoading(true);
-    setError(null);
+    setErrorMessage("");
     setShowHistoryModal(false);
     try {
       const session = await getTutorSession(sessionId);
@@ -156,32 +195,44 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
       setMessages(session.messages || []);
       setSelectedDocId(session.document_id);
       setMode(session.mode);
-      setTopicFocus(session.topic_focus);
-      // Collect citations from recent tutor message
-      const lastTutorMsg = [...session.messages].reverse().find((m) => m.role === "tutor");
+      setTopicFocus(session.topic_focus || "");
+      const lastTutorMsg = [...(session.messages || [])]
+        .reverse()
+        .find((m) => m.role === "tutor");
       setActiveCitations(lastTutorMsg?.citations || []);
       setSuggestedFollowups([]);
       setConceptCheck(null);
+      setHighlightedCitationIndex(null);
     } catch (err) {
-      setError(err.message || "Could not load session.");
+      setErrorMessage(err.message || "Could not load session.");
     } finally {
       setSessionLoading(false);
     }
   }
 
-  async function handleDeleteSession(sessionId, e) {
-    e.stopPropagation();
-    if (!confirm("Are you sure you want to delete this tutoring session?")) return;
+  function handlePromptDeleteSession(session) {
+    setSessionPendingDelete(session);
+  }
+
+  async function handleConfirmDeleteSession() {
+    if (!sessionPendingDelete) return;
+
+    setIsDeletingSession(true);
+    setErrorMessage("");
     try {
-      await deleteTutorSession(sessionId);
-      if (currentSession?.session_id === sessionId) {
+      await deleteTutorSession(sessionPendingDelete.session_id);
+      if (currentSession?.session_id === sessionPendingDelete.session_id) {
         setCurrentSession(null);
         setMessages([]);
         setActiveCitations([]);
       }
+      setSuccessMessage("Tutoring session removed from your workspace.");
+      setSessionPendingDelete(null);
       loadStudentSessions();
     } catch (err) {
-      alert("Failed to delete session: " + err.message);
+      setErrorMessage(err.message || "Failed to delete tutoring session.");
+    } finally {
+      setIsDeletingSession(false);
     }
   }
 
@@ -191,9 +242,9 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
 
     setInputMessage("");
     setLoading(true);
-    setError(null);
+    setErrorMessage("");
 
-    // Optimistically add student message
+    // Optimistically append student message
     const tempStudentMsg = {
       message_id: `temp_${Date.now()}`,
       session_id: currentSession.session_id,
@@ -227,415 +278,572 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
       }
       setSuggestedFollowups(response.suggested_followups || []);
       setConceptCheck(response.concept_check_question || null);
+      setHighlightedCitationIndex(null);
     } catch (err) {
-      setError(err.message || "Failed to receive response from Tutor Agent.");
+      setErrorMessage(err.message || "Failed to receive response from Tutor Agent.");
     } finally {
       setLoading(false);
     }
   }
 
+  function handleHighlightCitation(citationIndex) {
+    setHighlightedCitationIndex(citationIndex);
+    // Remove highlight pulse after 3 seconds
+    setTimeout(() => {
+      setHighlightedCitationIndex(null);
+    }, 3000);
+  }
+
   const activeDocName =
-    documents.find((d) => d.document_id === selectedDocId)?.original_filename || "Course Lecture";
+    documents.find((d) => d.document_id === selectedDocId)?.original_filename ||
+    "Course Lecture";
+
+  const currentModeMeta = getModeMeta(mode);
 
   return (
-    <div className="tutor-page-layout">
-      {/* Top Banner / Session Setup Bar */}
-      <div className="tutor-control-panel">
-        <div className="tutor-header-row">
-          <div>
-            <h2 className="tutor-main-title">💬 AI Socratic Tutor</h2>
-            <p className="tutor-subtitle">
-              Pedagogical conversational learning grounded strictly in your course lecture materials.
-            </p>
-            <p className="tutor-subtitle">
-              AI-generated explanations can be imperfect. Verify important academic information against the cited pages.
-            </p>
-          </div>
-
-          <div className="tutor-action-group">
-            <button
-              type="button"
-              className="btn-secondary btn-sm"
-              onClick={() => setShowHistoryModal(true)}
-            >
-              📜 Past Sessions ({pastSessions.length})
-            </button>
-            <button
-              type="button"
-              className="btn-primary btn-sm"
-              onClick={handleStartNewSession}
-              disabled={sessionLoading || documents.length === 0}
-            >
-              ✨ Start New Session
-            </button>
+    <div className="tutor-page">
+      {/* Hero Header & Telemetry Map */}
+      <header className="tutor-hero">
+        <div className="tutor-hero-copy">
+          <p className="tutor-eyebrow">Tutor · Socratic Guidance</p>
+          <h1>Master complex concepts with lecture-grounded dialogue.</h1>
+          <p className="tutor-hero-description">
+            Engage in personalized Socratic study sessions grounded strictly in your uploaded course lecture PDFs, with verified page-aware citations.
+          </p>
+          <div className="tutor-hero-trust">
+            <span>
+              <TutorIcon name="shield" size={15} /> Server-grounded retrieval
+            </span>
+            <span>
+              <TutorIcon name="book" size={15} /> Page-aware citations
+            </span>
+            <span>
+              <TutorIcon name="brain" size={15} /> Bloom-aligned scaffolding
+            </span>
           </div>
         </div>
 
-        {/* Configuration Row */}
-        <div className="tutor-config-grid">
-          <div className="form-group">
-            <label>👤 Signed-in learner</label>
-            <input
-              type="text"
-              value={user.full_name}
-              readOnly
-            />
+        <div className="tutor-telemetry-map" aria-label="Tutor workspace statistics">
+          <div className="tutor-map-visual" aria-hidden="true">
+            <span className="tutor-map-ring tutor-map-ring-one" />
+            <span className="tutor-map-ring tutor-map-ring-two" />
+            <span className="tutor-map-node tutor-map-node-one" />
+            <span className="tutor-map-node tutor-map-node-two" />
+            <span className="tutor-map-node tutor-map-node-three" />
+            <span className="tutor-map-core">
+              <TutorIcon name="sparkles" size={24} />
+            </span>
           </div>
-
-          <div className="form-group">
-            <label>📚 Course Document</label>
-            <select
-              value={selectedDocId}
-              onChange={(e) => setSelectedDocId(e.target.value)}
-              disabled={documents.length === 0}
-            >
-              {documents.length === 0 && <option value="">No documents uploaded</option>}
-              {documents.map((doc) => (
-                <option key={doc.document_id} value={doc.document_id}>
-                  {doc.original_filename} ({doc.page_count} pages)
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label>🎯 Concept / Topic Focus</label>
-            <input
-              type="text"
-              value={topicFocus}
-              onChange={(e) => setTopicFocus(e.target.value)}
-              placeholder="e.g. Vector Space Scoring, Inverted Index..."
-            />
-          </div>
-
-          <div className="form-group">
-            <label>🧠 Teaching Mode</label>
-            <div className="mode-toggle-group">
-              <button
-                type="button"
-                className={`mode-btn ${mode === "socratic" ? "active" : ""}`}
-                onClick={() => setMode("socratic")}
-                title="Guides you with probing questions to discover answers"
-              >
-                🧠 Socratic
-              </button>
-              <button
-                type="button"
-                className={`mode-btn ${mode === "step_by_step" ? "active" : ""}`}
-                onClick={() => setMode("step_by_step")}
-                title="Structured numbered breakdown with intuitive analogies"
-              >
-                🪜 Step-by-Step
-              </button>
-              <button
-                type="button"
-                className={`mode-btn ${mode === "concept_check" ? "active" : ""}`}
-                onClick={() => setMode("concept_check")}
-                title="Concise recap followed by a quick comprehension challenge"
-              >
-                🎯 Concept Check
-              </button>
+          <div className="tutor-stat-grid">
+            <div>
+              <span>{stats.sessions}</span>
+              <small>Sessions</small>
+            </div>
+            <div>
+              <span>{stats.documents}</span>
+              <small>Course Sources</small>
+            </div>
+            <div>
+              <span>{stats.topics}</span>
+              <small>Topics</small>
             </div>
           </div>
         </div>
+      </header>
 
-        {/* Remedial Handoff Context Banner */}
-        {initialHandoff && (
-          <div className="handoff-alert-banner">
-            <div className="handoff-alert-icon">🤝</div>
-            <div className="handoff-alert-content">
-              <strong>Inter-Agent Remedial Handoff Active:</strong>
-              <span>
-                Personalized review initialized by Recommendation Agent for:{" "}
-                <em>{initialHandoff.target_topics?.join(", ") || "Identified Knowledge Gaps"}</em> (Severity:{" "}
-                <span className="severity-badge-pill">{initialHandoff.gap_severity}</span>)
-              </span>
+      {/* Global Notifications Feedback Stack */}
+      <div className="tutor-feedback-stack" aria-live="polite">
+        {errorMessage && (
+          <div className="tutor-feedback tutor-feedback-error" role="alert">
+            <span className="tutor-feedback-icon" aria-hidden="true">
+              <TutorIcon name="close" size={17} />
+            </span>
+            <div>
+              <strong>Something needs attention</strong>
+              <p>{errorMessage}</p>
             </div>
-            {onClearHandoff && (
-              <button
-                type="button"
-                className="close-banner-btn"
-                onClick={onClearHandoff}
-                title="Dismiss Handoff Banner"
-              >
-                ✕
-              </button>
-            )}
+            <button
+              aria-label="Dismiss error"
+              onClick={() => setErrorMessage("")}
+              type="button"
+            >
+              <TutorIcon name="close" size={16} />
+            </button>
+          </div>
+        )}
+
+        {successMessage && (
+          <div className="tutor-feedback tutor-feedback-success" role="status">
+            <span className="tutor-feedback-icon" aria-hidden="true">
+              <TutorIcon name="check" size={17} />
+            </span>
+            <div>
+              <strong>Dialogue updated</strong>
+              <p>{successMessage}</p>
+            </div>
+            <button
+              aria-label="Dismiss success message"
+              onClick={() => setSuccessMessage("")}
+              type="button"
+            >
+              <TutorIcon name="close" size={16} />
+            </button>
           </div>
         )}
       </div>
 
-      {error && (
-        <div className="error-alert">
-          <span>⚠️ {error}</span>
-          <button type="button" onClick={() => setError(null)}>
-            ✕
-          </button>
-        </div>
-      )}
-
-      {/* Main Tutoring Area: Chat Thread + Evidence Citations Drawer */}
-      <div className="tutor-workspace-grid">
-        {/* Chat Section */}
-        <div className="tutor-chat-card">
-          <div className="chat-card-header">
-            <div className="session-status-indicator">
-              <span className="pulse-dot"></span>
-              <strong>{currentSession ? `Session: ${currentSession.topic_focus || activeDocName}` : "AI Tutor Ready"}</strong>
-            </div>
-            <div className="active-mode-badge">
-              Mode: {mode === "socratic" ? "🧠 Socratic Discovery" : mode === "step_by_step" ? "🪜 Step-by-Step Breakdown" : "🎯 Concept Check"}
+      {/* Section 01: Socratic Session Architect */}
+      <section className="tutor-panel" aria-labelledby="tutor-setup-heading">
+        <div className="tutor-section-heading">
+          <div>
+            <span className="tutor-section-number">01</span>
+            <div>
+              <p className="tutor-section-kicker">Session Architect</p>
+              <h2 id="tutor-setup-heading">Configure Socratic study session</h2>
             </div>
           </div>
-
-          <div className="chat-messages-container">
-            {!currentSession && !sessionLoading && (
-              <div className="empty-chat-state">
-                <div className="empty-icon">🤖</div>
-                <h3>Welcome to LearnMate AI Tutoring!</h3>
-                <p>
-                  Click <strong>"Start New Session"</strong> above or select a topic from your quiz recommendations to start a guided, lecture-grounded Socratic study session.
-                </p>
-                {documents.length > 0 && (
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={handleStartNewSession}
-                  >
-                    Start Tutoring on {documents[0].original_filename}
-                  </button>
-                )}
-              </div>
-            )}
-
-            {sessionLoading && (
-              <div className="chat-loading-state">
-                <div className="spinner"></div>
-                <p>Preparing Socratic pedagogy and indexing lecture context...</p>
-              </div>
-            )}
-
-            {messages.map((msg, index) => (
-              <div
-                key={msg.message_id || index}
-                className={`chat-bubble-wrapper ${msg.role === "student" ? "student-wrapper" : "tutor-wrapper"}`}
-              >
-                <div className="bubble-avatar">
-                  {msg.role === "student" ? "👤" : "🎓"}
-                </div>
-                <div className="bubble-content-box">
-                  <div className="bubble-header-line">
-                    <span className="bubble-author">
-                      {msg.role === "student" ? "You (Student)" : "LearnMate AI Tutor"}
-                    </span>
-                    <span className="bubble-time">
-                      {msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
-                    </span>
-                  </div>
-
-                  <div className="bubble-body-text">
-                    {msg.content.split("\n\n").map((para, pIdx) => (
-                      <p key={pIdx}>{para}</p>
-                    ))}
-                  </div>
-
-                  {/* Inline citation pill badges */}
-                  {msg.citations && msg.citations.length > 0 && (
-                    <div className="bubble-citations-tray">
-                      <span className="citations-label">📑 Lecture Citations:</span>
-                      {msg.citations.map((c, cIdx) => (
-                        <button
-                          key={cIdx}
-                          type="button"
-                          className="citation-chip"
-                          onClick={() => setActiveCitations([c])}
-                          title={`Page ${c.page_number} of ${c.source || "Lecture"}`}
-                        >
-                          Page {c.page_number}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-
-            {loading && (
-              <div className="chat-bubble-wrapper tutor-wrapper">
-                <div className="bubble-avatar">🎓</div>
-                <div className="bubble-content-box tutor-thinking-box">
-                  <div className="typing-dots">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                  </div>
-                  <small>Grounding response on lecture citations...</small>
-                </div>
-              </div>
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Interactive Suggestions & Concept Check Callout */}
-          {conceptCheck && (
-            <div className="concept-check-card">
-              <div className="concept-check-header">
-                <strong>🎯 Concept Check Challenge:</strong>
-              </div>
-              <p className="concept-check-text">{conceptCheck}</p>
-            </div>
-          )}
-
-          {suggestedFollowups.length > 0 && (
-            <div className="followup-chips-cluster">
-              <span className="followup-heading">💡 Quick Follow-Ups:</span>
-              {suggestedFollowups.map((suggestion, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  className="followup-chip-btn"
-                  onClick={() => handleSendMessage(suggestion)}
-                  disabled={loading}
-                >
-                  "{suggestion}"
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Chat Input Bar */}
-          <div className="chat-input-bar">
-            <textarea
-              rows={2}
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendMessage();
-                }
-              }}
-              placeholder={
-                currentSession
-                  ? "Type your question or explanation... (Enter to send, Shift+Enter for new line)"
-                  : "Start a session to chat with the AI Tutor..."
-              }
-              disabled={!currentSession || loading}
-            />
+          <div className="tutor-heading-actions">
             <button
+              className="tutor-button tutor-button-secondary tutor-button-sm"
+              onClick={() => setShowHistoryModal(true)}
               type="button"
-              className="send-message-btn"
-              onClick={() => handleSendMessage()}
-              disabled={!currentSession || !inputMessage.trim() || loading}
             >
-              {loading ? "..." : "Send 🚀"}
+              <TutorIcon name="history" size={15} />
+              Past Sessions ({pastSessions.length})
+            </button>
+            <button
+              className="tutor-button tutor-button-primary tutor-button-sm"
+              disabled={sessionLoading || documents.length === 0}
+              onClick={handleStartNewSession}
+              type="button"
+            >
+              <TutorIcon name="sparkles" size={15} />
+              Start New Session
             </button>
           </div>
         </div>
 
-        {/* Right Sidebar: Grounding Evidence & Lecture Citations */}
-        <div className="tutor-evidence-drawer">
-          <div className="evidence-header">
-            <h3>📑 Verified Lecture Grounding</h3>
-            <span className="evidence-count-badge">
-              {activeCitations.length} cited {activeCitations.length === 1 ? "excerpt" : "excerpts"}
-            </span>
-          </div>
-
-          <p className="evidence-desc">
-            Passages retrieved via the <strong>Retrieval Agent</strong> semantic search reduce hallucination risk, but do not guarantee correctness.
-          </p>
-
-          <div className="citations-feed">
-            {activeCitations.length === 0 ? (
-              <div className="no-citations-state">
-                <span className="no-citations-icon">🔍</span>
-                <p>No citations active. As you converse with the AI Tutor, verified lecture passages will appear here with page numbers.</p>
-              </div>
-            ) : (
-              activeCitations.map((chunk, idx) => (
-                <div key={idx} className="evidence-chunk-card">
-                  <div className="evidence-chunk-meta">
-                    <span className="page-badge">📄 Page {chunk.page_number}</span>
-                    <span className="source-label">{chunk.source || activeDocName}</span>
-                  </div>
-                  <div className="evidence-chunk-text">
-                    "{chunk.text || chunk.text_preview}"
-                  </div>
-                  {chunk.distance !== undefined && (
-                    <div className="similarity-score">
-                      Semantic match distance: <code>{chunk.distance.toFixed(4)}</code>
-                    </div>
-                  )}
-                </div>
-              ))
+        {/* Remedial Inter-Agent Handoff Banner */}
+        {initialHandoff && (
+          <div className="tutor-handoff-banner" role="status">
+            <div className="tutor-handoff-icon" aria-hidden="true">
+              <TutorIcon name="lightbulb" size={22} />
+            </div>
+            <div className="tutor-handoff-content">
+              <strong>Inter-Agent Remedial Handoff Active:</strong>
+              <p>
+                Personalized review initialized by Recommendation Agent for:{" "}
+                <em>
+                  {initialHandoff.target_topics?.join(", ") || "Identified Knowledge Gaps"}
+                </em>
+                <span className="tutor-handoff-badge">
+                  Severity: {initialHandoff.gap_severity || "medium"}
+                </span>
+              </p>
+            </div>
+            {onClearHandoff && (
+              <button
+                aria-label="Dismiss remedial handoff"
+                className="tutor-handoff-close"
+                onClick={onClearHandoff}
+                type="button"
+              >
+                <TutorIcon name="close" size={16} />
+              </button>
             )}
           </div>
-        </div>
-      </div>
+        )}
 
-      {/* MODAL: Past Sessions History */}
-      {showHistoryModal && (
-        <div className="modal-overlay" onClick={() => setShowHistoryModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>📜 Your Tutoring History</h3>
-              <button
-                type="button"
-                className="close-modal-btn"
-                onClick={() => setShowHistoryModal(false)}
+        <form onSubmit={handleStartNewSession}>
+          <div className="tutor-form-grid">
+            <div className="tutor-form-group">
+              <label htmlFor="tutor-doc-select">
+                <TutorIcon name="document" size={15} /> Target Lecture PDF
+              </label>
+              <select
+                className="tutor-form-control"
+                disabled={sessionLoading || documents.length === 0}
+                id="tutor-doc-select"
+                onChange={(e) => setSelectedDocId(e.target.value)}
+                value={selectedDocId}
               >
-                ✕
-              </button>
+                {documents.length === 0 && (
+                  <option value="">No course documents uploaded yet</option>
+                )}
+                {documents.map((doc) => (
+                  <option key={doc.document_id} value={doc.document_id}>
+                    {doc.original_filename} ({doc.page_count} pages)
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <div className="modal-body">
-              {pastSessions.length === 0 ? (
-                <p className="no-data-msg">No past tutoring sessions found.</p>
-              ) : (
-                <div className="session-history-list">
-                  {pastSessions.map((s) => (
-                    <div
-                      key={s.session_id}
-                      className={`session-history-item ${currentSession?.session_id === s.session_id ? "active-session-item" : ""}`}
-                      onClick={() => handleSelectPastSession(s.session_id)}
-                    >
-                      <div className="session-item-main">
-                        <div className="session-item-title">
-                          <strong>{s.topic_focus || "Course Review"}</strong>
-                          <span className="session-mode-pill">{s.mode}</span>
-                        </div>
-                        <div className="session-item-date">
-                          📅 {new Date(s.updated_at || s.created_at).toLocaleString()}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        className="delete-session-btn"
-                        onClick={(e) => handleDeleteSession(s.session_id, e)}
-                        title="Delete Session"
-                      >
-                        🗑️
-                      </button>
+            <div className="tutor-form-group">
+              <label htmlFor="tutor-topic-input">
+                <TutorIcon name="search" size={15} /> Specific Topic / Focus (Optional)
+              </label>
+              <input
+                className="tutor-form-control"
+                disabled={sessionLoading}
+                id="tutor-topic-input"
+                onChange={(e) => setTopicFocus(e.target.value)}
+                placeholder="e.g. Vector Space Model, Inverted Index, TF-IDF..."
+                type="text"
+                value={topicFocus}
+              />
+            </div>
+          </div>
+
+          {/* Teaching Mode Selector Cards */}
+          <div className="tutor-modes-selector">
+            <span className="tutor-modes-selector-label">
+              <TutorIcon name="brain" size={15} /> Select Pedagogical Mode
+            </span>
+            <div className="tutor-modes-grid" role="radiogroup">
+              {Object.values(TUTOR_MODES).map((item) => {
+                const isSelected = mode === item.id;
+                return (
+                  <button
+                    aria-checked={isSelected}
+                    className={`tutor-mode-card ${isSelected ? "tutor-mode-card-active" : ""}`}
+                    key={item.id}
+                    onClick={() => setMode(item.id)}
+                    role="radio"
+                    type="button"
+                  >
+                    <div className="tutor-mode-card-header">
+                      <strong>
+                        <TutorIcon name={item.icon} size={17} />
+                        {item.label}
+                      </strong>
+                      <span className="tutor-mode-kicker">{item.kicker}</span>
                     </div>
-                  ))}
+                    <p>{item.description}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </form>
+      </section>
+
+      {/* Section 02: Intelligent Socratic Dialogue Workspace */}
+      <section className="tutor-panel" aria-labelledby="tutor-workspace-heading">
+        <div className="tutor-section-heading">
+          <div>
+            <span className="tutor-section-number">02</span>
+            <div>
+              <p className="tutor-section-kicker">Pedagogical Dialogue</p>
+              <h2 id="tutor-workspace-heading">Active Socratic Workspace</h2>
+            </div>
+          </div>
+          <span className="tutor-security-label">
+            <TutorIcon name="shield" size={15} /> Zero-hallucination grounding
+          </span>
+        </div>
+
+        <div className="tutor-workspace-grid">
+          {/* Main Chat Stream Card */}
+          <div className="tutor-chat-card">
+            <div className="tutor-chat-header">
+              <div className="tutor-session-status">
+                <span className="tutor-pulse-dot" aria-hidden="true" />
+                <strong>
+                  {currentSession
+                    ? currentSession.topic_focus || activeDocName
+                    : "Socratic AI Tutor Ready"}
+                </strong>
+              </div>
+
+              <div className="tutor-header-badges">
+                <span className="tutor-mode-pill">
+                  <TutorIcon name={currentModeMeta.icon} size={13} />
+                  {currentModeMeta.shortLabel}
+                </span>
+                {documents.length > 0 && selectedDocId && (
+                  <span className="tutor-mode-pill">
+                    <TutorIcon name="book" size={13} />
+                    {activeDocName}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="tutor-messages-container" role="log">
+              {/* Empty State (Clean Constellation - No Floating Robot) */}
+              {!currentSession && !sessionLoading && (
+                <div className="tutor-empty-state">
+                  <div className="tutor-empty-visual" aria-hidden="true">
+                    <span className="tutor-empty-icon-core">
+                      <TutorIcon name="brain" size={32} />
+                    </span>
+                  </div>
+                  <p className="tutor-section-kicker">Dialogue Ready</p>
+                  <h3>Socratic Dialogue Grounded in Course Evidence</h3>
+                  <p>
+                    Select an uploaded course lecture above and click <strong>“Start New Session”</strong> to engage in interactive, step-by-step Socratic inquiry with verified page citations.
+                  </p>
+                  {documents.length > 0 ? (
+                    <button
+                      className="tutor-button tutor-button-primary"
+                      onClick={handleStartNewSession}
+                      type="button"
+                    >
+                      <TutorIcon name="sparkles" size={16} />
+                      Start Tutoring on {activeDocName}
+                    </button>
+                  ) : (
+                    <p className="tutor-empty-hint">
+                      Please upload a course PDF in the <strong>Knowledge Vault (Materials)</strong> tab first.
+                    </p>
+                  )}
                 </div>
               )}
+
+              {/* Shimmering Loading State */}
+              {sessionLoading && <TutorSkeleton />}
+
+              {/* Message Feed */}
+              {messages.map((msg, index) => {
+                const isStudent = msg.role === "student";
+
+                return (
+                  <div
+                    className={`tutor-bubble-wrapper ${
+                      isStudent ? "tutor-bubble-student" : "tutor-bubble-tutor"
+                    }`}
+                    key={msg.message_id || index}
+                  >
+                    <div
+                      className={`tutor-avatar ${
+                        isStudent ? "tutor-avatar-student" : "tutor-avatar-tutor"
+                      }`}
+                      aria-hidden="true"
+                    >
+                      <TutorIcon name={isStudent ? "user" : "brain"} size={18} />
+                    </div>
+
+                    <div className="tutor-bubble-content">
+                      <div className="tutor-bubble-meta">
+                        <span className="tutor-bubble-author">
+                          {isStudent ? user?.full_name || "You (Learner)" : "LearnMate AI Tutor"}
+                        </span>
+                        <span className="tutor-bubble-time">
+                          {msg.created_at
+                            ? new Date(msg.created_at).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : ""}
+                        </span>
+                      </div>
+
+                      <div className="tutor-bubble-text">
+                        {msg.content.split("\n\n").map((para, pIdx) => (
+                          <p key={pIdx}>{para}</p>
+                        ))}
+                      </div>
+
+                      {/* Inline Citations Tray in Tutor replies */}
+                      {msg.citations && msg.citations.length > 0 && (
+                        <div className="tutor-citations-tray">
+                          <span className="tutor-citations-label">
+                            <TutorIcon name="book" size={13} /> Citations:
+                          </span>
+                          {msg.citations.map((c, cIdx) => (
+                            <button
+                              className="tutor-citation-chip"
+                              key={cIdx}
+                              onClick={() => {
+                                setActiveCitations([c]);
+                                handleHighlightCitation(cIdx);
+                              }}
+                              title={`Page ${c.page_number} of ${c.source || "Lecture"}`}
+                              type="button"
+                            >
+                              Page {c.page_number}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Live Thinking Indicator */}
+              {loading && (
+                <div className="tutor-bubble-wrapper tutor-bubble-tutor">
+                  <div className="tutor-avatar tutor-avatar-tutor" aria-hidden="true">
+                    <TutorIcon name="brain" size={18} />
+                  </div>
+                  <div className="tutor-thinking-card">
+                    <div className="tutor-typing-dots" aria-hidden="true">
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                    <span>Grounding response on lecture citations…</span>
+                  </div>
+                </div>
+              )}
+
+              <div ref={messagesEndRef} />
             </div>
 
-            <div className="modal-footer">
+            {/* Interactive Concept Check Challenge & Quick Follow-ups */}
+            {(conceptCheck || suggestedFollowups.length > 0) && (
+              <div className="tutor-interactive-panel">
+                {conceptCheck && (
+                  <div className="tutor-concept-check-card" role="region">
+                    <div className="tutor-concept-check-icon" aria-hidden="true">
+                      <TutorIcon name="target" size={20} />
+                    </div>
+                    <div className="tutor-concept-check-text">
+                      <strong>Concept Check Challenge:</strong>
+                      <p>{conceptCheck}</p>
+                    </div>
+                  </div>
+                )}
+
+                {suggestedFollowups.length > 0 && (
+                  <div className="tutor-followup-cluster">
+                    <span className="tutor-followup-label">
+                      <TutorIcon name="lightbulb" size={14} /> Quick Follow-ups:
+                    </span>
+                    {suggestedFollowups.map((suggestion, idx) => (
+                      <button
+                        className="tutor-followup-pill"
+                        disabled={loading}
+                        key={idx}
+                        onClick={() => handleSendMessage(suggestion)}
+                        type="button"
+                      >
+                        “{suggestion}”
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Chat Input Bar */}
+            <div className="tutor-input-bar">
+              <div className="tutor-input-textarea-wrapper">
+                <textarea
+                  className="tutor-chat-textarea"
+                  disabled={!currentSession || loading}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                  placeholder={
+                    currentSession
+                      ? "Ask a conceptual question or respond to the Socratic prompt..."
+                      : "Start a study session above to chat with the AI Tutor..."
+                  }
+                  ref={textareaRef}
+                  rows={2}
+                  value={inputMessage}
+                />
+                <span className="tutor-input-helper">
+                  Press <kbd>Enter</kbd> to send, <kbd>Shift</kbd> + <kbd>Enter</kbd> for newline
+                </span>
+              </div>
+
               <button
+                aria-label="Send message to AI Tutor"
+                className="tutor-send-button"
+                disabled={!currentSession || !inputMessage.trim() || loading}
+                onClick={() => handleSendMessage()}
                 type="button"
-                className="btn-secondary"
-                onClick={() => setShowHistoryModal(false)}
               >
-                Close History
+                <span>Send</span>
+                <TutorIcon name="send" size={16} />
               </button>
             </div>
           </div>
+
+          {/* Right Column: Grounding Evidence Drawer */}
+          <aside className="tutor-evidence-drawer" aria-label="Course Lecture Grounding Citations">
+            <div className="tutor-evidence-header">
+              <h3>
+                <TutorIcon name="book" size={17} /> Verified Grounding
+              </h3>
+              <span className="tutor-evidence-count-badge">
+                {activeCitations.length} cited {activeCitations.length === 1 ? "excerpt" : "excerpts"}
+              </span>
+            </div>
+
+            <p className="tutor-evidence-desc">
+              Passages retrieved via the <strong>Retrieval Agent</strong> semantic search directly from your course PDF.
+            </p>
+
+            <div className="tutor-citations-feed">
+              {activeCitations.length === 0 ? (
+                <div className="tutor-no-citations">
+                  <span className="tutor-no-citations-icon" aria-hidden="true">
+                    <TutorIcon name="search" size={24} />
+                  </span>
+                  <p>
+                    No citations active yet. As you converse with the AI Tutor, verified lecture passages will appear here with page numbers.
+                  </p>
+                </div>
+              ) : (
+                activeCitations.map((chunk, idx) => (
+                  <div
+                    className={`tutor-evidence-chunk-card ${
+                      highlightedCitationIndex === idx ? "tutor-chunk-highlighted" : ""
+                    }`}
+                    key={idx}
+                  >
+                    <div className="tutor-chunk-meta">
+                      <span className="tutor-page-badge">
+                        <TutorIcon name="document" size={13} /> Page {chunk.page_number}
+                      </span>
+                      <span className="tutor-source-label">
+                        {chunk.source || activeDocName}
+                      </span>
+                    </div>
+
+                    <blockquote className="tutor-chunk-quote">
+                      “{chunk.text || chunk.text_preview}”
+                    </blockquote>
+
+                    {chunk.distance !== undefined && (
+                      <div className="tutor-similarity-score">
+                        <span>Match distance:</span>
+                        <code>{chunk.distance.toFixed(4)}</code>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </aside>
         </div>
-      )}
+      </section>
+
+      {/* Accessible Session History Modal */}
+      <SessionHistoryModal
+        currentSessionId={currentSession?.session_id}
+        isOpen={showHistoryModal}
+        onClose={() => setShowHistoryModal(false)}
+        onDeleteSession={handlePromptDeleteSession}
+        onSelectSession={handleSelectPastSession}
+        sessions={pastSessions}
+      />
+
+      {/* Accessible Delete Confirmation Modal */}
+      <DeleteSessionModal
+        isDeleting={isDeletingSession}
+        onCancel={() => setSessionPendingDelete(null)}
+        onConfirm={handleConfirmDeleteSession}
+        session={sessionPendingDelete}
+      />
     </div>
   );
 }

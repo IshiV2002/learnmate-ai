@@ -347,9 +347,9 @@ class LLMService:
                 "- 'difficulty': 'easy', 'medium', or 'hard'\n"
                 "- 'cognitive_level': 'recall', 'understanding', 'application', or 'analysis'\n"
                 "- 'question_type': 'mcq', 'short_answer', or 'true_false'\n"
-                "- 'question_text': Clear, unambiguous question\n"
+                "- 'question_text': Clear question or statement. For 'true_false', this MUST be a single short, direct declarative statement (10-20 words max) asserting a factual claim. Do NOT include 'True or False:' prefixes.\n"
                 "- 'options': Array of 4 distinct choices for MCQ, or ['True', 'False'] for true_false, or [] for short_answer\n"
-                "- 'correct_answer': The exact correct choice or concise model answer\n"
+                "- 'correct_answer': The exact correct choice ('True' or 'False' for true_false) or concise model answer\n"
                 "- 'explanation': Educational explanation clarifying why this answer is correct\n"
                 "- 'rubric': Essential keywords or criteria required in an answer\n"
                 "- 'source_page': Page number integer from the context citations\n"
@@ -419,17 +419,21 @@ class LLMService:
 
                 if q_type == "true_false":
                     is_true = (i % 2 == 0)
-                    statement = fact if is_true else f"{fact} (Note: this is universally inverted)."
+                    fact_words = fact.split()
+                    short_fact = " ".join(fact_words[:18])
+                    if not short_fact.endswith("."):
+                        short_fact += "."
+                    statement = short_fact if is_true else f"{short_fact.rstrip('.')} operates in inverted order."
                     questions.append({
                         "question_id": q_id,
                         "topic": target_topic,
                         "difficulty": diff,
                         "cognitive_level": cog,
                         "question_type": "true_false",
-                        "question_text": f"True or False: {statement}",
+                        "question_text": statement,
                         "options": ["True", "False"],
                         "correct_answer": "True" if is_true else "False",
-                        "explanation": f"Based on lecture page {page_num}: '{fact}'.",
+                        "explanation": f"Based on lecture page {page_num}: '{short_fact}'.",
                         "rubric": key_term,
                         "source_page": page_num,
                         "source_chunk_index": c_idx,
