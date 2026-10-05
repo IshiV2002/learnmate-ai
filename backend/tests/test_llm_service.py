@@ -23,6 +23,55 @@ class FakeGeminiResponse:
 
 
 class LLMServiceTests(unittest.TestCase):
+    def test_offline_fallback_creates_five_distinct_grounded_mcqs(self) -> None:
+        service = LLMService(api_key="")
+        context_chunks = [
+            {
+                "page_number": 2,
+                "chunk_index": 0,
+                "text": (
+                    "An inverted index is a database index that maps terms to document positions. "
+                    "TF-IDF weighting calculates a product of term frequency and inverse document frequency to measure term importance. "
+                    "Cosine similarity measures the angle between two document vectors. "
+                    "Tokenization converts text into individual tokens before indexing. "
+                    "Stop-word removal excludes common terms that contribute little meaning."
+                ),
+            }
+        ]
+
+        questions = service.generate_quiz_questions(
+            context_chunks=context_chunks,
+            topic="Information Retrieval",
+            num_questions=5,
+            question_types=["mcq"],
+        )
+
+        self.assertEqual(len(questions), 5)
+        self.assertEqual(len({question["question_text"] for question in questions}), 5)
+        self.assertEqual(len({question["correct_answer"] for question in questions}), 5)
+        for question in questions:
+            self.assertTrue(question["question_text"].endswith("?"))
+            self.assertEqual(len(question["options"]), 4)
+            self.assertEqual(len(set(question["options"])), 4)
+            self.assertIn(question["correct_answer"], question["options"])
+            self.assertEqual(question["source_page"], 2)
+            self.assertEqual(question["source_chunk_index"], 0)
+
+    def test_offline_fallback_refuses_to_pad_with_generic_questions(self) -> None:
+        service = LLMService(api_key="")
+        with self.assertRaisesRegex(ValueError, "supports only 1 distinct questions"):
+            service.generate_quiz_questions(
+                context_chunks=[
+                    {
+                        "page_number": 1,
+                        "chunk_index": 0,
+                        "text": "An inverted index is a structure that maps terms to document positions.",
+                    }
+                ],
+                num_questions=2,
+                question_types=["mcq"],
+            )
+
     def test_gemini_request_uses_current_model_header_key_and_system_instruction(
         self,
     ) -> None:

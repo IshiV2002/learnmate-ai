@@ -601,16 +601,25 @@ class DocumentDatabase:
         return self._row_to_quiz(row)
 
     def list_document_quizzes(self, document_id: str) -> list[QuizRecord]:
-        """List all quizzes generated for a specific document."""
+        """List all quizzes generated for a specific document (including mixed-document quizzes)."""
+        clean_id = document_id.strip()
         try:
             with closing(self._connect()) as connection:
                 rows = connection.execute(
                     """
                     SELECT * FROM quizzes
                     WHERE document_id = ?
+                       OR document_id LIKE ?
+                       OR document_id LIKE ?
+                       OR document_id LIKE ?
                     ORDER BY created_at DESC
                     """,
-                    (document_id,),
+                    (
+                        clean_id,
+                        f"{clean_id},%",
+                        f"%,{clean_id},%",
+                        f"%,{clean_id}",
+                    ),
                 ).fetchall()
         except (OSError, sqlite3.Error) as error:
             raise DocumentDatabaseError(
