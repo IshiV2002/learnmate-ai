@@ -47,10 +47,18 @@ def get_quiz_agent() -> QuizAgent:
     return _quiz_agent
 
 
+def _user_has_quiz_access(quiz: Any, user_id: str, db: Any) -> bool:
+    """Check if the user owns any document associated with the quiz."""
+    if quiz is None or not getattr(quiz, "document_id", None):
+        return False
+    doc_ids = [d.strip() for d in str(quiz.document_id).split(",") if d.strip()]
+    return any(db.get_document(did, user_id) is not None for did in doc_ids)
+
+
 @router.post(
     "/generate",
     status_code=status.HTTP_201_CREATED,
-    summary="Generate a New Assessment from Lecture PDF",
+    summary="Generate a New Assessment from Lecture PDF(s)",
 )
 async def generate_quiz(
     request: QuizGenerationRequest,
@@ -59,24 +67,36 @@ async def generate_quiz(
     """Synthesize a multi-question quiz anchored to the document's indexed semantic context."""
     db = get_document_database()
 
-    # Validate that document exists
-    try:
-        doc = await run_in_threadpool(
-            db.get_document,
-            request.document_id,
-            current_user.user_id,
-        )
-    except DocumentDatabaseError as error:
+    target_doc_ids = [
+        did.strip()
+        for did in (request.document_ids or ([request.document_id] if request.document_id else []))
+        if did and did.strip()
+    ]
+    if not target_doc_ids:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Could not verify document metadata.",
-        ) from error
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one document ID must be provided.",
+        )
 
-    if doc is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Document with ID '{request.document_id}' not found.",
-        )
+    # Validate that each target document exists and belongs to current user
+    for did in target_doc_ids:
+        try:
+            doc = await run_in_threadpool(
+                db.get_document,
+                did,
+                current_user.user_id,
+            )
+        except DocumentDatabaseError as error:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Could not verify document metadata.",
+            ) from error
+
+        if doc is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Document with ID '{did}' not found.",
+            )
 
     try:
         agent = get_quiz_agent()
@@ -124,9 +144,8 @@ async def get_quiz(
             detail=f"Quiz with ID '{quiz_id}' not found.",
         )
 
-    if get_document_database().get_document(
-        quiz.document_id, current_user.user_id
-    ) is None:
+    db = get_document_database()
+    if not _user_has_quiz_access(quiz, current_user.user_id, db):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Quiz with ID '{quiz_id}' not found.",
@@ -178,8 +197,7 @@ async def list_all_quizzes(
         return [
             quiz.to_dict(include_solutions=False)
             for quiz in quizzes
-            if database.get_document(quiz.document_id, current_user.user_id)
-            is not None
+            if _user_has_quiz_access(quiz, current_user.user_id, database)
         ]
     except Exception as error:
         raise HTTPException(
@@ -202,9 +220,8 @@ async def evaluate_quiz_submission(
     try:
         agent = get_quiz_agent()
         quiz = await run_in_threadpool(agent.get_quiz, quiz_id)
-        if quiz is None or get_document_database().get_document(
-            quiz.document_id, current_user.user_id
-        ) is None:
+        db = get_document_database()
+        if quiz is None or not _user_has_quiz_access(quiz, current_user.user_id, db):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Quiz with ID '{quiz_id}' not found.",
@@ -244,9 +261,8 @@ async def evaluate_and_recommend(
     try:
         quiz_agent = get_quiz_agent()
         quiz = await run_in_threadpool(quiz_agent.get_quiz, quiz_id)
-        if quiz is None or get_document_database().get_document(
-            quiz.document_id, current_user.user_id
-        ) is None:
+        db = get_document_database()
+        if quiz is None or not _user_has_quiz_access(quiz, current_user.user_id, db):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Quiz with ID '{quiz_id}' not found.",
@@ -288,9 +304,7 @@ async def delete_quiz(
     try:
         db = get_document_database()
         quiz = await run_in_threadpool(db.get_quiz, quiz_id)
-        if quiz is None or db.get_document(
-            quiz.document_id, current_user.user_id
-        ) is None:
+        if quiz is None or not _user_has_quiz_access(quiz, current_user.user_id, db):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Quiz with ID '{quiz_id}' not found.",

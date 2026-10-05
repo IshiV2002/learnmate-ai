@@ -27,8 +27,11 @@ class MockRetrievalAgent:
                 "chunk_index": 0,
                 "source": "ir_scoring.pdf",
                 "text": (
-                    "Cosine similarity compares normalized document vectors, while "
-                    "TF-IDF represents the importance of terms in those vectors."
+                    "Cosine similarity measures the angle between normalized document vectors. "
+                    "TF-IDF weighting represents term importance using term frequency and inverse document frequency. "
+                    "Term frequency counts how often a term appears in a document. "
+                    "Inverse document frequency reduces the weight of terms that appear in many documents. "
+                    "Vector normalization scales document vectors to unit length before similarity comparison."
                 ),
                 "distance": 0.08,
             }

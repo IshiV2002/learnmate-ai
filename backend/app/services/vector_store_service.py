@@ -85,18 +85,28 @@ class VectorStoreService:
             self.delete_document(document_id, ignore_errors=True)
             raise VectorStoreError("Document chunks could not be indexed.") from error
 
-    def search_document(
+    def search_documents(
         self,
-        document_id: str,
+        document_ids: list[str],
         query_embedding: list[float],
         top_k: int,
     ) -> list[VectorSearchResult]:
-        """Search only chunks belonging to the requested document."""
+        """Search across one or multiple documents by IDs."""
+        cleaned_ids = [doc_id.strip() for doc_id in document_ids if doc_id and doc_id.strip()]
+        if not cleaned_ids:
+            return []
+
+        where_clause = (
+            {"document_id": cleaned_ids[0]}
+            if len(cleaned_ids) == 1
+            else {"document_id": {"$in": cleaned_ids}}
+        )
+
         try:
             query_result = self.collection.query(
                 query_embeddings=[query_embedding],
                 n_results=top_k,
-                where={"document_id": document_id},
+                where=where_clause,
                 include=["documents", "metadatas", "distances"],
             )
         except Exception as error:
@@ -130,6 +140,16 @@ class VectorStoreService:
             )
 
         return results
+
+    def search_document(
+        self,
+        document_id: str,
+        query_embedding: list[float],
+        top_k: int,
+    ) -> list[VectorSearchResult]:
+        """Search only chunks belonging to the requested document."""
+        return self.search_documents([document_id], query_embedding, top_k)
+
 
     def count_document_chunks(self, document_id: str) -> int:
         """Return the number of stored chunks for one document."""

@@ -91,8 +91,10 @@ export function getScoreTier(scorePercentage) {
   };
 }
 
-export function validateQuizConfig(documentId, questionType) {
-  if (!documentId || typeof documentId !== "string" || !documentId.trim()) {
+export function validateQuizConfig(documentId, questionType, documentIds = []) {
+  const hasSingle = Boolean(documentId && typeof documentId === "string" && documentId.trim());
+  const hasMultiple = Array.isArray(documentIds) && documentIds.length > 0;
+  if (!hasSingle && !hasMultiple) {
     return "Please select a target lecture PDF.";
   }
   const validTypes = ["mcq", "true_false", "short_answer"];
@@ -118,3 +120,25 @@ export function formatTrueFalseStatement(text) {
   clean = clean.replace(/^(statement\s*[:\-\—]?\s*)/i, "");
   return clean.trim();
 }
+
+export function formatQuizDate(dateString) {
+  if (!dateString) return "Recently created";
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return "Recently created";
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch {
+    return "Recently created";
+  }
+}
+
+export function estimateQuizDuration(questionCount) {
+  const count = Number(questionCount) || 1;
+  const minutes = Math.max(2, Math.ceil(count * 1.5));
+  return `~${minutes} min${minutes > 1 ? "s" : ""}`;
+}
+

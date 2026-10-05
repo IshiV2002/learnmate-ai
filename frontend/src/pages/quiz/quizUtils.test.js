@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  estimateQuizDuration,
+  formatQuizDate,
   formatTime,
   formatTrueFalseStatement,
   getDifficultyMeta,
@@ -17,6 +19,19 @@ test("formats seconds into MM:SS format correctly", () => {
   assert.equal(formatTime(3600), "60:00");
   assert.equal(formatTime(-5), "00:00");
   assert.equal(formatTime(null), "00:00");
+});
+
+test("formats quiz created dates safely", () => {
+  assert.equal(formatQuizDate(null), "Recently created");
+  assert.equal(formatQuizDate(""), "Recently created");
+  assert.equal(formatQuizDate("invalid-date"), "Recently created");
+  assert.match(formatQuizDate("2026-03-15T12:00:00Z"), /2026/);
+});
+
+test("estimates quiz completion duration based on question count", () => {
+  assert.equal(estimateQuizDuration(1), "~2 mins");
+  assert.equal(estimateQuizDuration(5), "~8 mins");
+  assert.equal(estimateQuizDuration(10), "~15 mins");
 });
 
 test("cleans and structures True/False statements", () => {
