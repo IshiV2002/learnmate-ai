@@ -26,6 +26,7 @@ FRONTEND_ORIGINS = [
 ]
 
 DEFAULT_MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
+DEFAULT_MAX_IMAGE_PIXELS = 25_000_000
 DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 JWT_SECRET_KEY = os.getenv("LEARNMATE_JWT_SECRET_KEY", "").strip()
@@ -68,6 +69,54 @@ def _read_max_upload_size() -> int:
 
 
 MAX_UPLOAD_SIZE_BYTES = _read_max_upload_size()
+
+
+def _read_max_image_pixels() -> int:
+    """Limit decoded image dimensions to reduce memory-exhaustion attacks."""
+    configured_value = os.getenv(
+        "LEARNMATE_MAX_IMAGE_PIXELS",
+        str(DEFAULT_MAX_IMAGE_PIXELS),
+    )
+
+    try:
+        maximum_pixels = int(configured_value)
+    except ValueError as error:
+        raise RuntimeError(
+            "LEARNMATE_MAX_IMAGE_PIXELS must be a whole number."
+        ) from error
+
+    if maximum_pixels <= 0:
+        raise RuntimeError(
+            "LEARNMATE_MAX_IMAGE_PIXELS must be greater than zero."
+        )
+
+    return maximum_pixels
+
+
+def _find_tessdata_directory() -> Path | None:
+    """Find Tesseract language data without depending on the shell PATH."""
+    configured_path = (
+        os.getenv("LEARNMATE_TESSDATA_PATH", "").strip()
+        or os.getenv("TESSDATA_PREFIX", "").strip()
+    )
+    if configured_path:
+        return Path(configured_path)
+
+    common_locations = [
+        Path(r"C:\Program Files\Tesseract-OCR\tessdata"),
+        Path("/usr/share/tesseract-ocr/5/tessdata"),
+        Path("/usr/share/tessdata"),
+        Path("/opt/homebrew/share/tessdata"),
+    ]
+    return next(
+        (path for path in common_locations if (path / "eng.traineddata").is_file()),
+        None,
+    )
+
+
+MAX_IMAGE_PIXELS = _read_max_image_pixels()
+TESSDATA_DIRECTORY = _find_tessdata_directory()
+OCR_LANGUAGE = "eng"
 
 
 def _read_access_token_expiry() -> int:

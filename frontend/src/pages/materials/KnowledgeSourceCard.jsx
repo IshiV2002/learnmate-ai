@@ -1,5 +1,5 @@
 import MaterialIcon from "./MaterialIcon.jsx";
-import { formatFileSize, formatUploadDate } from "./materialsUtils.js";
+import { formatFileSize, formatUploadDate, getMaterialType } from "./materialsUtils.js";
 
 function MetadataItem({ icon, label, value }) {
   return (
@@ -12,7 +12,8 @@ function MetadataItem({ icon, label, value }) {
 }
 
 function KnowledgeSourceCard({ document, isDeleting, onDelete }) {
-  const filename = document.original_filename || "Untitled PDF";
+  const filename = document.original_filename || "Untitled material";
+  const materialType = getMaterialType(filename);
 
   return (
     <article className="knowledge-source-card">
@@ -20,7 +21,7 @@ function KnowledgeSourceCard({ document, isDeleting, onDelete }) {
       <div className="source-card-heading">
         <span className="source-document-icon" aria-hidden="true">
           <MaterialIcon name="document" size={24} />
-          <small>PDF</small>
+          <small>{materialType}</small>
         </span>
         <div className="source-title-group">
           <span className="source-indexed-label">

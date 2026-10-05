@@ -87,7 +87,7 @@ class AuthenticationResponse(BaseModel):
 
 @dataclass(frozen=True)
 class DocumentRecord:
-    """Metadata kept for one successfully indexed PDF."""
+    """Metadata kept for one successfully indexed learning material."""
 
     document_id: str
     original_filename: str
