@@ -12,7 +12,7 @@ import LibrarySkeleton from "./materials/LibrarySkeleton.jsx";
 import MaterialIcon from "./materials/MaterialIcon.jsx";
 import ProcessingJourney from "./materials/ProcessingJourney.jsx";
 import UploadDropzone from "./materials/UploadDropzone.jsx";
-import { getLibraryStats, validatePdf } from "./materials/materialsUtils.js";
+import { getLibraryStats, validateMaterial } from "./materials/materialsUtils.js";
 
 function Materials() {
   const [documents, setDocuments] = useState([]);
@@ -55,7 +55,7 @@ function Materials() {
   }, []);
 
   function selectFile(file) {
-    const validationMessage = validatePdf(file);
+    const validationMessage = validateMaterial(file);
 
     setSuccessMessage("");
     setErrorMessage(validationMessage);
@@ -113,7 +113,7 @@ function Materials() {
   async function handleUpload(event) {
     event.preventDefault();
 
-    const validationMessage = validatePdf(selectedFile);
+    const validationMessage = validateMaterial(selectedFile);
 
     if (validationMessage) {
       setErrorMessage(validationMessage);
@@ -137,7 +137,7 @@ function Materials() {
       if (refreshed) {
         setUploadStatus("complete");
         setSuccessMessage(
-          result.message || "Your PDF was uploaded and indexed successfully.",
+          result.message || "Your material was uploaded and indexed successfully.",
         );
       }
     } catch (error) {
@@ -183,10 +183,10 @@ function Materials() {
           <p className="vault-eyebrow">Materials · Knowledge Vault</p>
           <h1>Turn course material into searchable knowledge.</h1>
           <p className="vault-hero-description">
-            Add trusted course PDFs to create a private library of page-aware sections that LearnMate agents can retrieve when supporting your study.
+            Add trusted course PDFs and images to create a private library of page-aware sections that LearnMate agents can retrieve when supporting your study.
           </p>
           <div className="vault-hero-trust">
-            <span><MaterialIcon name="shield" size={16} /> Server-validated PDFs</span>
+            <span><MaterialIcon name="shield" size={16} /> Server-validated materials</span>
             <span><MaterialIcon name="search" size={16} /> Page references preserved</span>
           </div>
         </div>
@@ -243,7 +243,7 @@ function Materials() {
             <span className="vault-section-number">01</span>
             <div>
               <p className="vault-section-kicker">Add knowledge</p>
-              <h2 id="vault-upload-heading">Upload a course PDF</h2>
+              <h2 id="vault-upload-heading">Upload a course PDF or image</h2>
             </div>
           </div>
           <span className="vault-security-label"><MaterialIcon name="shield" size={15} /> Backend validation remains authoritative</span>
@@ -264,7 +264,7 @@ function Materials() {
 
           <div className="vault-upload-actions">
             <p>
-              Frontend checks improve feedback; the server still performs all security and PDF validation.
+              Frontend checks improve feedback; the server still performs all security and file validation.
             </p>
             <div>
               {selectedFile && (
@@ -289,11 +289,11 @@ function Materials() {
           <p className="vault-section-kicker">How retrieval works</p>
           <h2 id="vault-transparency-heading">Grounded in your material, with page context.</h2>
           <p>
-            LearnMate extracts text into searchable sections and keeps page references so Tutor and Quiz agents can retrieve relevant source material. Retrieval improves grounding, but it does not guarantee every AI response is correct—always check important answers against the original PDF.
+            LearnMate extracts text into searchable sections and keeps page references so Tutor and Quiz agents can retrieve relevant source material. Images are read using OCR, which can make mistakes. Retrieval improves grounding, but it does not guarantee every AI response is correct—always check important answers against the original source.
           </p>
         </div>
         <div className="vault-pipeline" aria-label="Knowledge indexing pipeline">
-          <span>PDF</span><i aria-hidden="true" /><span>Page-aware sections</span><i aria-hidden="true" /><span>Agent retrieval</span>
+          <span>PDF or image</span><i aria-hidden="true" /><span>Page-aware sections</span><i aria-hidden="true" /><span>Agent retrieval</span>
         </div>
       </section>
 
@@ -302,7 +302,7 @@ function Materials() {
           <div>
             <p className="vault-section-kicker">Indexed sources</p>
             <h2 id="vault-library-heading">Your knowledge library</h2>
-            <p>Every card represents a real PDF currently available to retrieval.</p>
+            <p>Every card represents a real uploaded source currently available to retrieval.</p>
           </div>
           <button
             className="vault-button vault-button-secondary"
@@ -327,9 +327,9 @@ function Materials() {
             </div>
             <p className="vault-section-kicker">The vault is ready</p>
             <h3>Add your first knowledge source</h3>
-            <p>Upload a text-based course PDF to make its page-aware sections available for semantic retrieval.</p>
+            <p>Upload a course PDF or clear text image to make its page-aware sections available for semantic retrieval.</p>
             <button className="vault-button vault-button-primary" onClick={openFilePicker} type="button">
-              <MaterialIcon name="upload" size={18} /> Choose your first PDF
+              <MaterialIcon name="upload" size={18} /> Choose your first source
             </button>
           </div>
         ) : (

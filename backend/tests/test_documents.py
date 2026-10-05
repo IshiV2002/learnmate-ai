@@ -19,6 +19,10 @@ from app.agents.retrieval_agent import RetrievalAgent
 from app.database.database import DocumentDatabase, DocumentDatabaseError
 from app.database.models import DocumentRecord
 from app.main import app
+from app.services.image_ocr_service import (
+    ImageOCRUnavailableError,
+    ImagePixelLimitError,
+)
 from app.services.pdf_service import extract_pdf_pages
 from app.services.vector_store_service import VectorStoreService
 from tests.auth_helpers import make_test_user
@@ -140,6 +144,142 @@ class DocumentUploadTests(unittest.IsolatedAsyncioTestCase):
         stored_record = self.database.get_document(document_metadata["document_id"])
         self.assertIsNotNone(stored_record)
         self.assertEqual(stored_record.original_filename, "lecture.pdf")
+
+    async def test_valid_png_upload_is_ocr_processed_and_indexed(self) -> None:
+        image_content = documents.PNG_SIGNATURE + b"test-image-content"
+        normalized_pdf = create_test_pdf(["OCR lecture notes"])
+        upload = create_upload(image_content, "whiteboard.png", "image/png")
+
+        with patch.object(
+            documents,
+            "extract_image_page",
+            return_value=(
+                [{"page_number": 1, "text": "OCR lecture notes"}],
+                normalized_pdf,
+            ),
+        ):
+            response = await documents.upload_document(TEST_USER, upload)
+
+        metadata = response["document"]
+        stored_files = list(self.upload_directory.glob("*.pdf"))
+        self.assertEqual(
+            response["message"],
+            "Image uploaded, OCR processed, and indexed successfully",
+        )
+        self.assertEqual(metadata["original_filename"], "whiteboard.png")
+        self.assertEqual(metadata["page_count"], 1)
+        self.assertEqual(metadata["pages_with_text"], 1)
+        self.assertEqual(metadata["chunk_count"], 1)
+        self.assertEqual(metadata["file_size_bytes"], len(image_content))
+        self.assertNotIn("stored_filename", metadata)
+        self.assertEqual(len(stored_files), 1)
+        self.assertEqual(stored_files[0].read_bytes(), normalized_pdf)
+        self.assertEqual(
+            self.fake_retrieval_agent.indexed_document_ids,
+            [metadata["document_id"]],
+        )
+
+    async def test_valid_jpeg_extension_and_signature_are_supported(self) -> None:
+        image_content = documents.JPEG_SIGNATURE + b"test-image-content"
+        upload = create_upload(image_content, "lecture.jpeg", "image/jpeg")
+
+        with patch.object(
+            documents,
+            "extract_image_page",
+            return_value=(
+                [{"page_number": 1, "text": "JPEG lecture notes"}],
+                create_test_pdf(["JPEG lecture notes"]),
+            ),
+        ):
+            response = await documents.upload_document(TEST_USER, upload)
+
+        self.assertEqual(response["document"]["original_filename"], "lecture.jpeg")
+        self.assertEqual(response["document"]["chunk_count"], 1)
+
+    async def test_image_content_type_must_match_extension(self) -> None:
+        upload = create_upload(
+            documents.PNG_SIGNATURE + b"image",
+            "lecture.png",
+            "image/jpeg",
+        )
+
+        with self.assertRaises(HTTPException) as raised_error:
+            await documents.upload_document(TEST_USER, upload)
+
+        self.assertEqual(raised_error.exception.status_code, 415)
+
+    async def test_image_signature_must_match_declared_format(self) -> None:
+        upload = create_upload(
+            documents.JPEG_SIGNATURE + b"image",
+            "lecture.png",
+            "image/png",
+        )
+
+        with self.assertRaises(HTTPException) as raised_error:
+            await documents.upload_document(TEST_USER, upload)
+
+        self.assertEqual(raised_error.exception.status_code, 400)
+
+    async def test_image_without_readable_text_is_rejected_and_removed(self) -> None:
+        upload = create_upload(
+            documents.PNG_SIGNATURE + b"image",
+            "blank.png",
+            "image/png",
+        )
+
+        with patch.object(
+            documents,
+            "extract_image_page",
+            return_value=([{"page_number": 1, "text": ""}], create_test_pdf([""])),
+        ):
+            with self.assertRaises(HTTPException) as raised_error:
+                await documents.upload_document(TEST_USER, upload)
+
+        self.assertEqual(raised_error.exception.status_code, 422)
+        self.assertIn("no readable text", raised_error.exception.detail)
+        self.assertEqual(self.fake_retrieval_agent.indexed_document_ids, [])
+        self.assertEqual(self.database.list_documents(), [])
+        self.assertEqual(list(self.upload_directory.glob("*.pdf")), [])
+
+    async def test_excessive_image_dimensions_are_rejected(self) -> None:
+        upload = create_upload(
+            documents.PNG_SIGNATURE + b"image",
+            "huge.png",
+            "image/png",
+        )
+
+        with patch.object(
+            documents,
+            "extract_image_page",
+            side_effect=ImagePixelLimitError(
+                "The uploaded image dimensions are too large to process safely."
+            ),
+        ):
+            with self.assertRaises(HTTPException) as raised_error:
+                await documents.upload_document(TEST_USER, upload)
+
+        self.assertEqual(raised_error.exception.status_code, 413)
+        self.assertEqual(self.fake_retrieval_agent.indexed_document_ids, [])
+
+    async def test_missing_ocr_configuration_returns_service_unavailable(self) -> None:
+        upload = create_upload(
+            documents.PNG_SIGNATURE + b"image",
+            "notes.png",
+            "image/png",
+        )
+
+        with patch.object(
+            documents,
+            "extract_image_page",
+            side_effect=ImageOCRUnavailableError(
+                "Image OCR is unavailable because Tesseract language data is not configured."
+            ),
+        ):
+            with self.assertRaises(HTTPException) as raised_error:
+                await documents.upload_document(TEST_USER, upload)
+
+        self.assertEqual(raised_error.exception.status_code, 503)
+        self.assertEqual(self.fake_retrieval_agent.indexed_document_ids, [])
 
     async def test_document_ids_are_unique(self) -> None:
         first_upload = create_upload(

@@ -4,8 +4,9 @@ import test from "node:test";
 import {
   MAX_FILE_SIZE_BYTES,
   formatFileSize,
+  getMaterialType,
   getLibraryStats,
-  validatePdf,
+  validateMaterial,
 } from "./materialsUtils.js";
 
 function file(overrides = {}) {
@@ -17,17 +18,33 @@ function file(overrides = {}) {
   };
 }
 
-test("validates a supported PDF", () => {
-  assert.equal(validatePdf(file()), "");
+test("validates supported PDFs and images", () => {
+  assert.equal(validateMaterial(file()), "");
+  assert.equal(validateMaterial(file({ name: "diagram.png", type: "image/png" })), "");
+  assert.equal(validateMaterial(file({ name: "notes.jpg", type: "image/jpeg" })), "");
+  assert.equal(validateMaterial(file({ name: "notes.jpeg", type: "image/jpeg" })), "");
 });
 
 test("rejects unsupported, empty, and oversized uploads", () => {
-  assert.equal(validatePdf(file({ name: "notes.txt" })), "Only PDF files are supported.");
-  assert.equal(validatePdf(file({ size: 0 })), "The selected PDF is empty.");
   assert.equal(
-    validatePdf(file({ size: MAX_FILE_SIZE_BYTES + 1 })),
-    "The PDF must be 10 MB or smaller.",
+    validateMaterial(file({ name: "notes.txt" })),
+    "Only PDF, PNG, JPG, and JPEG files are supported.",
   );
+  assert.equal(
+    validateMaterial(file({ name: "fake.png", type: "application/pdf" })),
+    "Only PDF, PNG, JPG, and JPEG files are supported.",
+  );
+  assert.equal(validateMaterial(file({ size: 0 })), "The selected file is empty.");
+  assert.equal(
+    validateMaterial(file({ size: MAX_FILE_SIZE_BYTES + 1 })),
+    "The file must be 10 MB or smaller.",
+  );
+});
+
+test("identifies the material type from its filename", () => {
+  assert.equal(getMaterialType("lecture.pdf"), "PDF");
+  assert.equal(getMaterialType("diagram.PNG"), "Image");
+  assert.equal(getMaterialType("photo.jpeg"), "Image");
 });
 
 test("formats file sizes and totals only real document metadata", () => {

@@ -1,13 +1,5 @@
 import MaterialIcon from "./MaterialIcon.jsx";
 
-const stages = [
-  "Upload",
-  "Read PDF",
-  "Process text",
-  "Create knowledge sections",
-  "Ready",
-];
-
 function ProcessingJourney({ fileName, status }) {
   if (status === "idle") {
     return null;
@@ -15,6 +7,14 @@ function ProcessingJourney({ fileName, status }) {
 
   const isComplete = status === "complete";
   const isError = status === "error";
+  const isImage = /\.(png|jpe?g)$/i.test(fileName);
+  const stages = [
+    "Upload",
+    isImage ? "Read image with OCR" : "Read PDF",
+    "Process text",
+    "Create knowledge sections",
+    "Ready",
+  ];
 
   return (
     <div
@@ -44,7 +44,7 @@ function ProcessingJourney({ fileName, status }) {
         </div>
       </div>
 
-      <ol className="vault-journey-track" aria-label="PDF processing journey">
+      <ol className="vault-journey-track" aria-label="Material processing journey">
         {stages.map((stage, index) => (
           <li
             className={isComplete ? "vault-stage-complete" : isError ? "vault-stage-error" : "vault-stage-active"}

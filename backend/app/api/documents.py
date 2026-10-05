@@ -12,6 +12,12 @@ from app.api.auth import CurrentUser
 from app.core.config import MAX_UPLOAD_SIZE_BYTES, UPLOAD_DIRECTORY
 from app.database.database import DocumentDatabase, DocumentDatabaseError
 from app.database.models import DocumentRecord
+from app.services.image_ocr_service import (
+    ImageExtractionError,
+    ImageOCRUnavailableError,
+    ImagePixelLimitError,
+    extract_image_page,
+)
 from app.services.pdf_service import PDFExtractionError, extract_pdf_pages
 from app.services.text_processing_service import chunk_pages
 
@@ -19,7 +25,11 @@ from app.services.text_processing_service import chunk_pages
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 ALLOWED_PDF_CONTENT_TYPES = {"application/pdf", "application/x-pdf"}
+ALLOWED_PNG_CONTENT_TYPES = {"image/png"}
+ALLOWED_JPEG_CONTENT_TYPES = {"image/jpeg", "image/jpg"}
 PDF_SIGNATURE = b"%PDF-"
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+JPEG_SIGNATURE = b"\xff\xd8\xff"
 
 _retrieval_agent: RetrievalAgent | None = None
 _retrieval_agent_lock = Lock()
@@ -87,42 +97,58 @@ def _safe_display_filename(filename: str | None) -> str:
     return PurePosixPath(normalized_filename).name
 
 
-def _validate_file_metadata(filename: str, content_type: str | None) -> None:
-    """Validate the filename extension and the reported MIME type."""
-    if Path(filename).suffix.lower() != ".pdf":
+def _validate_file_metadata(filename: str, content_type: str | None) -> str:
+    """Validate the extension and reported MIME type, then return its kind."""
+    extension = Path(filename).suffix.lower()
+    supported_types = {
+        ".pdf": ("pdf", ALLOWED_PDF_CONTENT_TYPES),
+        ".png": ("png", ALLOWED_PNG_CONTENT_TYPES),
+        ".jpg": ("jpeg", ALLOWED_JPEG_CONTENT_TYPES),
+        ".jpeg": ("jpeg", ALLOWED_JPEG_CONTENT_TYPES),
+    }
+
+    if extension not in supported_types:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only files with a .pdf extension are allowed.",
+            detail="Only PDF, PNG, JPG, and JPEG files are allowed.",
         )
 
-    if content_type not in ALLOWED_PDF_CONTENT_TYPES:
+    material_type, allowed_content_types = supported_types[extension]
+    if content_type not in allowed_content_types:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail="The uploaded file must use a PDF content type.",
+            detail="The uploaded file content type does not match its extension.",
         )
 
+    return material_type
 
-def _validate_file_content(file_content: bytes) -> None:
-    """Reject empty, oversized, or obviously non-PDF file content."""
+
+def _validate_file_content(file_content: bytes, material_type: str) -> None:
+    """Reject empty, oversized, or signature-mismatched material content."""
     if not file_content:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="The uploaded PDF is empty.",
+            detail="The uploaded file is empty.",
         )
 
     if len(file_content) > MAX_UPLOAD_SIZE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=(
-                "The uploaded PDF is too large. "
+                "The uploaded file is too large. "
                 f"The maximum size is {MAX_UPLOAD_SIZE_BYTES} bytes."
             ),
         )
 
-    if not file_content.startswith(PDF_SIGNATURE):
+    expected_signatures = {
+        "pdf": PDF_SIGNATURE,
+        "png": PNG_SIGNATURE,
+        "jpeg": JPEG_SIGNATURE,
+    }
+    if not file_content.startswith(expected_signatures[material_type]):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="The uploaded file does not contain valid PDF content.",
+            detail="The uploaded file signature does not match its declared format.",
         )
 
 
@@ -176,10 +202,13 @@ async def upload_document(
     current_user: CurrentUser,
     file: UploadFile = File(...),
 ) -> dict[str, object]:
-    """Validate, save, and extract page-level text from one uploaded PDF."""
+    """Validate, save, and extract page-level text from one material."""
     try:
         original_filename = _safe_display_filename(file.filename)
-        _validate_file_metadata(original_filename, file.content_type)
+        material_type = _validate_file_metadata(
+            original_filename,
+            file.content_type,
+        )
 
         # Reading one byte beyond the limit lets us detect an oversized upload
         # without loading an unlimited file into memory.
@@ -187,26 +216,58 @@ async def upload_document(
     finally:
         await file.close()
 
-    _validate_file_content(file_content)
+    _validate_file_content(file_content, material_type)
     stored_filename, stored_path = _create_safe_storage_path()
 
-    try:
-        UPLOAD_DIRECTORY.mkdir(parents=True, exist_ok=True)
-        stored_path.write_bytes(file_content)
-    except OSError as error:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="The PDF could not be saved.",
-        ) from error
+    if material_type == "pdf":
+        stored_content = file_content
+        try:
+            UPLOAD_DIRECTORY.mkdir(parents=True, exist_ok=True)
+            stored_path.write_bytes(stored_content)
+        except OSError as error:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="The material could not be saved.",
+            ) from error
 
-    try:
-        pages = extract_pdf_pages(stored_path)
-    except PDFExtractionError as error:
-        stored_path.unlink(missing_ok=True)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(error),
-        ) from error
+        try:
+            pages = extract_pdf_pages(stored_path)
+        except PDFExtractionError as error:
+            stored_path.unlink(missing_ok=True)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(error),
+            ) from error
+    else:
+        try:
+            pages, stored_content = await run_in_threadpool(
+                extract_image_page,
+                file_content,
+            )
+        except ImagePixelLimitError as error:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail=str(error),
+            ) from error
+        except ImageOCRUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=str(error),
+            ) from error
+        except ImageExtractionError as error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(error),
+            ) from error
+
+        try:
+            UPLOAD_DIRECTORY.mkdir(parents=True, exist_ok=True)
+            stored_path.write_bytes(stored_content)
+        except OSError as error:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="The material could not be saved.",
+            ) from error
 
     chunks = chunk_pages(pages)
 
@@ -221,6 +282,11 @@ async def upload_document(
             detail=(
                 "The PDF contains no extractable text. "
                 "Scanned or image-only PDFs are not currently supported."
+                if material_type == "pdf"
+                else (
+                    "The image contains no readable text. "
+                    "Upload a clear image containing course material."
+                )
             ),
         )
 
@@ -285,7 +351,11 @@ async def upload_document(
         ) from error
 
     return {
-        "message": "PDF uploaded, processed, and indexed successfully",
+        "message": (
+            "PDF uploaded, processed, and indexed successfully"
+            if material_type == "pdf"
+            else "Image uploaded, OCR processed, and indexed successfully"
+        ),
         "document": document_record.to_public_dict(),
     }
 

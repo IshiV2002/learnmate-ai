@@ -53,7 +53,7 @@ function DeleteDocumentModal({ document: targetDocument, isDeleting, onCancel, o
         <p className="vault-dialog-eyebrow">Remove knowledge source</p>
         <h2 id="delete-document-title">Delete “{filename}”?</h2>
         <p id="delete-document-description">
-          This permanently removes the stored PDF, its metadata, and its searchable sections. Learning agents will no longer be able to retrieve from it.
+          This permanently removes the stored material, its metadata, and its searchable sections. Learning agents will no longer be able to retrieve from it.
         </p>
         <div className="vault-dialog-actions">
           <button
