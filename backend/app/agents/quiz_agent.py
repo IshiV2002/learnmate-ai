@@ -144,6 +144,41 @@ class QuizAgent:
                 "topic or upload a text-based PDF."
             )
 
+        # Semantic search is capped at 20 chunks. When Gemini is unavailable,
+        # the local fallback can cheaply scan all indexed passages instead of
+        # falsely reporting that a long PDF contains too few distinct facts.
+        fallback_context_chunks = None
+        if not self.llm_service.is_available and hasattr(
+            self.retrieval_agent, "get_document_chunks"
+        ):
+            try:
+                indexed_chunks = self.retrieval_agent.get_document_chunks(target_doc_ids)
+                fallback_context_chunks = []
+                seen_fallback_chunks: set[tuple[str, int, int]] = set()
+                # Keep topic-matched retrieval results first, then use the rest
+                # of the document as coverage if those passages are too narrow.
+                for chunk in [*context_chunks, *indexed_chunks]:
+                    chunk_key = (
+                        str(chunk["source"]),
+                        int(chunk["page_number"]),
+                        int(chunk["chunk_index"]),
+                    )
+                    if chunk_key in seen_fallback_chunks:
+                        continue
+                    fallback_context_chunks.append(
+                        {
+                            "text": chunk["text"],
+                            "page_number": chunk["page_number"],
+                            "chunk_index": chunk["chunk_index"],
+                            "source": chunk["source"],
+                        }
+                    )
+                    seen_fallback_chunks.add(chunk_key)
+                fallback_context_chunks = fallback_context_chunks or None
+            except Exception:
+                # Keep the semantic results if the full-document lookup fails.
+                fallback_context_chunks = None
+
         # 2. Synthesize questions via LLM Service (with pedagogical fallback)
         try:
             raw_questions = self.llm_service.generate_quiz_questions(
@@ -152,6 +187,7 @@ class QuizAgent:
                 num_questions=request.num_questions,
                 difficulty=request.difficulty,
                 question_types=request.question_types,
+                fallback_context_chunks=fallback_context_chunks,
             )
         except ValueError as error:
             raise QuizAgentError(str(error)) from error
