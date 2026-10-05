@@ -1,3 +1,4 @@
+from collections import Counter
 import json
 import os
 import re
@@ -324,6 +325,7 @@ class LLMService:
         num_questions: int = 5,
         difficulty: str = "mixed",
         question_types: list[str] | None = None,
+        fallback_context_chunks: list[dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]:
         """Synthesize educational assessment questions grounded in lecture context."""
         question_types = question_types or ["mcq"]
@@ -389,7 +391,7 @@ class LLMService:
 
         # Deterministic fallback question generator when offline or if LLM unavailable
         return self._generate_fallback_questions(
-            context_chunks=context_chunks,
+            context_chunks=fallback_context_chunks or context_chunks,
             topic=topic,
             num_questions=num_questions,
             difficulty=difficulty,
@@ -486,6 +488,135 @@ class LLMService:
 
         return accepted
 
+    def _extract_cloze_facts(
+        self,
+        context_chunks: list[dict[str, Any]],
+        existing_facts: list[dict[str, Any]],
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Create grounded fill-in-the-blank facts from varied PDF prose."""
+        if limit <= 0:
+            return []
+
+        stop_words = {
+            "a", "an", "and", "are", "as", "at", "be", "been", "being", "but",
+            "by", "can", "could", "did", "do", "does", "for", "from", "had", "has",
+            "have", "he", "her", "here", "hers", "him", "his", "how", "i", "if", "in",
+            "into", "is", "it", "its", "may", "me", "might", "more", "most", "must",
+            "my", "no", "not", "of", "on", "or", "our", "ours", "she", "should",
+            "so", "some", "such", "than", "that", "the", "their", "theirs", "them",
+            "then", "there", "these", "they", "this", "those", "through", "to", "too",
+            "under", "up", "us", "very", "was", "we", "were", "what", "when", "where",
+            "which", "while", "who", "will", "with", "would", "you", "your", "yours",
+            "also", "according", "following", "lecture", "pdf", "example", "examples",
+        }
+        token_pattern = re.compile(r"[A-Za-z][A-Za-z'-]*|\d+(?:\.\d+)?")
+        all_text = " ".join(str(chunk.get("text", "")) for chunk in context_chunks)
+        term_frequencies = Counter(
+            token.lower()
+            for token in token_pattern.findall(all_text)
+            if token.lower() not in stop_words
+        )
+        seen_statements = {
+            self._normalize_question_text(str(fact.get("text", "")))
+            for fact in existing_facts
+        }
+        seen_answers = {
+            self._normalize_question_text(str(fact.get("answer", "")))
+            for fact in existing_facts
+        }
+        extracted: list[dict[str, Any]] = []
+
+        for chunk in context_chunks:
+            text = str(chunk.get("text", ""))
+            text = re.sub(r"(?<!\w)(\d{1,2})\.\s+(?=[A-Z])", r"\n\1. ", text)
+            items = re.split(r"[\u2022\u00b7\u2219\u2043\u25aa\u25cf\u25e6]\s*|\n+", text)
+            for item in items:
+                for raw_sentence in re.split(r"(?<=[.!?])\s+", item):
+                    sentence = re.sub(r"^\s*[-*\d.)]+\s*", "", raw_sentence).strip()
+                    sentence = re.split(r"\s+#\s*", sentence, maxsplit=1)[0]
+                    sentence = sentence.rstrip(" .;:")
+                    sentence_key = self._normalize_question_text(sentence)
+                    words = token_pattern.findall(sentence)
+                    if (
+                        sentence_key in seen_statements
+                        or len(words) < 7
+                        or len(words) > 40
+                        or re.match(
+                            r"^(?:consider|suppose|assume|what|which|why|how|the following)\b",
+                            sentence,
+                            flags=re.IGNORECASE,
+                        )
+                        or re.search(r"\b(?:as follows|consider the following)\b", sentence, re.IGNORECASE)
+                    ):
+                        continue
+
+                    matches = list(token_pattern.finditer(sentence))
+                    spans: list[tuple[float, int, int]] = []
+                    for start_index in range(len(matches)):
+                        for span_size in (3, 2, 1):
+                            end_index = start_index + span_size - 1
+                            if end_index >= len(matches):
+                                continue
+                            selected = matches[start_index : end_index + 1]
+                            terms = [match.group().lower() for match in selected]
+                            if any(term in stop_words for term in terms):
+                                continue
+                            if any(len(term) < 3 and not term.isdigit() for term in terms):
+                                continue
+                            answer = sentence[selected[0].start() : selected[-1].end()]
+                            if len(answer) < 4:
+                                continue
+                            rarity = sum(
+                                1 / (1 + term_frequencies.get(term, 0))
+                                for term in terms
+                            )
+                            score = rarity + 0.2 * (span_size - 1)
+                            if any(character.isupper() for character in answer[1:]):
+                                score += 0.2
+                            spans.append((score, selected[0].start(), selected[-1].end()))
+
+                    if not spans:
+                        continue
+                    selected_span = next(
+                        (
+                            (start, end)
+                            for _, start, end in sorted(spans, reverse=True)
+                            if self._normalize_question_text(sentence[start:end]) not in seen_answers
+                        ),
+                        None,
+                    )
+                    if selected_span is None:
+                        continue
+                    answer_start, answer_end = selected_span
+                    answer = sentence[answer_start:answer_end]
+                    answer_key = self._normalize_question_text(answer)
+
+                    masked_statement = (
+                        sentence[:answer_start] + "_____" + sentence[answer_end:]
+                    )
+                    extracted.append(
+                        {
+                            "text": sentence,
+                            "subject": answer,
+                            "answer": answer,
+                            "detail": sentence,
+                            "kind": "cloze",
+                            "question": (
+                                "Which phrase correctly completes this statement from the PDF? "
+                                f"{masked_statement}"
+                            ),
+                            "page": int(chunk.get("page_number", 1)),
+                            "chunk_index": int(chunk.get("chunk_index", 0)),
+                        }
+                    )
+                    seen_statements.add(sentence_key)
+                    seen_answers.add(answer_key)
+                    if len(extracted) == limit:
+                        return extracted
+
+        return extracted
+
     def _generate_fallback_questions(
         self,
         context_chunks: list[dict[str, Any]],
@@ -502,14 +633,53 @@ class LLMService:
 
         for chunk in context_chunks:
             text = str(chunk.get("text", ""))
-            sentences = re.split(r"(?<=[.!?])\s+|\n+", text)
-            for sentence in sentences:
-                sentence = re.sub(r"^\s*[-*•\d.)]+\s*", "", sentence).strip()
-                sentence = sentence.rstrip(" .;:")
-                fact_key = self._normalize_question_text(sentence)
-                if len(fact_key.split()) < 8 or fact_key in seen_facts:
+            # Lecture slides often store several bullet points on one line.
+            # Numbered headings in text-heavy lab sheets may follow code on the
+            # same line, so make each heading a boundary before splitting bullets.
+            text = re.sub(r"(?<!\w)(\d{1,2})\.\s+(?=[A-Z])", r"\n\1. ", text)
+            bullet_items = re.split(r"[\u2022\u00b7\u2219\u2043\u25aa\u25cf\u25e6]\s*|\n+", text)
+            sentences: list[tuple[str, str]] = []
+            section_heading = ""
+            for item_index, item in enumerate(bullet_items):
+                item = item.strip()
+                numbered_heading = re.match(
+                    r"^(?:.*?\s)?\d{1,2}\.\s+(?P<title>[^#]{3,65})$",
+                    item,
+                )
+                if numbered_heading:
+                    section_heading = numbered_heading.group("title").strip()
                     continue
 
+                # Slide titles are often short standalone text before the first
+                # bullet. Keep them as context for the statements that follow.
+                if (
+                    item_index == 0
+                    and len(item.split()) <= 8
+                    and not re.search(r"[.!?]", item)
+                    and not re.match(r"^\d+\.", item)
+                ):
+                    section_heading = item
+                    continue
+
+                sentences.extend(
+                    (sentence, section_heading)
+                    for sentence in re.split(r"(?<=[.!?])\s+", item)
+                )
+            for sentence, section_heading in sentences:
+                sentence = re.sub(r"^\s*[-*•\d.)]+\s*", "", sentence).strip()
+                # Lab sheets commonly put code immediately after the explanatory
+                # bullet. Keep the natural-language purpose and skip the code.
+                sentence = re.split(r"\s+#\s*", sentence, maxsplit=1)[0]
+                sentence = sentence.rstrip(" .;:")
+                fact_key = self._normalize_question_text(sentence)
+                if len(fact_key.split()) < 6 or fact_key in seen_facts:
+                    continue
+
+                labeled_fact = re.match(
+                    r"^(?P<label>[A-Za-z][A-Za-z0-9 /()_-]{2,65}):\s*"
+                    r"(?P<detail>.+)$",
+                    sentence,
+                )
                 definition = re.match(
                     r"^(?:an?\s+|the\s+)?(?P<subject>[A-Za-z][\w -]{1,65}?)\s+"
                     r"(?P<link>is|are|refers to|means|denotes|represents)\s+"
@@ -530,7 +700,48 @@ class LLMService:
                     flags=re.IGNORECASE,
                 )
 
-                if definition and definition.group("subject").lower() not in {"this", "it", "they"}:
+                purpose = (
+                    section_heading
+                    and re.match(
+                        r"^to (?:determine|compare|test|measure|check|calculate|estimate)\b",
+                        sentence,
+                        flags=re.IGNORECASE,
+                    )
+                )
+                if purpose:
+                    facts.append({
+                        "text": sentence,
+                        "subject": section_heading,
+                        "answer": sentence,
+                        "detail": sentence,
+                        "kind": "purpose",
+                        "question": f"What is the purpose of {section_heading}?",
+                        "page": int(chunk.get("page_number", 1)),
+                        "chunk_index": int(chunk.get("chunk_index", 0)),
+                    })
+                elif labeled_fact and len(labeled_fact.group("detail").split()) >= 5:
+                    subject = labeled_fact.group("label").strip()
+                    detail = labeled_fact.group("detail").strip()
+                    facts.append({
+                        "text": sentence,
+                        "subject": subject,
+                        "answer": detail,
+                        "detail": detail,
+                        "kind": "label",
+                        "question": f"What does the lecture say about {subject}?",
+                        "page": int(chunk.get("page_number", 1)),
+                        "chunk_index": int(chunk.get("chunk_index", 0)),
+                    })
+                elif (
+                    definition
+                    and definition.group("subject").lower() not in {
+                        "this", "it", "they", "what", "which", "who", "when", "where"
+                    }
+                    and not definition.group("subject").strip().lower().startswith(("to ", "if "))
+                    and not definition.group("predicate").strip().lower().startswith(
+                        ("of ", "to ", "by ", "that ")
+                    )
+                ):
                     subject = definition.group("subject").strip()
                     predicate = definition.group("predicate").strip()
                     if len(predicate.split()) >= 3:
@@ -600,7 +811,9 @@ class LLMService:
                             "chunk_index": int(chunk.get("chunk_index", 0)),
                         })
 
-                if definition or action:
+                if definition or action or labeled_fact:
+                    seen_facts.add(fact_key)
+                if purpose:
                     seen_facts.add(fact_key)
 
         # Remove facts that would turn into repeated stems or repeat the same
@@ -617,6 +830,31 @@ class LLMService:
             seen_stems.add(stem_key)
             seen_answers.add(answer_key)
         facts = unique_facts
+
+        # Different PDFs use different sentence structures. If explicit
+        # question patterns still leave a gap, create source-grounded cloze
+        # questions from additional readable statements in the document.
+        minimum_fact_count = max(num_questions, 4 if "mcq" in question_types else 1)
+        if len(facts) < minimum_fact_count:
+            facts.extend(
+                self._extract_cloze_facts(
+                    context_chunks=context_chunks,
+                    existing_facts=facts,
+                    limit=minimum_fact_count - len(facts),
+                )
+            )
+            unique_facts = []
+            seen_stems.clear()
+            seen_answers.clear()
+            for fact in facts:
+                stem_key = self._normalize_question_text(fact["question"])
+                answer_key = self._normalize_question_text(fact["answer"])
+                if stem_key in seen_stems or answer_key in seen_answers:
+                    continue
+                unique_facts.append(fact)
+                seen_stems.add(stem_key)
+                seen_answers.add(answer_key)
+            facts = unique_facts
 
         # Keep one question per distinct, parseable lecture fact. Never pad with
         # generic questions when the retrieved PDF evidence is too thin.
@@ -642,6 +880,24 @@ class LLMService:
                         other["subject"]
                         for other in facts
                         if other is not fact and other["kind"] == "definition"
+                    ]
+                elif fact["kind"] == "purpose":
+                    distractors = [
+                        other["answer"]
+                        for other in facts
+                        if other is not fact and other["kind"] == "purpose"
+                    ]
+                elif fact["kind"] == "label":
+                    distractors = [
+                        other["answer"]
+                        for other in facts
+                        if other is not fact and other["kind"] == "label"
+                    ]
+                elif fact["kind"] == "cloze":
+                    distractors = [
+                        other["answer"]
+                        for other in facts
+                        if other is not fact and other["kind"] == "cloze"
                     ]
                 else:
                     distractors = [
@@ -683,6 +939,12 @@ class LLMService:
                 if fact["kind"] == "definition":
                     question_text = f"What does the lecture mean by {fact['subject']}?"
                     correct_answer = fact["detail"]
+                elif fact["kind"] == "label":
+                    question_text = fact["question"]
+                    correct_answer = fact["answer"]
+                elif fact["kind"] == "cloze":
+                    question_text = fact["question"]
+                    correct_answer = fact["answer"]
                 else:
                     question_text = fact["question"]
                     correct_answer = fact["answer"]

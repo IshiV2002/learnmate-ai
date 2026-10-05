@@ -84,6 +84,15 @@ class RetrievalAgent:
             raise ValueError("document_id cannot be empty.")
         return self.search_documents([document_id], query, top_k)
 
+    def get_document_chunks(self, document_ids: list[str]) -> list[VectorSearchResult]:
+        """Load all indexed passages for offline tasks that need broader coverage."""
+        try:
+            return self.vector_store_service.get_document_chunks(document_ids)
+        except Exception as error:
+            raise RetrievalAgentError(
+                "The indexed course text could not be loaded."
+            ) from error
+
 
     def delete_document(self, document_id: str) -> None:
         """Remove every indexed chunk belonging to one document."""

@@ -150,6 +150,48 @@ class VectorStoreService:
         """Search only chunks belonging to the requested document."""
         return self.search_documents([document_id], query_embedding, top_k)
 
+    def get_document_chunks(self, document_ids: list[str]) -> list[VectorSearchResult]:
+        """Return every indexed chunk for selected documents in source order."""
+        cleaned_ids = [doc_id.strip() for doc_id in document_ids if doc_id and doc_id.strip()]
+        if not cleaned_ids:
+            return []
+
+        where_clause = (
+            {"document_id": cleaned_ids[0]}
+            if len(cleaned_ids) == 1
+            else {"document_id": {"$in": cleaned_ids}}
+        )
+        try:
+            records = self.collection.get(
+                where=where_clause,
+                include=["documents", "metadatas"],
+            )
+        except Exception as error:
+            raise VectorStoreError("Document chunks could not be loaded.") from error
+
+        chunks: list[VectorSearchResult] = []
+        for text, metadata in zip(records.get("documents") or [], records.get("metadatas") or []):
+            if text is None or metadata is None:
+                continue
+            chunks.append(
+                {
+                    "text": str(text),
+                    "page_number": int(metadata["page_number"]),
+                    "chunk_index": int(metadata["chunk_index"]),
+                    "source": str(metadata["original_filename"]),
+                    "distance": 0.0,
+                }
+            )
+
+        return sorted(
+            chunks,
+            key=lambda chunk: (
+                chunk["source"],
+                chunk["page_number"],
+                chunk["chunk_index"],
+            ),
+        )
+
 
     def count_document_chunks(self, document_id: str) -> int:
         """Return the number of stored chunks for one document."""
