@@ -48,14 +48,25 @@ class QuizAgent:
         self.llm_service = llm_service or LLMService()
 
     def generate_quiz(self, request: QuizGenerationRequest) -> QuizRecord:
-        """Synthesize a new quiz from indexed lecture document context."""
-        doc = self.database.get_document(request.document_id)
-        if doc is None:
-            raise QuizAgentError(
-                f"Document with ID '{request.document_id}' not found in the system."
-            )
+        """Synthesize a new quiz from indexed lecture document context (single or mixed documents)."""
+        target_doc_ids = [
+            did.strip()
+            for did in (request.document_ids or ([request.document_id] if request.document_id else []))
+            if did and did.strip()
+        ]
+        if not target_doc_ids:
+            raise QuizAgentError("At least one document ID must be specified for quiz generation.")
 
-        # 1. Retrieve relevant lecture chunks
+        docs = []
+        for did in target_doc_ids:
+            doc = self.database.get_document(did)
+            if doc is None:
+                raise QuizAgentError(
+                    f"Document with ID '{did}' not found in the system."
+                )
+            docs.append(doc)
+
+        # 1. Retrieve relevant lecture chunks from target document(s)
         if self.retrieval_agent is None:
             raise QuizAgentError(
                 "Quiz generation is unavailable because indexed course evidence "
@@ -63,12 +74,38 @@ class QuizAgent:
             )
 
         query = request.topic or "Core concepts, definitions, algorithms, and key principles"
+        topic_query = (
+            f"{request.topic}: definitions, methods, key relationships, and applications"
+            if request.topic
+            else "Lecture definitions, methods, examples, and important relationships"
+        )
+        retrieval_queries = list(dict.fromkeys([query, topic_query]))
+        retrieval_limit = min(20, max(8, request.num_questions * 3))
         try:
-            search_results = self.retrieval_agent.search(
-                document_id=request.document_id,
-                query=query,
-                top_k=min(8, max(4, request.num_questions)),
-            )
+            search_results = []
+            if len(target_doc_ids) > 1 and hasattr(self.retrieval_agent, "search_documents"):
+                for retrieval_query in retrieval_queries:
+                    search_results.extend(
+                        self.retrieval_agent.search_documents(
+                            document_ids=target_doc_ids,
+                            query=retrieval_query,
+                            top_k=retrieval_limit,
+                        )
+                    )
+            else:
+                k_each = min(
+                    20,
+                    max(4, retrieval_limit // len(target_doc_ids)),
+                )
+                for retrieval_query in retrieval_queries:
+                    for did in target_doc_ids:
+                        search_results.extend(
+                            self.retrieval_agent.search(
+                                document_id=did,
+                                query=retrieval_query,
+                                top_k=k_each,
+                            )
+                        )
         except Exception as error:
             raise QuizAgentError(
                 "Quiz generation is unavailable because indexed course evidence "
@@ -86,6 +123,21 @@ class QuizAgent:
             if res.get("text", "").strip()
         ]
 
+        # Multiple retrieval queries can return the same chunk. Keep one copy
+        # of each source passage so it cannot dominate question generation.
+        unique_chunks: list[dict[str, Any]] = []
+        seen_chunks: set[tuple[str, int, int]] = set()
+        for chunk in context_chunks:
+            chunk_key = (
+                str(chunk["source"]),
+                int(chunk["page_number"]),
+                int(chunk["chunk_index"]),
+            )
+            if chunk_key not in seen_chunks:
+                unique_chunks.append(chunk)
+                seen_chunks.add(chunk_key)
+        context_chunks = unique_chunks[:20]
+
         if not context_chunks:
             raise QuizAgentError(
                 "No supporting course text was found for this quiz. Try another "
@@ -101,6 +153,8 @@ class QuizAgent:
                 difficulty=request.difficulty,
                 question_types=request.question_types,
             )
+        except ValueError as error:
+            raise QuizAgentError(str(error)) from error
         except Exception as error:
             raise QuizAgentError(
                 "Questions could not be generated from the retrieved course evidence."
@@ -129,24 +183,39 @@ class QuizAgent:
 
         if not validated_questions:
             raise QuizAgentError("No valid questions could be synthesized.")
+        if len(validated_questions) != request.num_questions:
+            raise QuizAgentError(
+                f"The quiz generator returned {len(validated_questions)} of "
+                f"{request.num_questions} requested questions. Please try again."
+            )
 
         # 4. Determine Quiz Title and Metadata
         title = request.title
         if not title:
-            base_name = doc.original_filename.replace(".pdf", "")
-            if request.topic:
-                title = f"{base_name}: {request.topic}"
+            if len(docs) > 1:
+                doc_names = [d.original_filename.replace(".pdf", "") for d in docs]
+                first_two = ", ".join(doc_names[:2])
+                suffix = " & more" if len(doc_names) > 2 else ""
+                if request.topic:
+                    title = f"Mixed Assessment ({len(docs)} Docs): {request.topic}"
+                else:
+                    title = f"Mixed Quiz: {first_two}{suffix}"
             else:
-                title = f"{base_name} Quiz"
+                base_name = docs[0].original_filename.replace(".pdf", "")
+                if request.topic:
+                    title = f"{base_name}: {request.topic}"
+                else:
+                    title = f"{base_name} Quiz"
 
         quiz_id = f"quiz_{uuid.uuid4().hex[:12]}"
         now_timestamp = datetime.now(timezone.utc).isoformat()
+        saved_document_id = target_doc_ids[0] if len(target_doc_ids) == 1 else ",".join(target_doc_ids)
 
         quiz_record = QuizRecord(
             quiz_id=quiz_id,
-            document_id=request.document_id,
+            document_id=saved_document_id,
             title=title,
-            topic=request.topic or "Comprehensive",
+            topic=request.topic or ("Comprehensive Review" if len(docs) > 1 else "Comprehensive"),
             total_questions=len(validated_questions),
             difficulty=request.difficulty,
             questions_json=json.dumps([q.model_dump() for q in validated_questions]),

@@ -41,13 +41,21 @@ class TutorHandoffService:
 
         # 1. Fetch relevant lecture chunks for weak topics if Retrieval Agent is available
         if self.retrieval_agent and document_id:
+            doc_ids = [d.strip() for d in document_id.split(",") if d.strip()]
             for item in action_items:
                 try:
-                    search_results = self.retrieval_agent.search(
-                        document_id=document_id,
-                        query=item.topic,
-                        top_k=2,
-                    )
+                    if len(doc_ids) > 1 and hasattr(self.retrieval_agent, "search_documents"):
+                        search_results = self.retrieval_agent.search_documents(
+                            document_ids=doc_ids,
+                            query=item.topic,
+                            top_k=2,
+                        )
+                    else:
+                        search_results = self.retrieval_agent.search(
+                            document_id=doc_ids[0] if doc_ids else document_id,
+                            query=item.topic,
+                            top_k=2,
+                        )
                     citations = [
                         {
                             "page_number": res.get("page_number", 1),
