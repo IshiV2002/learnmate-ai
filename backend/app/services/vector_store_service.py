@@ -3,7 +3,11 @@ from typing import TypedDict
 
 import chromadb
 
-from app.core.config import CHROMA_COLLECTION_NAME, CHROMA_DATA_DIRECTORY
+from app.core.config import (
+    CHROMA_COLLECTION_NAME,
+    CHROMA_DATA_DIRECTORY,
+    MAX_RETRIEVAL_COSINE_DISTANCE,
+)
 from app.services.text_processing_service import TextChunk
 
 
@@ -28,8 +32,15 @@ class VectorStoreService:
         self,
         persistence_directory: Path = CHROMA_DATA_DIRECTORY,
         collection_name: str = CHROMA_COLLECTION_NAME,
+        max_cosine_distance: float = MAX_RETRIEVAL_COSINE_DISTANCE,
     ) -> None:
+        if not 0 < max_cosine_distance <= 2:
+            raise ValueError(
+                "max_cosine_distance must be greater than 0 and no greater than 2."
+            )
+
         self.persistence_directory = persistence_directory
+        self.max_cosine_distance = max_cosine_distance
         self.persistence_directory.mkdir(parents=True, exist_ok=True)
 
         try:
@@ -129,13 +140,17 @@ class VectorStoreService:
             if text is None or metadata is None:
                 continue
 
+            numeric_distance = float(distance)
+            if numeric_distance > self.max_cosine_distance:
+                continue
+
             results.append(
                 {
                     "text": text,
                     "page_number": int(metadata["page_number"]),
                     "chunk_index": int(metadata["chunk_index"]),
                     "source": str(metadata["original_filename"]),
-                    "distance": float(distance),
+                    "distance": numeric_distance,
                 }
             )
 

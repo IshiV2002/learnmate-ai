@@ -32,6 +32,10 @@ experiment.
 
 - `test-plan.md`: the 20 planned retrieval and security tests.
 - `evidence-template.md`: the required recording format for each executed test.
+- `results/post-merge-reassessment-bec9feb.md`: targeted reassessment after the
+  shared `develop` merge, kept separate from the frozen baseline.
+- `results/final-post-remediation-assessment.md`: complete final rerun of all
+  planned retrieval and security tests after the five remediations.
 - `tools/generate_test_corpus.py`: creates reproducible synthetic test files.
 - `generated/`: local generated corpus; intentionally ignored by Git.
 - `evidence/raw/`: local screenshots and raw logs; intentionally ignored by Git.

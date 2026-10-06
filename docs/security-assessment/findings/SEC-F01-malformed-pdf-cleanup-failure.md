@@ -5,7 +5,14 @@
 - Evidence status: Confirmed and repeatable
 - Related test: SEC-06
 - Affected commit: `a4451ba5c47bc92786684eeb117a53bf97bf09b3`
+- Reconfirmed commit: `bec9feb60d8dd643ceee8eb6ab54d3db47c563a9`
+- Remediation status: Fixed and verified
+- Fixed commit: `2415416437482c97ece7c3c268e0fb0c1cf7191c`
 - Environment: Windows local FastAPI service
+
+The High 12/25 rating documents the demonstrated pre-fix risk. It is retained
+for the assignment's original risk assessment and is not a claim that the same
+exposure remains after the verified remediation.
 
 ## Description
 
@@ -61,6 +68,25 @@ the intended API error and leaves residue.
 4. Add Windows regression tests for corrupt and truncated PDF paths.
 5. Add per-user upload quotas and request-rate controls.
 6. Verify exact upload, SQLite and Chroma baseline restoration after the fix.
+
+## Implemented mitigation and verification
+
+The upload endpoint now parses and validates untrusted PDF bytes in memory
+before creating a persistent upload file. The path-based PDF helper also reads
+the file into memory before invoking PyMuPDF, so PyMuPDF no longer holds the
+stored path open during parser-error handling.
+
+Two automated regression tests cover the corrupt and truncated PDF paths. A
+post-fix rerun of SEC-06 passed all five malformed/protected-file cases:
+
+- corrupt and truncated PDFs returned controlled 400 responses;
+- no upload, SQLite or Chroma state changed after rejected inputs;
+- zero orphan upload files remained;
+- the service stayed healthy and accepted a later valid upload; and
+- the complete backend regression suite passed 116 tests.
+
+See `results/SEC-F01-remediation-verification.md` for the full verification
+record and evidence identity.
 
 ## Residual risk
 

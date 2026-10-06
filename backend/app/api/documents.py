@@ -9,7 +9,13 @@ from starlette.concurrency import run_in_threadpool
 
 from app.agents.retrieval_agent import RetrievalAgent, RetrievalAgentError
 from app.api.auth import CurrentUser
-from app.core.config import MAX_UPLOAD_SIZE_BYTES, UPLOAD_DIRECTORY
+from app.core.config import (
+    MAX_SEARCH_QUERY_CHARACTERS,
+    MAX_UPLOAD_SIZE_BYTES,
+    SEARCH_RATE_LIMIT_REQUESTS,
+    SEARCH_RATE_LIMIT_WINDOW_SECONDS,
+    UPLOAD_DIRECTORY,
+)
 from app.database.database import DocumentDatabase, DocumentDatabaseError
 from app.database.models import DocumentRecord
 from app.services.image_ocr_service import (
@@ -18,7 +24,11 @@ from app.services.image_ocr_service import (
     ImagePixelLimitError,
     extract_image_page,
 )
-from app.services.pdf_service import PDFExtractionError, extract_pdf_pages
+from app.services.pdf_service import PDFExtractionError, extract_pdf_pages_from_bytes
+from app.services.rate_limit_service import (
+    RateLimitExceededError,
+    SlidingWindowRateLimiter,
+)
 from app.services.text_processing_service import chunk_pages
 
 
@@ -35,13 +45,17 @@ _retrieval_agent: RetrievalAgent | None = None
 _retrieval_agent_lock = Lock()
 _document_database: DocumentDatabase | None = None
 _document_database_lock = Lock()
+_search_rate_limiter = SlidingWindowRateLimiter(
+    max_requests=SEARCH_RATE_LIMIT_REQUESTS,
+    window_seconds=SEARCH_RATE_LIMIT_WINDOW_SECONDS,
+)
 
 
 class DocumentSearchRequest(BaseModel):
     """Validated input for a document semantic search."""
 
     document_id: str
-    query: str
+    query: str = Field(max_length=MAX_SEARCH_QUERY_CHARACTERS)
     top_k: int = Field(default=3, ge=1, le=10)
 
     @field_validator("document_id", "query")
@@ -221,6 +235,19 @@ async def upload_document(
 
     if material_type == "pdf":
         stored_content = file_content
+        # Validate and parse untrusted PDF bytes before persistent storage. This
+        # also prevents PyMuPDF from holding a Windows file lock during cleanup.
+        try:
+            pages = await run_in_threadpool(
+                extract_pdf_pages_from_bytes,
+                stored_content,
+            )
+        except PDFExtractionError as error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(error),
+            ) from error
+
         try:
             UPLOAD_DIRECTORY.mkdir(parents=True, exist_ok=True)
             stored_path.write_bytes(stored_content)
@@ -228,15 +255,6 @@ async def upload_document(
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="The material could not be saved.",
-            ) from error
-
-        try:
-            pages = extract_pdf_pages(stored_path)
-        except PDFExtractionError as error:
-            stored_path.unlink(missing_ok=True)
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(error),
             ) from error
     else:
         try:
@@ -366,6 +384,15 @@ def search_documents(
     current_user: CurrentUser,
 ) -> dict[str, object]:
     """Search the selected indexed document using semantic similarity."""
+    try:
+        _search_rate_limiter.check_request(current_user.user_id)
+    except RateLimitExceededError as error:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many semantic search requests. Try again shortly.",
+            headers={"Retry-After": str(error.retry_after_seconds)},
+        ) from error
+
     try:
         document = get_document_database().get_document(
             request.document_id,
