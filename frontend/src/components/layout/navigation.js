@@ -1,5 +1,12 @@
 export const navigationItems = [
   {
+    id: "home",
+    label: "Home",
+    description: "Your study overview",
+    title: "Home",
+    icon: "home",
+  },
+  {
     id: "materials",
     label: "Materials",
     description: "Library & retrieval",
@@ -10,7 +17,7 @@ export const navigationItems = [
     id: "tutor",
     label: "Tutor",
     description: "Guided understanding",
-    title: "Socratic AI Tutor",
+    title: "Study Tutor",
     icon: "tutor",
   },
   {
@@ -24,7 +31,7 @@ export const navigationItems = [
     id: "recommendations",
     label: "Recommendations",
     description: "Adaptive next steps",
-    title: "Personalized Recommendations",
+    title: "Study Recommendations",
     icon: "recommendations",
   },
 ];

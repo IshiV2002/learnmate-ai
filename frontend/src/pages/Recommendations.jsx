@@ -126,11 +126,10 @@ export default function Recommendations({
   initialSubmission,
   initialRecommendation,
   onLaunchTutor = null,
+  onToggleTheme,
+  theme = "light",
 }) {
   const { user } = useAuth();
-  const [theme, setTheme] = useState(
-    () => localStorage.getItem("learnmate_rec_theme") || "dark"
-  );
   const [documents, setDocuments] = useState([]);
   const [selectedDocId, setSelectedDocId] = useState(
     initialSubmission?.document_id || ""
@@ -150,12 +149,6 @@ export default function Recommendations({
     initialRecommendation || initialSubmission ? "dashboard" : "take_quiz"
   );
   const [copiedContract, setCopiedContract] = useState(false);
-
-  function toggleTheme() {
-    const nextTheme = theme === "dark" ? "light" : "dark";
-    setTheme(nextTheme);
-    localStorage.setItem("learnmate_rec_theme", nextTheme);
-  }
 
   useEffect(() => {
     loadDocuments();
@@ -277,13 +270,13 @@ export default function Recommendations({
         <div className="rec-hero-header-bar">
           <div className="rec-badge">
             <span className="rec-pulse-dot" />
-            AI Recommendation Agent & Study Coach
+            Personal study coach
           </div>
 
           <button
             type="button"
             className="rec-theme-toggle"
-            onClick={toggleTheme}
+            onClick={onToggleTheme}
             aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
             title={`Toggle ${theme === "dark" ? "Light" : "Dark"} Mode`}
           >
@@ -328,10 +321,9 @@ export default function Recommendations({
           </button>
         </div>
 
-        <h1 className="rec-hero-title">Personalized Knowledge Gap Analysis</h1>
+        <h1 className="rec-hero-title">Your personal revision guide</h1>
         <p className="rec-hero-subtitle">
-          Intelligently inspects student assessment logs, calculates fine-grained topic mastery,
-          provides explainable pedagogical justifications, and formulates targeted Socratic review packages for the Tutor Agent.
+          Review quiz results, see which topics need more attention, and choose a clear next step for your study session.
         </p>
         <div className="rec-hero-disclaimer">
           <span>ℹ️</span>

@@ -33,7 +33,7 @@
 }
 
 .ui-button-primary:hover:not(:disabled) {
-  background: #91e0d5;
+  background: var(--color-accent-strong);
 }
 
 .ui-button-ghost {
