@@ -239,3 +239,7 @@ frontend/package-lock.json
 /LearnMate_AI_Mid_Evaluation.pptx
 /LearnMate_AI_Mid_Evaluation.pptx.inspect.ndjson
 /LearnMate_AI_Mid_Evaluation/
+
+# Individual retrieval/security assessment outputs
+docs/security-assessment/generated/
+docs/security-assessment/evidence/raw/
