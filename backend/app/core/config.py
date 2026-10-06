@@ -31,6 +31,7 @@ DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES = 60
 DEFAULT_MAX_SEARCH_QUERY_CHARACTERS = 4_096
 DEFAULT_SEARCH_RATE_LIMIT_REQUESTS = 10
 DEFAULT_SEARCH_RATE_LIMIT_WINDOW_SECONDS = 10
+DEFAULT_MAX_RETRIEVAL_COSINE_DISTANCE = 0.8
 
 JWT_SECRET_KEY = os.getenv("LEARNMATE_JWT_SECRET_KEY", "").strip()
 JWT_ALGORITHM = "HS256"
@@ -101,6 +102,32 @@ SEARCH_RATE_LIMIT_WINDOW_SECONDS = _read_positive_integer(
     "LEARNMATE_SEARCH_RATE_LIMIT_WINDOW_SECONDS",
     DEFAULT_SEARCH_RATE_LIMIT_WINDOW_SECONDS,
 )
+
+
+def _read_retrieval_distance_limit() -> float:
+    """Read a valid cosine-distance cutoff for semantic retrieval."""
+    configured_value = os.getenv(
+        "LEARNMATE_MAX_RETRIEVAL_COSINE_DISTANCE",
+        str(DEFAULT_MAX_RETRIEVAL_COSINE_DISTANCE),
+    )
+
+    try:
+        maximum_distance = float(configured_value)
+    except ValueError as error:
+        raise RuntimeError(
+            "LEARNMATE_MAX_RETRIEVAL_COSINE_DISTANCE must be a number."
+        ) from error
+
+    if not 0 < maximum_distance <= 2:
+        raise RuntimeError(
+            "LEARNMATE_MAX_RETRIEVAL_COSINE_DISTANCE must be greater than 0 "
+            "and no greater than 2."
+        )
+
+    return maximum_distance
+
+
+MAX_RETRIEVAL_COSINE_DISTANCE = _read_retrieval_distance_limit()
 
 
 def _read_max_image_pixels() -> int:

@@ -85,6 +85,34 @@ class RetrievalAgentTests(unittest.TestCase):
         self.assertEqual(results[0]["page_number"], 1)
         self.assertIn("Cats", results[0]["text"])
 
+    def test_semantically_unrelated_chunks_are_not_returned(self) -> None:
+        self.agent.index_document(
+            "document-a",
+            "plants.pdf",
+            [make_chunk(1, 0, "Plants use sunlight for photosynthesis.")],
+        )
+
+        results = self.agent.search(
+            "document-a",
+            "How should I care for cats?",
+            top_k=1,
+        )
+
+        self.assertEqual(results, [])
+
+    def test_result_at_distance_threshold_is_retained(self) -> None:
+        self.vector_store.max_cosine_distance = 1.0
+        self.agent.index_document(
+            "document-a",
+            "plants.pdf",
+            [make_chunk(1, 0, "Plants use sunlight for photosynthesis.")],
+        )
+
+        results = self.agent.search("document-a", "cat care", top_k=1)
+
+        self.assertEqual(len(results), 1)
+        self.assertAlmostEqual(results[0]["distance"], 1.0)
+
     def test_search_is_filtered_by_document_id(self) -> None:
         self.agent.index_document(
             "document-a",
