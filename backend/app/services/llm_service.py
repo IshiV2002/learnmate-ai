@@ -33,6 +33,11 @@ class LLMService:
         re.compile(r"\b(?:follow|obey|execute)\b.{0,40}\b(?:these|this|the following)\b.{0,20}\binstructions?\b", re.IGNORECASE),
         re.compile(r"\b(?:system|developer|application)\s+(?:rules?|instructions?|prompts?)\b", re.IGNORECASE),
     )
+    NUMERIC_CLAIM_PATTERN = re.compile(
+        r"\b(?P<value>\d+(?:\.\d+)?)\s*"
+        r"(?P<unit>credits?|percent|%|hours?|days?|weeks?|months?|years?|points?|marks?)\b",
+        re.IGNORECASE,
+    )
 
     def __init__(
         self,
@@ -258,15 +263,46 @@ class LLMService:
         source_name = first_chunk.get("source", "the lecture slides") if first_chunk else "the lecture"
         excerpt = first_chunk.get("text", "")[:200].strip() if first_chunk else ""
 
-        unsafe_chunk = next(
-            (
-                chunk
-                for chunk in lecture_chunks
-                if self._contains_retrieved_instruction(chunk.get("text", ""))
-            ),
-            None,
-        )
-        if unsafe_chunk is not None:
+        unsafe_chunks = [
+            chunk
+            for chunk in lecture_chunks
+            if self._contains_retrieved_instruction(chunk.get("text", ""))
+        ]
+        safe_chunks = [chunk for chunk in lecture_chunks if chunk not in unsafe_chunks]
+
+        numeric_conflict = self._find_numeric_conflict(safe_chunks)
+        if numeric_conflict is not None:
+            unit, claims = numeric_conflict
+            display_unit = "percent" if unit == "percent" else f"{unit}s"
+            claim_lines = "\n".join(
+                f"- {claim['source']} (Page {claim['page_number']}) states "
+                f"**{claim['value']} {display_unit}**."
+                for claim in claims
+            )
+            safety_notice = ""
+            if unsafe_chunks:
+                safety_notice = (
+                    "I also excluded an untrusted instruction found in the retrieved "
+                    "material and will not follow it.\n\n"
+                )
+            reply = (
+                f"{safety_notice}"
+                "I found conflicting evidence in the retrieved course material:\n\n"
+                f"{claim_lines}\n\n"
+                "These passages give different values for the same measure. I cannot "
+                "determine which value is authoritative from the uploaded material "
+                "alone, so please verify the latest official source before relying on "
+                "either value."
+            )
+            followups = [
+                "Help me compare the surrounding text on both pages.",
+                "What authoritative source should I use to resolve this conflict?",
+                "Summarize the conflict with both page references.",
+            ]
+            return reply, followups, None
+
+        if unsafe_chunks:
+            unsafe_chunk = unsafe_chunks[0]
             unsafe_page = unsafe_chunk.get("page_number", "?")
             unsafe_source = unsafe_chunk.get("source", "the uploaded material")
             reply = (
@@ -356,6 +392,32 @@ class LLMService:
         """Identify common instructions aimed at the AI inside retrieved source data."""
         candidate = str(text)
         return any(pattern.search(candidate) for pattern in cls.RETRIEVED_INSTRUCTION_PATTERNS)
+
+    @classmethod
+    def _find_numeric_conflict(
+        cls,
+        lecture_chunks: list[dict[str, Any]],
+    ) -> tuple[str, list[dict[str, str]]] | None:
+        """Return differently valued claims that use the same measurable unit."""
+        claims_by_unit: dict[str, list[dict[str, str]]] = {}
+        for chunk in lecture_chunks:
+            text = str(chunk.get("text", ""))
+            for match in cls.NUMERIC_CLAIM_PATTERN.finditer(text):
+                raw_unit = match.group("unit").lower()
+                unit = "percent" if raw_unit == "%" else raw_unit.rstrip("s")
+                claim = {
+                    "value": match.group("value"),
+                    "page_number": str(chunk.get("page_number", "?")),
+                    "source": str(chunk.get("source", "the uploaded material")),
+                }
+                if claim not in claims_by_unit.setdefault(unit, []):
+                    claims_by_unit[unit].append(claim)
+
+        for unit, claims in claims_by_unit.items():
+            distinct_values = {float(claim["value"]) for claim in claims}
+            if len(distinct_values) > 1:
+                return unit, claims
+        return None
 
     def generate_quiz_questions(
         self,
