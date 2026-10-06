@@ -78,11 +78,11 @@ function Auth({ onAuthenticated, onViewPlans }) {
         <div className="auth-brand">
           <span className="app-brand-mark" aria-hidden="true">LM</span>
           <div>
-            <strong>LearnMate AI</strong>
-            <span>Personal knowledge workspace</span>
+            <strong>LearnMate</strong>
+            <span>Personal study workspace</span>
           </div>
         </div>
-        <p className="auth-eyebrow">Four agents. One learning journey.</p>
+        <p className="auth-eyebrow">Four study tools. One learning journey.</p>
         <h1 id="auth-heading">Your course material becomes a connected learning space.</h1>
         <p className="auth-introduction">
           Upload trusted material, learn with grounded tutoring, test your
@@ -92,7 +92,7 @@ function Auth({ onAuthenticated, onViewPlans }) {
           <button onClick={onViewPlans} type="button">Explore plans</button>
           <span>No payment or subscription is required in this prototype.</span>
         </div>
-        <div className="auth-agent-map" aria-label="LearnMate agent capabilities">
+        <div className="auth-agent-map" aria-label="LearnMate study tools">
           {[
             ["01", "Retrieval", "Finds relevant sections with page references"],
             ["02", "Tutor", "Builds explanations from your indexed material"],

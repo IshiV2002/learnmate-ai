@@ -3,15 +3,18 @@ import { useEffect, useState } from "react";
 import AppShell from "./components/layout/AppShell.jsx";
 import { useAuth } from "./auth/AuthContext.jsx";
 import Auth from "./pages/Auth.jsx";
+import Home from "./pages/Home.jsx";
 import Materials from "./pages/Materials.jsx";
 import Plans from "./pages/Plans.jsx";
 import Quiz from "./pages/Quiz.jsx";
 import Recommendations from "./pages/Recommendations.jsx";
 import Tutor from "./pages/Tutor.jsx";
+import { useTheme } from "./theme/useTheme.js";
 
 function App() {
   const { user, isAuthLoading, completeAuthentication, logout } = useAuth();
-  const [currentPage, setCurrentPage] = useState("quiz");
+  const { theme, toggleTheme } = useTheme();
+  const [currentPage, setCurrentPage] = useState("home");
   const [handoffSubmission, setHandoffSubmission] = useState(null);
   const [handoffRecommendation, setHandoffRecommendation] = useState(null);
   const [tutorHandoff, setTutorHandoff] = useState(null);
@@ -60,8 +63,20 @@ function App() {
     setCurrentPage("tutor");
   };
 
+  function handleAuthentication(authentication) {
+    setCurrentPage("home");
+    completeAuthentication(authentication);
+  }
+
   if (showPlans) {
-    return <Plans isAuthenticated={Boolean(user)} onGetStarted={closePlans} />;
+    return (
+      <Plans
+        isAuthenticated={Boolean(user)}
+        onGetStarted={closePlans}
+        onToggleTheme={toggleTheme}
+        theme={theme}
+      />
+    );
   }
 
   if (isAuthLoading) {
@@ -71,7 +86,7 @@ function App() {
   if (!user) {
     return (
       <Auth
-        onAuthenticated={completeAuthentication}
+        onAuthenticated={handleAuthentication}
         onViewPlans={openPlans}
       />
     );
@@ -82,9 +97,12 @@ function App() {
       currentPage={currentPage}
       onLogout={logout}
       onNavigate={setCurrentPage}
+      onToggleTheme={toggleTheme}
       onViewPlans={openPlans}
+      theme={theme}
       user={user}
     >
+      {currentPage === "home" && <Home onNavigate={setCurrentPage} user={user} />}
       {currentPage === "materials" && <Materials />}
       {currentPage === "quiz" && (
         <Quiz onNavigateToRecommendations={handleNavigateToRecommendations} />
@@ -94,6 +112,8 @@ function App() {
           initialSubmission={handoffSubmission}
           initialRecommendation={handoffRecommendation}
           onLaunchTutor={handleLaunchTutorHandoff}
+          onToggleTheme={toggleTheme}
+          theme={theme}
         />
       )}
       {currentPage === "tutor" && (

@@ -1,0 +1,206 @@
+/* Light mode is the default. These rules replace older page-specific dark fills. */
+:root[data-theme="light"] body {
+  background:
+    radial-gradient(circle at 82% -12%, rgb(206 195 229 / 30%), transparent 31rem),
+    radial-gradient(circle at 14% 94%, rgb(190 220 199 / 30%), transparent 34rem),
+    var(--color-canvas);
+}
+
+:root[data-theme="light"] .ambient-grid {
+  opacity: 0.26;
+  background-image:
+    linear-gradient(rgb(81 111 91 / 5%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(81 111 91 / 5%) 1px, transparent 1px);
+}
+
+:root[data-theme="light"] .ambient-aurora-one { background: #d5cbe7; }
+:root[data-theme="light"] .ambient-aurora-two { background: #c4dfcf; }
+:root[data-theme="light"] .network-line,
+:root[data-theme="light"] .network-node { opacity: 0.1; }
+
+:root[data-theme="light"] .app-sidebar {
+  background: rgb(252 253 249 / 90%);
+}
+
+:root[data-theme="light"] .app-topbar {
+  background: rgb(247 247 241 / 82%);
+}
+
+:root[data-theme="light"] .mobile-navigation-panel {
+  background: #fbfcf8;
+  box-shadow: 24px 0 70px rgb(63 79 68 / 18%);
+}
+
+:root[data-theme="light"] .mobile-navigation-backdrop {
+  background: rgb(36 48 41 / 34%);
+}
+
+:root[data-theme="light"] .app-brand:hover,
+:root[data-theme="light"] .app-nav-item:hover,
+:root[data-theme="light"] .sidebar-footer,
+:root[data-theme="light"] .nav-icon-box,
+:root[data-theme="light"] .ui-button-ghost,
+:root[data-theme="light"] .ui-badge,
+:root[data-theme="light"] .vault-hero-trust span,
+:root[data-theme="light"] .quiz-hero-trust span,
+:root[data-theme="light"] .tutor-hero-trust span,
+:root[data-theme="light"] .vault-security-label,
+:root[data-theme="light"] .quiz-security-label {
+  background: rgb(255 255 255 / 64%);
+}
+
+:root[data-theme="light"] .app-brand-mark {
+  color: #fff;
+  background:
+    radial-gradient(circle at 75% 25%, rgb(184 166 210 / 70%), transparent 42%),
+    linear-gradient(145deg, #789f8a, #758aa0);
+  box-shadow: inset 0 1px rgb(255 255 255 / 35%), 0 8px 20px rgb(63 79 68 / 13%);
+}
+
+:root[data-theme="light"] .app-nav-item-active {
+  border-color: rgb(91 139 119 / 20%);
+  background: linear-gradient(90deg, rgb(205 229 215 / 75%), rgb(235 228 244 / 55%));
+}
+
+:root[data-theme="light"] .nav-icon-box {
+  color: var(--color-text-muted);
+}
+
+:root[data-theme="light"] .theme-toggle {
+  border-color: rgb(136 126 176 / 22%);
+  color: #6d648e;
+  background: #f3eff8;
+}
+
+:root[data-theme="light"] :where(.vault-hero, .quiz-hero, .tutor-hero) {
+  background:
+    radial-gradient(circle at 88% 12%, rgb(220 210 237 / 58%), transparent 22rem),
+    radial-gradient(circle at 10% 88%, rgb(210 232 216 / 58%), transparent 22rem),
+    linear-gradient(145deg, #fcfdf9, #f2f5ee);
+}
+
+:root[data-theme="light"] :where(.vault-hero, .quiz-hero, .tutor-hero)::before {
+  opacity: 0.35;
+  background-image:
+    linear-gradient(rgb(81 111 91 / 5%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(81 111 91 / 5%) 1px, transparent 1px);
+}
+
+:root[data-theme="light"] :where(.vault-hero-trust span, .quiz-hero-trust span, .tutor-hero-trust span, .vault-security-label, .quiz-security-label, .tutor-security-label) {
+  color: var(--color-text-muted);
+}
+
+:root[data-theme="light"] :where(.vault-knowledge-map, .quiz-assessment-map, .tutor-stat-grid > div) {
+  border-color: var(--color-border);
+  background: rgb(255 255 255 / 66%);
+  box-shadow: inset 0 1px rgb(255 255 255 / 70%);
+}
+
+:root[data-theme="light"] :where(.vault-map-node, .quiz-map-node) {
+  background: #f4faf5;
+}
+
+:root[data-theme="light"] :where(.vault-map-core, .quiz-map-core, .tutor-map-core, .vault-upload-icon, .quiz-empty-document, .vault-empty-document, .tutor-empty-icon-core) {
+  color: var(--color-accent-strong);
+  background: linear-gradient(145deg, #e4f0e7, #eee9f5);
+  box-shadow: 0 10px 26px rgb(82 113 94 / 12%);
+}
+
+:root[data-theme="light"] :where(.vault-stat-grid > div, .quiz-stat-grid > div) {
+  background: rgb(255 255 255 / 72%);
+}
+
+:root[data-theme="light"] :where(.vault-panel, .quiz-panel, .knowledge-source-card, .saved-quiz-card, .tutor-panel, .tutor-chat-card, .tutor-evidence-drawer) {
+  color: var(--color-text);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+:root[data-theme="light"] :where(.vault-dropzone, .quiz-doc-multiselect-wrap, .question-display-card) {
+  background:
+    radial-gradient(circle at 10% 50%, rgb(195 224 207 / 28%), transparent 14rem),
+    #fafcf8;
+}
+
+:root[data-theme="light"] .vault-dropzone:hover,
+:root[data-theme="light"] .vault-dropzone:focus-within,
+:root[data-theme="light"] .vault-dropzone-dragging {
+  background:
+    radial-gradient(circle at 10% 50%, rgb(195 224 207 / 45%), transparent 15rem),
+    #f5faf5;
+  box-shadow: inset 0 0 0 1px rgb(117 170 153 / 8%), 0 14px 32px rgb(63 79 68 / 8%);
+}
+
+:root[data-theme="light"] :where(.source-metadata-item, .quiz-form-control, .tutor-form-control, .tutor-chat-textarea, .app-content input[type="text"], .app-content input[type="number"], .app-content select, .app-content textarea) {
+  color: var(--color-text);
+  background: #fbfcf9;
+}
+
+:root[data-theme="light"] :where(.source-grounding-note, .tutor-chat-header, .tutor-input-bar, .tutor-evidence-header, .tutor-evidence-desc) {
+  background: #f7f9f4;
+}
+
+:root[data-theme="light"] :where(.quiz-format-pill, .quiz-scope-btn, .quiz-refresh-btn, .tf-option-card, .quiz-tag, .tutor-mode-pill, .tutor-evidence-count-badge) {
+  background: #fafbf8;
+}
+
+:root[data-theme="light"] :where(.vault-delete-dialog, .quiz-delete-dialog) {
+  background: var(--color-surface);
+  box-shadow: 0 28px 90px rgb(63 79 68 / 24%);
+}
+
+:root[data-theme="light"] :where(.vault-modal-backdrop, .quiz-modal-backdrop, .app-content .modal-overlay) {
+  background: rgb(36 48 41 / 42%);
+}
+
+:root[data-theme="light"] .app-content :where(.panel, .card-panel, .tutor-control-panel, .question-display-card, .result-item-card) {
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+
+:root[data-theme="light"] .app-content :where(.document-card, .saved-quiz-card, .option-card, .question-item, .topic-mastery-row, .action-item-card, .evidence-chunk-card) {
+  color: var(--color-text);
+  background: #fbfcf9;
+}
+
+:root[data-theme="light"] .app-content :where(.document-card, .saved-quiz-card, .option-card, .action-item-card, .evidence-chunk-card):hover {
+  background: #f4f7f0;
+}
+
+:root[data-theme="light"] :where(.auth-page) {
+  background:
+    radial-gradient(circle at 16% 18%, rgb(190 220 199 / 40%), transparent 28%),
+    radial-gradient(circle at 80% 82%, rgb(211 201 231 / 42%), transparent 27%),
+    var(--color-canvas);
+}
+
+:root[data-theme="light"] .auth-page::before {
+  background-image:
+    linear-gradient(rgb(81 111 91 / 5%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(81 111 91 / 5%) 1px, transparent 1px);
+}
+
+:root[data-theme="light"] :where(.auth-agent-map article, .auth-panel) {
+  background: rgb(255 255 255 / 76%);
+}
+
+:root[data-theme="light"] .auth-tabs {
+  background: #eef2ea;
+}
+
+:root[data-theme="light"] .auth-form input {
+  background: #fff;
+}
+
+:root[data-theme="light"] :where(.auth-error, .vault-feedback-error, .quiz-feedback-error, .tutor-feedback-error) {
+  color: #9e4d52;
+}
+
+@media (max-width: 720px) {
+  :root[data-theme="light"] .theme-toggle {
+    width: 40px;
+    min-height: 40px;
+    padding: 0;
+    font-size: 0;
+  }
+}

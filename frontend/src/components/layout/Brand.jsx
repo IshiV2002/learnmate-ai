@@ -1,10 +1,10 @@
 function Brand({ onNavigate }) {
   return (
-    <button className="app-brand" onClick={() => onNavigate("materials")} type="button">
+    <button className="app-brand" onClick={() => onNavigate("home")} type="button">
       <span className="app-brand-mark" aria-hidden="true">LM</span>
       <span className="app-brand-copy">
-        <strong>LearnMate AI</strong>
-        <small>Knowledge Universe</small>
+        <strong>LearnMate</strong>
+        <small>Study workspace</small>
       </span>
     </button>
   );

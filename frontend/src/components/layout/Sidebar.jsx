@@ -6,15 +6,15 @@ function Sidebar({ currentPage, onNavigate }) {
   return (
     <aside className="app-sidebar">
       <Brand onNavigate={onNavigate} />
-      <p className="sidebar-context">Learning workspace</p>
+      <p className="sidebar-context">My study space</p>
       <Navigation currentPage={currentPage} onNavigate={onNavigate} />
 
       <div className="sidebar-footer">
         <div className="sidebar-footer-label">
           <span className="system-dot" aria-hidden="true" />
-          Shared agent workspace
+          Ready when you are
         </div>
-        <p>Retrieval, tutoring, assessment, and study guidance in one connected space.</p>
+        <p>Keep your materials, practice and next study steps together.</p>
         <Icon name="network" size={18} />
       </div>
     </aside>
