@@ -514,6 +514,20 @@ class DocumentSearchApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 422)
 
+    def test_maximum_query_length_is_accepted(self) -> None:
+        self.database.create_document(make_document_record("document-1"))
+
+        response = self.client.post(
+            "/documents/search",
+            json={
+                "document_id": "document-1",
+                "query": "a" * documents.MAX_SEARCH_QUERY_CHARACTERS,
+                "top_k": 3,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+
     def test_authenticated_search_burst_is_rate_limited(self) -> None:
         self.database.create_document(make_document_record("document-1"))
 
