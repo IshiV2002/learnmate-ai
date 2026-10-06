@@ -27,6 +27,13 @@ class LLMService:
         "say clearly when that evidence is insufficient."
     )
 
+    RETRIEVED_INSTRUCTION_PATTERNS = (
+        re.compile(r"\bignore\b.{0,80}\b(?:rules?|instructions?|prompts?)\b", re.IGNORECASE),
+        re.compile(r"\b(?:reveal|disclose|expose|print|show)\b.{0,80}\b(?:secrets?|credentials?|passwords?|tokens?|system prompts?|hidden instructions?)\b", re.IGNORECASE),
+        re.compile(r"\b(?:follow|obey|execute)\b.{0,40}\b(?:these|this|the following)\b.{0,20}\binstructions?\b", re.IGNORECASE),
+        re.compile(r"\b(?:system|developer|application)\s+(?:rules?|instructions?|prompts?)\b", re.IGNORECASE),
+    )
+
     def __init__(
         self,
         api_key: str | None = None,
@@ -251,6 +258,32 @@ class LLMService:
         source_name = first_chunk.get("source", "the lecture slides") if first_chunk else "the lecture"
         excerpt = first_chunk.get("text", "")[:200].strip() if first_chunk else ""
 
+        unsafe_chunk = next(
+            (
+                chunk
+                for chunk in lecture_chunks
+                if self._contains_retrieved_instruction(chunk.get("text", ""))
+            ),
+            None,
+        )
+        if unsafe_chunk is not None:
+            unsafe_page = unsafe_chunk.get("page_number", "?")
+            unsafe_source = unsafe_chunk.get("source", "the uploaded material")
+            reply = (
+                "Safety notice: the retrieved passage contains an untrusted instruction "
+                "directed at the AI. I will not follow it or treat it as authoritative "
+                "course content. The passage remains source data for review, with its "
+                f"provenance preserved as {unsafe_source} (Page {unsafe_page}).\n\n"
+                "Please verify the surrounding material or use a trusted section before "
+                "relying on it for learning."
+            )
+            followups = [
+                "Show me a different trusted section on this topic.",
+                "How can I verify this passage against the source?",
+                "Explain why instructions inside uploaded material are untrusted.",
+            ]
+            return reply, followups, None
+
         if mode == "socratic":
             if lecture_chunks:
                 reply = (
@@ -317,6 +350,12 @@ class LLMService:
         ]
         check_q = f"How would the system behave if {primary_topic} was omitted?"
         return reply, followups, check_q
+
+    @classmethod
+    def _contains_retrieved_instruction(cls, text: object) -> bool:
+        """Identify common instructions aimed at the AI inside retrieved source data."""
+        candidate = str(text)
+        return any(pattern.search(candidate) for pattern in cls.RETRIEVED_INSTRUCTION_PATTERNS)
 
     def generate_quiz_questions(
         self,
