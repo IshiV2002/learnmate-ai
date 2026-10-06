@@ -28,6 +28,9 @@ FRONTEND_ORIGINS = [
 DEFAULT_MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
 DEFAULT_MAX_IMAGE_PIXELS = 25_000_000
 DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES = 60
+DEFAULT_MAX_SEARCH_QUERY_CHARACTERS = 4_096
+DEFAULT_SEARCH_RATE_LIMIT_REQUESTS = 10
+DEFAULT_SEARCH_RATE_LIMIT_WINDOW_SECONDS = 10
 
 JWT_SECRET_KEY = os.getenv("LEARNMATE_JWT_SECRET_KEY", "").strip()
 JWT_ALGORITHM = "HS256"
@@ -69,6 +72,35 @@ def _read_max_upload_size() -> int:
 
 
 MAX_UPLOAD_SIZE_BYTES = _read_max_upload_size()
+
+
+def _read_positive_integer(name: str, default: int) -> int:
+    """Read a positive whole-number security setting from the environment."""
+    configured_value = os.getenv(name, str(default))
+
+    try:
+        value = int(configured_value)
+    except ValueError as error:
+        raise RuntimeError(f"{name} must be a whole number.") from error
+
+    if value <= 0:
+        raise RuntimeError(f"{name} must be greater than zero.")
+
+    return value
+
+
+MAX_SEARCH_QUERY_CHARACTERS = _read_positive_integer(
+    "LEARNMATE_MAX_SEARCH_QUERY_CHARACTERS",
+    DEFAULT_MAX_SEARCH_QUERY_CHARACTERS,
+)
+SEARCH_RATE_LIMIT_REQUESTS = _read_positive_integer(
+    "LEARNMATE_SEARCH_RATE_LIMIT_REQUESTS",
+    DEFAULT_SEARCH_RATE_LIMIT_REQUESTS,
+)
+SEARCH_RATE_LIMIT_WINDOW_SECONDS = _read_positive_integer(
+    "LEARNMATE_SEARCH_RATE_LIMIT_WINDOW_SECONDS",
+    DEFAULT_SEARCH_RATE_LIMIT_WINDOW_SECONDS,
+)
 
 
 def _read_max_image_pixels() -> int:

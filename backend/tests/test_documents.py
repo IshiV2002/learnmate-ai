@@ -24,6 +24,7 @@ from app.services.image_ocr_service import (
     ImagePixelLimitError,
 )
 from app.services.pdf_service import extract_pdf_pages
+from app.services.rate_limit_service import SlidingWindowRateLimiter
 from app.services.vector_store_service import VectorStoreService
 from tests.auth_helpers import make_test_user
 
@@ -476,11 +477,18 @@ class DocumentSearchApiTests(unittest.TestCase):
             return_value=self.database,
         )
         self.database_patch.start()
+        self.rate_limiter_patch = patch.object(
+            documents,
+            "_search_rate_limiter",
+            SlidingWindowRateLimiter(max_requests=10, window_seconds=10),
+        )
+        self.rate_limiter_patch.start()
         app.dependency_overrides[get_current_user] = lambda: TEST_USER
         self.client = TestClient(app)
 
     def tearDown(self) -> None:
         self.client.close()
+        self.rate_limiter_patch.stop()
         self.database_patch.stop()
         self.retrieval_agent_patch.stop()
         app.dependency_overrides.pop(get_current_user, None)
@@ -493,6 +501,48 @@ class DocumentSearchApiTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 422)
+
+    def test_excessive_query_length_is_rejected_before_search(self) -> None:
+        response = self.client.post(
+            "/documents/search",
+            json={
+                "document_id": "document-1",
+                "query": "a" * (documents.MAX_SEARCH_QUERY_CHARACTERS + 1),
+                "top_k": 3,
+            },
+        )
+
+        self.assertEqual(response.status_code, 422)
+
+    def test_authenticated_search_burst_is_rate_limited(self) -> None:
+        self.database.create_document(make_document_record("document-1"))
+
+        with patch.object(
+            documents,
+            "_search_rate_limiter",
+            SlidingWindowRateLimiter(max_requests=2, window_seconds=60),
+        ):
+            responses = [
+                self.client.post(
+                    "/documents/search",
+                    json={
+                        "document_id": "document-1",
+                        "query": f"machine learning request {index}",
+                        "top_k": 3,
+                    },
+                )
+                for index in range(3)
+            ]
+
+        self.assertEqual(
+            [response.status_code for response in responses],
+            [200, 200, 429],
+        )
+        self.assertEqual(
+            responses[-1].json(),
+            {"detail": "Too many semantic search requests. Try again shortly."},
+        )
+        self.assertEqual(responses[-1].headers["retry-after"], "60")
 
     def test_local_frontend_origin_is_allowed_by_cors(self) -> None:
         response = self.client.options(
