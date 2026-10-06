@@ -18,7 +18,7 @@ from app.services.image_ocr_service import (
     ImagePixelLimitError,
     extract_image_page,
 )
-from app.services.pdf_service import PDFExtractionError, extract_pdf_pages
+from app.services.pdf_service import PDFExtractionError, extract_pdf_pages_from_bytes
 from app.services.text_processing_service import chunk_pages
 
 
@@ -221,6 +221,19 @@ async def upload_document(
 
     if material_type == "pdf":
         stored_content = file_content
+        # Validate and parse untrusted PDF bytes before persistent storage. This
+        # also prevents PyMuPDF from holding a Windows file lock during cleanup.
+        try:
+            pages = await run_in_threadpool(
+                extract_pdf_pages_from_bytes,
+                stored_content,
+            )
+        except PDFExtractionError as error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(error),
+            ) from error
+
         try:
             UPLOAD_DIRECTORY.mkdir(parents=True, exist_ok=True)
             stored_path.write_bytes(stored_content)
@@ -228,15 +241,6 @@ async def upload_document(
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="The material could not be saved.",
-            ) from error
-
-        try:
-            pages = extract_pdf_pages(stored_path)
-        except PDFExtractionError as error:
-            stored_path.unlink(missing_ok=True)
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(error),
             ) from error
     else:
         try:

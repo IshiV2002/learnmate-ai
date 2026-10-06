@@ -323,6 +323,45 @@ class DocumentUploadTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.database.list_documents(), [])
         self.assertEqual(list(self.upload_directory.glob("*.pdf")), [])
 
+    async def test_corrupt_pdf_is_rejected_before_storage(self) -> None:
+        upload = create_upload(
+            b"%PDF-1.7\nsynthetic truncated test input",
+            "corrupt.pdf",
+            "application/pdf",
+        )
+
+        with self.assertRaises(HTTPException) as raised_error:
+            await documents.upload_document(TEST_USER, upload)
+
+        self.assertEqual(raised_error.exception.status_code, 400)
+        self.assertEqual(
+            raised_error.exception.detail,
+            "The uploaded PDF could not be opened or processed.",
+        )
+        self.assertEqual(self.fake_retrieval_agent.indexed_document_ids, [])
+        self.assertEqual(self.database.list_documents(), [])
+        self.assertEqual(list(self.upload_directory.glob("*.pdf")), [])
+
+    async def test_truncated_pdf_is_rejected_before_storage(self) -> None:
+        truncated_pdf = create_test_pdf(["Truncated PDF test content"])[:128]
+        upload = create_upload(
+            truncated_pdf,
+            "truncated.pdf",
+            "application/pdf",
+        )
+
+        with self.assertRaises(HTTPException) as raised_error:
+            await documents.upload_document(TEST_USER, upload)
+
+        self.assertEqual(raised_error.exception.status_code, 400)
+        self.assertEqual(
+            raised_error.exception.detail,
+            "The uploaded PDF could not be opened or processed.",
+        )
+        self.assertEqual(self.fake_retrieval_agent.indexed_document_ids, [])
+        self.assertEqual(self.database.list_documents(), [])
+        self.assertEqual(list(self.upload_directory.glob("*.pdf")), [])
+
     async def test_database_failure_rolls_back_chroma_and_uploaded_pdf(self) -> None:
         upload = create_upload(
             create_test_pdf(["Rollback lecture notes"]),
