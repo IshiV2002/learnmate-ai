@@ -396,10 +396,10 @@ function Quiz({ onNavigateToRecommendations }) {
                 <span className="quiz-empty-connection" />
               </div>
               <p className="quiz-section-kicker">Knowledge Vault required</p>
-              <h3>No lecture materials found</h3>
+              <h3>No course materials found</h3>
               <p>
-                Please upload a course PDF in the <strong>Knowledge Vault (Materials)</strong>{" "}
-                tab before generating personalized assessments.
+                Upload a course PDF or a clear PNG/JPG image containing readable text in the{" "}
+                <strong> Knowledge Vault (Materials)</strong> tab before generating personalized assessments.
               </p>
             </div>
           ) : (
@@ -425,7 +425,7 @@ function Quiz({ onNavigateToRecommendations }) {
                 <form className="quiz-config-form" onSubmit={handleGenerateQuiz}>
                   <div className="quiz-form-row">
                     <div className="quiz-form-group">
-                      <label htmlFor="doc-select">Target Lecture PDF</label>
+                      <label htmlFor="doc-select">Target Course Material</label>
                       <select
                         id="doc-select"
                         className="quiz-form-control"
