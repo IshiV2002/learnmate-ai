@@ -14,6 +14,7 @@ class UserRecord:
     email: str
     password_hash: str
     created_at: str
+    google_subject: str | None = None
 
     def to_public_dict(self) -> dict[str, str]:
         return {
@@ -69,6 +70,17 @@ class LoginRequest(BaseModel):
     @classmethod
     def normalize_email(cls, value: str) -> str:
         return value.strip().lower()
+
+
+class GoogleLoginRequest(BaseModel):
+    """Google Identity Services credential submitted for server verification."""
+
+    credential: str = Field(..., min_length=100, max_length=10_000)
+
+    @field_validator("credential")
+    @classmethod
+    def clean_credential(cls, value: str) -> str:
+        return value.strip()
 
 
 class UserResponse(BaseModel):

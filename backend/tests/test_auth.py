@@ -5,14 +5,30 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from app.api import documents
+from app.api import auth, documents
 from app.core import security
+from app.core.google_auth import (
+    GoogleIdentity,
+    GoogleIdentityVerificationError,
+)
 from app.database.database import DocumentDatabase, get_application_database
 from app.database.models import DocumentRecord
 from app.main import app
+from app.services.rate_limit_service import SlidingWindowRateLimiter
 
 
 TEST_SECRET = "test-only-secret-key-with-at-least-thirty-two-characters"
+
+
+class FakeClock:
+    def __init__(self) -> None:
+        self.current_time = 0.0
+
+    def __call__(self) -> float:
+        return self.current_time
+
+    def advance(self, seconds: float) -> None:
+        self.current_time += seconds
 
 
 class AuthenticationApiTests(unittest.TestCase):
@@ -34,10 +50,24 @@ class AuthenticationApiTests(unittest.TestCase):
             TEST_SECRET,
         )
         self.secret_patch.start()
+        self.client_rate_limiter_patch = patch.object(
+            auth,
+            "_auth_client_rate_limiter",
+            SlidingWindowRateLimiter(max_requests=1_000, window_seconds=60),
+        )
+        self.identity_rate_limiter_patch = patch.object(
+            auth,
+            "_auth_identity_rate_limiter",
+            SlidingWindowRateLimiter(max_requests=1_000, window_seconds=60),
+        )
+        self.client_rate_limiter_patch.start()
+        self.identity_rate_limiter_patch.start()
         self.client = TestClient(app)
 
     def tearDown(self) -> None:
         self.client.close()
+        self.identity_rate_limiter_patch.stop()
+        self.client_rate_limiter_patch.stop()
         self.secret_patch.stop()
         self.document_database_patch.stop()
         app.dependency_overrides.clear()
@@ -130,6 +160,218 @@ class AuthenticationApiTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 401)
+
+    def test_google_login_creates_account_and_reuses_stable_subject(self) -> None:
+        identity = GoogleIdentity(
+            subject="google-student-123",
+            email="google.student@gmail.com",
+            full_name="Google Student",
+            email_is_google_authoritative=True,
+        )
+        with patch.object(auth, "verify_google_id_token", return_value=identity):
+            first_response = self.client.post(
+                "/auth/google",
+                json={"credential": "x" * 120},
+            )
+            second_response = self.client.post(
+                "/auth/google",
+                json={"credential": "y" * 120},
+            )
+
+        self.assertEqual(first_response.status_code, 200, first_response.text)
+        self.assertEqual(second_response.status_code, 200, second_response.text)
+        self.assertEqual(
+            first_response.json()["user"]["user_id"],
+            second_response.json()["user"]["user_id"],
+        )
+        stored_user = self.database.get_user_by_google_subject(identity.subject)
+        self.assertIsNotNone(stored_user)
+        self.assertNotIn("google_subject", first_response.json()["user"])
+
+    def test_google_login_links_authoritative_email_account(self) -> None:
+        signup_body = self.signup("student@gmail.com")
+        identity = GoogleIdentity(
+            subject="google-linked-456",
+            email="student@gmail.com",
+            full_name="Student One",
+            email_is_google_authoritative=True,
+        )
+
+        with patch.object(auth, "verify_google_id_token", return_value=identity):
+            response = self.client.post(
+                "/auth/google",
+                json={"credential": "z" * 120},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(
+            response.json()["user"]["user_id"],
+            signup_body["user"]["user_id"],
+        )
+        stored_user = self.database.get_user_by_google_subject(identity.subject)
+        self.assertEqual(stored_user.user_id, signup_body["user"]["user_id"])
+
+    def test_google_login_does_not_silently_link_third_party_email(self) -> None:
+        self.signup("student@example.com")
+        identity = GoogleIdentity(
+            subject="google-third-party-789",
+            email="student@example.com",
+            full_name="Student One",
+            email_is_google_authoritative=False,
+        )
+
+        with patch.object(auth, "verify_google_id_token", return_value=identity):
+            response = self.client.post(
+                "/auth/google",
+                json={"credential": "q" * 120},
+            )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIsNone(
+            self.database.get_user_by_google_subject(identity.subject)
+        )
+
+    def test_invalid_google_token_is_rejected(self) -> None:
+        with patch.object(
+            auth,
+            "verify_google_id_token",
+            side_effect=GoogleIdentityVerificationError(
+                "Google sign-in could not be verified."
+            ),
+        ):
+            response = self.client.post(
+                "/auth/google",
+                json={"credential": "invalid" * 20},
+            )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(
+            response.json()["detail"],
+            "Google sign-in could not be verified.",
+        )
+
+    def test_login_rate_limit_enforces_boundary_and_recovers(self) -> None:
+        self.signup()
+        clock = FakeClock()
+        account_limiter = SlidingWindowRateLimiter(
+            max_requests=2,
+            window_seconds=30,
+            clock=clock,
+        )
+        client_limiter = SlidingWindowRateLimiter(
+            max_requests=100,
+            window_seconds=30,
+            clock=clock,
+        )
+
+        with (
+            patch.object(auth, "_auth_client_rate_limiter", client_limiter),
+            patch.object(auth, "_auth_identity_rate_limiter", account_limiter),
+        ):
+            responses = [
+                self.client.post(
+                    "/auth/login",
+                    json={
+                        "email": "student@example.com",
+                        "password": "WrongPass9",
+                    },
+                )
+                for _ in range(3)
+            ]
+            clock.advance(30)
+            recovered_response = self.client.post(
+                "/auth/login",
+                json={
+                    "email": "student@example.com",
+                    "password": "WrongPass9",
+                },
+            )
+
+        self.assertEqual(
+            [response.status_code for response in responses],
+            [401, 401, 429],
+        )
+        self.assertEqual(responses[-1].headers["Retry-After"], "30")
+        self.assertEqual(
+            responses[-1].json()["detail"],
+            "Too many authentication attempts. Try again shortly.",
+        )
+        self.assertEqual(recovered_response.status_code, 401)
+
+    def test_successful_login_clears_account_failure_allowance(self) -> None:
+        self.signup()
+        account_limiter = SlidingWindowRateLimiter(
+            max_requests=2,
+            window_seconds=60,
+        )
+
+        with patch.object(
+            auth,
+            "_auth_identity_rate_limiter",
+            account_limiter,
+        ):
+            first_failure = self.client.post(
+                "/auth/login",
+                json={
+                    "email": "student@example.com",
+                    "password": "WrongPass9",
+                },
+            )
+            success = self.client.post(
+                "/auth/login",
+                json={
+                    "email": "student@example.com",
+                    "password": "LearnMate9",
+                },
+            )
+            failures_after_success = [
+                self.client.post(
+                    "/auth/login",
+                    json={
+                        "email": "student@example.com",
+                        "password": "WrongPass9",
+                    },
+                )
+                for _ in range(3)
+            ]
+
+        self.assertEqual(first_failure.status_code, 401)
+        self.assertEqual(success.status_code, 200)
+        self.assertEqual(
+            [response.status_code for response in failures_after_success],
+            [401, 401, 429],
+        )
+
+    def test_google_token_abuse_is_limited_before_third_verification(self) -> None:
+        client_limiter = SlidingWindowRateLimiter(
+            max_requests=2,
+            window_seconds=60,
+        )
+        verification_error = GoogleIdentityVerificationError(
+            "Google sign-in could not be verified."
+        )
+
+        with (
+            patch.object(auth, "_auth_client_rate_limiter", client_limiter),
+            patch.object(
+                auth,
+                "verify_google_id_token",
+                side_effect=verification_error,
+            ) as verifier,
+        ):
+            responses = [
+                self.client.post(
+                    "/auth/google",
+                    json={"credential": character * 120},
+                )
+                for character in ["a", "b", "c"]
+            ]
+
+        self.assertEqual(
+            [response.status_code for response in responses],
+            [401, 401, 429],
+        )
+        self.assertEqual(verifier.call_count, 2)
 
     def test_missing_jwt_secret_does_not_create_account(self) -> None:
         with patch.object(security, "JWT_SECRET_KEY", ""):

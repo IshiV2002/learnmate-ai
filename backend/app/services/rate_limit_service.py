@@ -59,3 +59,8 @@ class SlidingWindowRateLimiter:
         """Remove recorded requests, primarily for controlled test isolation."""
         with self._lock:
             self._requests_by_key.clear()
+
+    def clear_key(self, key: str) -> None:
+        """Clear one allowance after a successful authentication attempt."""
+        with self._lock:
+            self._requests_by_key.pop(key, None)

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
-import { login, signup } from "../services/api.js";
+import GoogleSignInButton from "../components/auth/GoogleSignInButton.jsx";
+import { login, loginWithGoogle, signup } from "../services/api.js";
 import { validateEmail, validateSignupForm } from "../auth/authUtils.js";
 
 
@@ -17,6 +18,7 @@ function Auth({ onAuthenticated, onViewPlans }) {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
 
   const isSignup = mode === "signup";
 
@@ -68,6 +70,19 @@ function Auth({ onAuthenticated, onViewPlans }) {
       setIsSubmitting(false);
     }
   }
+
+  const handleGoogleCredential = useCallback(async (credential) => {
+    setIsGoogleSubmitting(true);
+    setError("");
+    try {
+      const authentication = await loginWithGoogle(credential);
+      onAuthenticated(authentication, "login");
+    } catch (requestError) {
+      setError(requestError.message || "Google sign-in could not be completed.");
+    } finally {
+      setIsGoogleSubmitting(false);
+    }
+  }, [onAuthenticated]);
 
   return (
     <main className="auth-page">
@@ -136,6 +151,16 @@ function Auth({ onAuthenticated, onViewPlans }) {
           >Create account</button>
         </div>
 
+        <GoogleSignInButton
+          disabled={isSubmitting || isGoogleSubmitting}
+          mode={mode}
+          onCredential={handleGoogleCredential}
+        />
+
+        <div className="auth-divider"><span>or use email and password</span></div>
+
+        {error && <div className="auth-error" role="alert">{error}</div>}
+
         <form className="auth-form" onSubmit={handleSubmit} noValidate>
           {isSignup && (
             <label>
@@ -199,10 +224,12 @@ function Auth({ onAuthenticated, onViewPlans }) {
             </>
           )}
 
-          {error && <div className="auth-error" role="alert">{error}</div>}
-
-          <button className="auth-submit" disabled={isSubmitting} type="submit">
-            {isSubmitting
+          <button
+            className="auth-submit"
+            disabled={isSubmitting || isGoogleSubmitting}
+            type="submit"
+          >
+            {isSubmitting || isGoogleSubmitting
               ? "Securing your session…"
               : isSignup
                 ? "Create secure workspace"
@@ -212,7 +239,8 @@ function Auth({ onAuthenticated, onViewPlans }) {
 
         <div className="auth-security-note">
           <span aria-hidden="true">✓</span>
-          Passwords are one-way hashed. Your login token expires automatically.
+          Passwords are one-way hashed, Google credentials are verified by the
+          backend, and LearnMate sessions expire automatically.
         </div>
       </section>
     </main>
