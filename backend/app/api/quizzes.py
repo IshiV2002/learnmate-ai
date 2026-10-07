@@ -58,7 +58,7 @@ def _user_has_quiz_access(quiz: Any, user_id: str, db: Any) -> bool:
 @router.post(
     "/generate",
     status_code=status.HTTP_201_CREATED,
-    summary="Generate a New Assessment from Lecture PDF(s)",
+    summary="Generate a New Assessment from Uploaded Course Material",
 )
 async def generate_quiz(
     request: QuizGenerationRequest,

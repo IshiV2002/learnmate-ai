@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+from pathlib import Path
 from typing import Any, TYPE_CHECKING
 import uuid
 
@@ -32,7 +33,7 @@ class QuizAgentError(Exception):
 class QuizAgent:
     """Intelligent Quiz Agent for LearnMate AI.
     
-    Generates formative assessments grounded in retrieved lecture context,
+    Generates formative assessments grounded in retrieved course material,
     evaluates student responses, provides pedagogical feedback, and packages
     results for seamless gap analysis by the Recommendation Agent.
     """
@@ -48,7 +49,7 @@ class QuizAgent:
         self.llm_service = llm_service or LLMService()
 
     def generate_quiz(self, request: QuizGenerationRequest) -> QuizRecord:
-        """Synthesize a new quiz from indexed lecture document context (single or mixed documents)."""
+        """Synthesize a quiz from indexed PDF or OCR-processed image context."""
         target_doc_ids = [
             did.strip()
             for did in (request.document_ids or ([request.document_id] if request.document_id else []))
@@ -141,7 +142,7 @@ class QuizAgent:
         if not context_chunks:
             raise QuizAgentError(
                 "No supporting course text was found for this quiz. Try another "
-                "topic or upload a text-based PDF."
+                "topic or upload a searchable PDF or a clear image containing text."
             )
 
         # Semantic search is capped at 20 chunks. When Gemini is unavailable,
@@ -229,7 +230,7 @@ class QuizAgent:
         title = request.title
         if not title:
             if len(docs) > 1:
-                doc_names = [d.original_filename.replace(".pdf", "") for d in docs]
+                doc_names = [Path(d.original_filename).stem for d in docs]
                 first_two = ", ".join(doc_names[:2])
                 suffix = " & more" if len(doc_names) > 2 else ""
                 if request.topic:
@@ -237,7 +238,7 @@ class QuizAgent:
                 else:
                     title = f"Mixed Quiz: {first_two}{suffix}"
             else:
-                base_name = docs[0].original_filename.replace(".pdf", "")
+                base_name = Path(docs[0].original_filename).stem
                 if request.topic:
                     title = f"{base_name}: {request.topic}"
                 else:

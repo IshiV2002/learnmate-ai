@@ -95,7 +95,7 @@ export function validateQuizConfig(documentId, questionType, documentIds = []) {
   const hasSingle = Boolean(documentId && typeof documentId === "string" && documentId.trim());
   const hasMultiple = Array.isArray(documentIds) && documentIds.length > 0;
   if (!hasSingle && !hasMultiple) {
-    return "Please select a target lecture PDF.";
+    return "Please select a target course material.";
   }
   const validTypes = ["mcq", "true_false", "short_answer"];
   if (Array.isArray(questionType)) {

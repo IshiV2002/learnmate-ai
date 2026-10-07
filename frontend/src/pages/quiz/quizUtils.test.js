@@ -83,7 +83,7 @@ test("classifies student score tiers properly", () => {
 });
 
 test("validates quiz generation form configurations", () => {
-  assert.equal(validateQuizConfig("", "mcq"), "Please select a target lecture PDF.");
+  assert.equal(validateQuizConfig("", "mcq"), "Please select a target course material.");
   assert.equal(
     validateQuizConfig("doc-1", ""),
     "Select a question format (MCQ, True/False, or Short Answer).",

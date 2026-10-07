@@ -33,8 +33,8 @@ function SavedQuizCard({
   const isMixed = Boolean(quiz.document_id && quiz.document_id.includes(","));
   const docCount = isMixed ? quiz.document_id.split(",").filter(Boolean).length : 1;
   const displayDocName = isMixed
-    ? `Mixed Assessment (${docCount} Lecture PDFs)`
-    : (documentName || "Target Lecture PDF");
+    ? `Mixed Assessment (${docCount} Course Sources)`
+    : (documentName || "Target Course Material");
 
   return (
     <article className="saved-quiz-card">
