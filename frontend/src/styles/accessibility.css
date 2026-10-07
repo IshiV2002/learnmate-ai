@@ -53,4 +53,9 @@
     animation: none !important;
     transform: none !important;
   }
+
+  .app-page-frame::after,
+  .auth-book-transition {
+    display: none !important;
+  }
 }

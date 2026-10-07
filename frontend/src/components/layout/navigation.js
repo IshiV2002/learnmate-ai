@@ -36,6 +36,25 @@ export const navigationItems = [
   },
 ];
 
+const studyPageIds = new Set(["materials", "tutor", "quiz", "recommendations"]);
+
 export function getNavigationItem(pageId) {
   return navigationItems.find((item) => item.id === pageId) || navigationItems[0];
+}
+
+export function getNavigationDirection(currentPageId, nextPageId) {
+  const currentIndex = navigationItems.findIndex((item) => item.id === currentPageId);
+  const nextIndex = navigationItems.findIndex((item) => item.id === nextPageId);
+
+  if (currentIndex < 0 || nextIndex < 0 || nextIndex >= currentIndex) {
+    return "forward";
+  }
+
+  return "backward";
+}
+
+export function getNavigationTransition(currentPageId, nextPageId) {
+  return studyPageIds.has(currentPageId) && studyPageIds.has(nextPageId)
+    ? "book"
+    : "soft";
 }

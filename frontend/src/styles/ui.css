@@ -26,6 +26,10 @@
   transform: translateY(-1px);
 }
 
+.ui-button:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
 .ui-button-primary {
   color: #06110f;
   background: var(--color-accent);
