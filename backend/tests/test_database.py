@@ -166,6 +166,47 @@ class DocumentDatabaseTests(unittest.TestCase):
         self.assertIsNotNone(migrated_database.get_document("legacy"))
         self.assertEqual(migrated_database.list_documents("new-user"), [])
 
+    def test_existing_user_table_is_migrated_for_google_identity(self) -> None:
+        with closing(sqlite3.connect(self.database_path)) as connection:
+            with connection:
+                connection.execute(
+                    """
+                    CREATE TABLE users (
+                        user_id TEXT PRIMARY KEY,
+                        full_name TEXT NOT NULL,
+                        email TEXT NOT NULL UNIQUE,
+                        password_hash TEXT NOT NULL,
+                        created_at TEXT NOT NULL
+                    )
+                    """
+                )
+                connection.execute(
+                    "INSERT INTO users VALUES (?, ?, ?, ?, ?)",
+                    (
+                        "legacy-user",
+                        "Legacy Student",
+                        "legacy@gmail.com",
+                        "$argon2id$legacy-hash",
+                        "2026-01-01T00:00:00+00:00",
+                    ),
+                )
+
+        migrated_database = DocumentDatabase(self.database_path)
+        migrated_database.initialize()
+        migrated_user = migrated_database.get_user_by_id("legacy-user")
+
+        self.assertIsNone(migrated_user.google_subject)
+        migrated_database.link_google_identity(
+            migrated_user.user_id,
+            "google-legacy-subject",
+        )
+        self.assertEqual(
+            migrated_database.get_user_by_google_subject(
+                "google-legacy-subject"
+            ).user_id,
+            "legacy-user",
+        )
+
     def test_document_creation_and_primary_key_uniqueness(self) -> None:
         record = make_record("document-1", "2026-01-01T00:00:00+00:00")
         self.database.create_document(record)

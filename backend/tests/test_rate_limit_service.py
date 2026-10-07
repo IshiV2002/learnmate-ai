@@ -50,6 +50,17 @@ class SlidingWindowRateLimiterTests(unittest.TestCase):
 
         self.rate_limiter.check_request("user-1")
 
+    def test_one_key_can_be_cleared_without_resetting_other_users(self) -> None:
+        for key in ["user-1", "user-2"]:
+            self.rate_limiter.check_request(key)
+            self.rate_limiter.check_request(key)
+
+        self.rate_limiter.clear_key("user-1")
+
+        self.rate_limiter.check_request("user-1")
+        with self.assertRaises(RateLimitExceededError):
+            self.rate_limiter.check_request("user-2")
+
 
 if __name__ == "__main__":
     unittest.main()

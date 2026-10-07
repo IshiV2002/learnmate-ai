@@ -77,6 +77,14 @@ export function login(payload) {
   });
 }
 
+export function loginWithGoogle(credential) {
+  return apiRequest("/auth/google", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ credential }),
+  });
+}
+
 export function getCurrentUser() {
   return apiRequest("/auth/me");
 }
