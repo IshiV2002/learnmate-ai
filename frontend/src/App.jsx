@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import AppShell from "./components/layout/AppShell.jsx";
 import { useAuth } from "./auth/AuthContext.jsx";
@@ -10,11 +10,18 @@ import Quiz from "./pages/Quiz.jsx";
 import Recommendations from "./pages/Recommendations.jsx";
 import Tutor from "./pages/Tutor.jsx";
 import { useTheme } from "./theme/useTheme.js";
+import {
+  getNavigationDirection,
+  getNavigationTransition,
+} from "./components/layout/navigation.js";
 
 function App() {
   const { user, isAuthLoading, completeAuthentication, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [currentPage, setCurrentPage] = useState("home");
+  const [navigationDirection, setNavigationDirection] = useState("forward");
+  const [navigationTransition, setNavigationTransition] = useState("soft");
+  const [playEntryAnimation, setPlayEntryAnimation] = useState(false);
   const [handoffSubmission, setHandoffSubmission] = useState(null);
   const [handoffRecommendation, setHandoffRecommendation] = useState(null);
   const [tutorHandoff, setTutorHandoff] = useState(null);
@@ -47,6 +54,16 @@ function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function navigateToPage(nextPage) {
+    if (nextPage === currentPage) {
+      return;
+    }
+
+    setNavigationDirection(getNavigationDirection(currentPage, nextPage));
+    setNavigationTransition(getNavigationTransition(currentPage, nextPage));
+    setCurrentPage(nextPage);
+  }
+
   function handleNavigateToRecommendations(data) {
     if (data && data.recommendation_id) {
       setHandoffRecommendation(data);
@@ -55,18 +72,30 @@ function App() {
       setHandoffSubmission(data);
       setHandoffRecommendation(null);
     }
-    setCurrentPage("recommendations");
+    navigateToPage("recommendations");
   }
 
   const handleLaunchTutorHandoff = (handoff) => {
     setTutorHandoff(handoff);
-    setCurrentPage("tutor");
+    navigateToPage("tutor");
   };
 
-  function handleAuthentication(authentication) {
+  function handleAuthentication(authentication, authenticationMode) {
+    setNavigationDirection("forward");
+    setNavigationTransition("soft");
     setCurrentPage("home");
+    setPlayEntryAnimation(authenticationMode === "login");
     completeAuthentication(authentication);
   }
+
+  function handleLogout() {
+    setPlayEntryAnimation(false);
+    logout();
+  }
+
+  const finishEntryAnimation = useCallback(() => {
+    setPlayEntryAnimation(false);
+  }, []);
 
   if (showPlans) {
     return (
@@ -95,14 +124,18 @@ function App() {
   return (
     <AppShell
       currentPage={currentPage}
-      onLogout={logout}
-      onNavigate={setCurrentPage}
+      navigationDirection={navigationDirection}
+      navigationTransition={navigationTransition}
+      onEntryAnimationComplete={finishEntryAnimation}
+      onLogout={handleLogout}
+      onNavigate={navigateToPage}
       onToggleTheme={toggleTheme}
       onViewPlans={openPlans}
+      playEntryAnimation={playEntryAnimation}
       theme={theme}
       user={user}
     >
-      {currentPage === "home" && <Home onNavigate={setCurrentPage} user={user} />}
+      {currentPage === "home" && <Home onNavigate={navigateToPage} user={user} />}
       {currentPage === "materials" && <Materials />}
       {currentPage === "quiz" && (
         <Quiz onNavigateToRecommendations={handleNavigateToRecommendations} />

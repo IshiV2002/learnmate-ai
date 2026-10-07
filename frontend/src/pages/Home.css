@@ -443,6 +443,10 @@
   transform: translateY(-4px);
 }
 
+.home-action-card:active {
+  transform: translateY(-1px) scale(0.985);
+}
+
 .home-action-sage { --card-background: #f0f6ee; --card-accent: #699279; }
 .home-action-blue { --card-background: #edf4f7; --card-accent: #648ca0; }
 .home-action-peach { --card-background: #faf1e7; --card-accent: #ae7d58; }

@@ -61,7 +61,7 @@ function Auth({ onAuthenticated, onViewPlans }) {
             email: values.email.trim(),
             password: values.password,
           });
-      onAuthenticated(authentication);
+      onAuthenticated(authentication, isSignup ? "signup" : "login");
     } catch (requestError) {
       setError(requestError.message || "Authentication could not be completed.");
     } finally {
