@@ -1392,3 +1392,672 @@
     flex-direction: column;
   }
 }
+
+/* =====================================================================
+   Gamified & Psychological Learning Enhancements
+   ===================================================================== */
+
+/* 1. Assessment History Switcher Bar */
+.rec-history-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: var(--rec-surface-card);
+  border: 1px solid var(--rec-border);
+  border-radius: 14px;
+  padding: 12px 18px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 16px -4px rgba(0, 0, 0, 0.2);
+}
+
+.rec-history-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--rec-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rec-history-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1;
+}
+
+.rec-history-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: var(--rec-surface-elevated);
+  border: 1px solid var(--rec-border);
+  border-radius: 9999px;
+  color: var(--rec-text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.rec-history-chip:hover {
+  background: var(--rec-surface-hover);
+  border-color: var(--rec-border-hover);
+  transform: translateY(-1px);
+}
+
+.rec-history-chip.active {
+  background: var(--rec-accent-soft);
+  border-color: var(--rec-accent);
+  color: var(--rec-accent);
+  box-shadow: 0 0 14px -3px var(--rec-accent-glow);
+}
+
+.rec-history-chip.sandbox-chip {
+  background: var(--rec-purple-soft);
+  border-color: var(--rec-purple);
+  color: var(--rec-purple);
+}
+
+.rec-chip-date {
+  font-size: 0.72rem;
+  color: var(--rec-text-subtle);
+  font-weight: 500;
+}
+
+/* 2. Scholar Level Badge & Boost Potential */
+.rec-scholar-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+
+.rec-scholar-badge.tier-grandmaster {
+  background: rgba(16, 185, 129, 0.16);
+  border: 1px solid #10b981;
+  color: #10b981;
+}
+
+.rec-scholar-badge.tier-challenger {
+  background: rgba(56, 189, 248, 0.16);
+  border: 1px solid #38bdf8;
+  color: #38bdf8;
+}
+
+.rec-scholar-badge.tier-explorer {
+  background: rgba(245, 158, 11, 0.16);
+  border: 1px solid #f59e0b;
+  color: #f59e0b;
+}
+
+.rec-scholar-badge.tier-rising {
+  background: rgba(168, 85, 247, 0.16);
+  border: 1px solid #a855f7;
+  color: #a855f7;
+}
+
+.rec-boost-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 6px 14px;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px dashed rgba(56, 189, 248, 0.35);
+  border-radius: 10px;
+  font-size: 0.82rem;
+  color: var(--rec-text);
+}
+
+.rec-boost-arrow {
+  color: var(--rec-accent);
+  font-weight: 800;
+}
+
+.rec-boost-val {
+  color: var(--rec-emerald);
+  font-weight: 700;
+}
+
+/* 3. The Quick Win Priority Card */
+.rec-quick-win-card {
+  position: relative;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.1) 0%, rgba(168, 85, 247, 0.1) 100%), var(--rec-surface-elevated);
+  border: 1.5px solid rgba(56, 189, 248, 0.4);
+  border-radius: 18px;
+  padding: 24px;
+  margin-bottom: 28px;
+  box-shadow: 0 12px 32px -8px rgba(56, 189, 248, 0.18);
+  overflow: hidden;
+  animation: rec-glow-pulse 4s ease-in-out infinite alternate;
+}
+
+@keyframes rec-glow-pulse {
+  0% {
+    box-shadow: 0 8px 24px -8px rgba(56, 189, 248, 0.15);
+    border-color: rgba(56, 189, 248, 0.35);
+  }
+  100% {
+    box-shadow: 0 14px 36px -6px rgba(56, 189, 248, 0.32);
+    border-color: rgba(56, 189, 248, 0.7);
+  }
+}
+
+.rec-quick-win-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.rec-quick-win-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: #f59e0b;
+  color: #000;
+  font-weight: 800;
+  font-size: 0.75rem;
+  border-radius: 9999px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.rec-quick-win-boost-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: var(--rec-emerald);
+  font-size: 0.78rem;
+  font-weight: 700;
+  border-radius: 9999px;
+}
+
+.rec-quick-win-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--rec-text);
+  margin: 0 0 8px;
+}
+
+.rec-quick-win-desc {
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--rec-text-muted);
+  margin: 0 0 18px;
+  max-width: 900px;
+}
+
+.rec-quick-win-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.rec-quick-win-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
+  transition: all 0.2s ease;
+}
+
+.rec-quick-win-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(2, 132, 199, 0.45);
+}
+
+.rec-quick-win-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: var(--rec-surface);
+  color: var(--rec-text);
+  border: 1px solid var(--rec-border);
+  border-radius: 10px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.rec-quick-win-btn-secondary:hover {
+  background: var(--rec-surface-hover);
+  border-color: var(--rec-border-hover);
+  transform: translateY(-1px);
+}
+
+/* 4. Interactive Study Quest Checklist */
+.rec-quest-panel {
+  background: var(--rec-surface-card);
+  border: 1px solid var(--rec-border);
+  border-radius: 18px;
+  padding: 24px;
+  margin-bottom: 28px;
+  box-shadow: var(--rec-shadow-card);
+}
+
+.rec-quest-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.rec-quest-title-box h3 {
+  font-size: 1.15rem;
+  font-weight: 800;
+  margin: 0 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rec-quest-title-box p {
+  font-size: 0.85rem;
+  color: var(--rec-text-muted);
+  margin: 0;
+}
+
+.rec-quest-progress-box {
+  min-width: 200px;
+}
+
+.rec-quest-progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--rec-text-muted);
+  margin-bottom: 6px;
+}
+
+.rec-quest-track {
+  height: 8px;
+  background: var(--rec-surface-soft);
+  border-radius: 9999px;
+  overflow: hidden;
+  border: 1px solid var(--rec-border);
+}
+
+.rec-quest-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #38bdf8 0%, #10b981 100%);
+  border-radius: 9999px;
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.rec-quest-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rec-quest-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 18px;
+  background: var(--rec-surface-elevated);
+  border: 1px solid var(--rec-border);
+  border-radius: 14px;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.rec-quest-item:hover {
+  border-color: var(--rec-border-hover);
+  background: var(--rec-surface-hover);
+}
+
+.rec-quest-item.completed {
+  background: rgba(16, 185, 129, 0.05);
+  border-color: rgba(16, 185, 129, 0.25);
+  opacity: 0.85;
+}
+
+.rec-quest-checkbox-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  margin-top: 2px;
+  color: var(--rec-text-muted);
+  transition: transform 0.2s ease;
+}
+
+.rec-quest-checkbox-btn:hover {
+  transform: scale(1.15);
+}
+
+.rec-quest-checkbox {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 2px solid var(--rec-border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  background: var(--rec-surface);
+}
+
+.rec-quest-item.completed .rec-quest-checkbox {
+  background: var(--rec-emerald);
+  border-color: var(--rec-emerald);
+  color: #fff;
+}
+
+.rec-quest-body {
+  flex: 1;
+}
+
+.rec-quest-meta-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.rec-quest-type-tag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--rec-surface-soft);
+  color: var(--rec-text-muted);
+  border: 1px solid var(--rec-border);
+}
+
+.rec-quest-time-tag {
+  font-size: 0.75rem;
+  color: var(--rec-text-subtle);
+  font-weight: 500;
+}
+
+.rec-quest-item-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--rec-text);
+  margin: 0 0 4px;
+}
+
+.rec-quest-item.completed .rec-quest-item-title {
+  text-decoration: line-through;
+  color: var(--rec-text-muted);
+}
+
+.rec-quest-item-desc {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--rec-text-muted);
+  margin: 0 0 10px;
+}
+
+.rec-quest-cta-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.rec-quest-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--rec-accent-soft);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 8px;
+  color: var(--rec-accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.rec-quest-action-btn:hover {
+  background: var(--rec-accent);
+  color: #fff;
+}
+
+/* 5. On-the-Spot Micro-Drills */
+.rec-gap-drill-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 6px 14px;
+  background: var(--rec-purple-soft);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  border-radius: 8px;
+  color: var(--rec-purple);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.rec-gap-drill-toggle-btn:hover {
+  background: var(--rec-purple);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.rec-gap-resolved-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 6px 14px;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid #10b981;
+  border-radius: 8px;
+  color: #10b981;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.rec-micro-drill-card {
+  margin-top: 14px;
+  padding: 16px;
+  background: var(--rec-surface-card);
+  border: 1.5px dashed rgba(168, 85, 247, 0.4);
+  border-radius: 12px;
+  animation: rec-fade-in 0.25s ease-out;
+}
+
+@keyframes rec-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.rec-drill-prompt {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--rec-text);
+  margin-bottom: 12px;
+  line-height: 1.45;
+}
+
+.rec-drill-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.rec-drill-option-btn {
+  text-align: left;
+  padding: 10px 14px;
+  background: var(--rec-surface-elevated);
+  border: 1px solid var(--rec-border);
+  border-radius: 8px;
+  color: var(--rec-text);
+  font-size: 0.84rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1.4;
+}
+
+.rec-drill-option-btn:hover:not(:disabled) {
+  background: var(--rec-surface-hover);
+  border-color: var(--rec-border-hover);
+}
+
+.rec-drill-option-btn.selected-correct {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: #10b981;
+  color: #10b981;
+  font-weight: 700;
+}
+
+.rec-drill-option-btn.selected-incorrect {
+  background: rgba(244, 63, 94, 0.18);
+  border-color: #f43f5e;
+  color: #f43f5e;
+  font-weight: 600;
+}
+
+.rec-drill-feedback {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.84rem;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rec-drill-feedback.success {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid #10b981;
+  color: #10b981;
+  font-weight: 700;
+}
+
+.rec-drill-feedback.error {
+  background: rgba(244, 63, 94, 0.12);
+  border: 1px solid #f43f5e;
+  color: #f43f5e;
+}
+
+/* 6. Closed-Loop Recovery CTA Panel */
+.rec-recovery-cta-panel {
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%), var(--rec-surface-card);
+  border: 1px solid var(--rec-border);
+  border-radius: 18px;
+  padding: 28px;
+  margin-top: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 20px;
+  box-shadow: var(--rec-shadow-card);
+}
+
+.rec-recovery-cta-text h3 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  margin: 0 0 6px;
+  color: var(--rec-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rec-recovery-cta-text p {
+  font-size: 0.9rem;
+  color: var(--rec-text-muted);
+  margin: 0;
+  max-width: 650px;
+}
+
+.rec-recovery-cta-btns {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* 7. Welcome Launchpad Empty State */
+.rec-launchpad-card {
+  background: var(--rec-surface-card);
+  border: 1px solid var(--rec-border);
+  border-radius: 20px;
+  padding: 44px 32px;
+  text-align: center;
+  box-shadow: var(--rec-shadow-card);
+  margin-top: 24px;
+}
+
+.rec-launchpad-icon {
+  font-size: 3rem;
+  margin-bottom: 16px;
+  display: inline-block;
+  animation: rec-bounce 2s infinite;
+}
+
+@keyframes rec-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.rec-launchpad-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin: 0 0 10px;
+  color: var(--rec-text);
+}
+
+.rec-launchpad-desc {
+  font-size: 0.95rem;
+  color: var(--rec-text-muted);
+  max-width: 600px;
+  margin: 0 auto 28px;
+  line-height: 1.6;
+}
+
+.rec-launchpad-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+

@@ -145,6 +145,7 @@ function App() {
           initialSubmission={handoffSubmission}
           initialRecommendation={handoffRecommendation}
           onLaunchTutor={handleLaunchTutorHandoff}
+          onNavigate={navigateToPage}
           onToggleTheme={toggleTheme}
           theme={theme}
         />
