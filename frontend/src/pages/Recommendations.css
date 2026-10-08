@@ -2061,3 +2061,337 @@
   gap: 14px;
 }
 
+/* ---------------------------------------------------------------------
+   8. Assessment Question Digest (Correct vs Incorrect Breakdown)
+   --------------------------------------------------------------------- */
+
+.rec-digest-panel {
+  background: var(--rec-surface-card);
+  border: 1px solid var(--rec-border);
+  border-radius: 18px;
+  padding: 24px;
+  margin-bottom: 28px;
+  box-shadow: var(--rec-shadow-card);
+}
+
+.rec-digest-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.rec-digest-title-box h3 {
+  font-size: 1.15rem;
+  font-weight: 800;
+  margin: 0 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rec-digest-title-box p {
+  font-size: 0.85rem;
+  color: var(--rec-text-muted);
+  margin: 0;
+}
+
+.rec-digest-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--rec-surface-elevated);
+  border: 1px solid var(--rec-border);
+  border-radius: 8px;
+  color: var(--rec-text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.rec-digest-toggle-btn:hover {
+  background: var(--rec-surface-hover);
+  border-color: var(--rec-border-hover);
+}
+
+.rec-digest-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rec-digest-card {
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--rec-border);
+  background: var(--rec-surface-elevated);
+  transition: all 0.2s ease;
+}
+
+.rec-digest-card.correct {
+  border-left: 4px solid var(--rec-emerald);
+}
+
+.rec-digest-card.incorrect {
+  border-left: 4px solid var(--rec-rose);
+  background: rgba(244, 63, 94, 0.04);
+}
+
+.rec-digest-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.rec-digest-left-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rec-digest-num {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--rec-text-muted);
+  text-transform: uppercase;
+}
+
+.rec-digest-topic {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--rec-surface-soft);
+  color: var(--rec-text);
+}
+
+.rec-digest-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 9999px;
+}
+
+.rec-digest-badge.correct {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--rec-emerald);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.rec-digest-badge.incorrect {
+  background: rgba(244, 63, 94, 0.15);
+  color: var(--rec-rose);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+}
+
+.rec-digest-question-text {
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--rec-text);
+  margin-bottom: 10px;
+}
+
+.rec-digest-answers-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.82rem;
+}
+
+.rec-digest-ans-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.rec-digest-ans-label {
+  font-weight: 700;
+  min-width: 100px;
+  color: var(--rec-text-muted);
+}
+
+.rec-digest-ans-val {
+  flex: 1;
+}
+
+.rec-digest-ans-val.wrong {
+  color: var(--rec-rose);
+  text-decoration: line-through;
+}
+
+.rec-digest-ans-val.right {
+  color: var(--rec-emerald);
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------------
+   9. Cognitive Balance: Verified Strengths vs Priority Growth Areas
+   --------------------------------------------------------------------- */
+
+.rec-balance-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+.rec-balance-card {
+  border-radius: 18px;
+  padding: 22px;
+  border: 1px solid var(--rec-border);
+  box-shadow: var(--rec-shadow-card);
+}
+
+.rec-balance-card.strengths {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(56, 189, 248, 0.04) 100%), var(--rec-surface-card);
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.rec-balance-card.weaknesses {
+  background: linear-gradient(135deg, rgba(244, 63, 94, 0.06) 0%, rgba(245, 158, 11, 0.04) 100%), var(--rec-surface-card);
+  border-color: rgba(244, 63, 94, 0.25);
+}
+
+.rec-balance-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.rec-balance-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rec-balance-card.strengths .rec-balance-title {
+  color: var(--rec-emerald);
+}
+
+.rec-balance-card.weaknesses .rec-balance-title {
+  color: var(--rec-rose);
+}
+
+.rec-balance-pill-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  text-transform: uppercase;
+}
+
+.rec-balance-card.strengths .rec-balance-pill-badge {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--rec-emerald);
+}
+
+.rec-balance-card.weaknesses .rec-balance-pill-badge {
+  background: rgba(244, 63, 94, 0.15);
+  color: var(--rec-rose);
+}
+
+.rec-balance-desc {
+  font-size: 0.82rem;
+  color: var(--rec-text-muted);
+  line-height: 1.45;
+  margin: 0 0 16px;
+}
+
+.rec-balance-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rec-balance-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--rec-surface-elevated);
+  border: 1px solid var(--rec-border);
+  font-size: 0.85rem;
+}
+
+.rec-balance-item-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--rec-text);
+}
+
+.rec-balance-item-stat {
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.rec-balance-empty {
+  font-size: 0.85rem;
+  color: var(--rec-text-muted);
+  font-style: italic;
+  padding: 12px;
+  text-align: center;
+}
+
+/* ---------------------------------------------------------------------
+   10. Enhanced Socratic Tutor Card (Cognitive Bridge & Analogy)
+   --------------------------------------------------------------------- */
+
+.rec-tutor-strengths-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  margin-bottom: 12px;
+}
+
+.rec-tutor-strength-chip {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--rec-emerald);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.rec-tutor-bridge-box {
+  margin-top: 12px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px dashed rgba(56, 189, 248, 0.35);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.rec-tutor-bridge-label {
+  font-weight: 800;
+  color: var(--rec-accent);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+

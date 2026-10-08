@@ -102,57 +102,108 @@ class LLMService:
         quiz_title: str,
         weak_topics: list[str],
         sample_misconceptions: list[str],
-    ) -> tuple[str, str]:
-        """Synthesize pedagogical guidance and an opening prompt for the Tutor Agent.
+        mastered_topics: list[str] | None = None,
+        mistake_details: list[dict[str, Any]] | None = None,
+    ) -> tuple[str, str, str]:
+        """Synthesize hyper-personalized pedagogical guidance, opening prompt, and cognitive bridge.
         
         Returns:
-            (pedagogical_instruction, suggested_opening_prompt)
+            (pedagogical_instruction, suggested_opening_prompt, cognitive_bridge_analogy)
         """
-        if not weak_topics:
+        mastered = [t for t in (mastered_topics or []) if t]
+        weak = [t for t in (weak_topics or []) if t]
+        mistakes = mistake_details or []
+
+        if not weak:
             instruction = (
-                "The student has achieved full mastery on this quiz. "
-                "Engage them with advanced synthesis questions and real-world edge cases."
+                f"The student achieved full mastery on '{quiz_title}'. "
+                f"Mastered topics: {', '.join(mastered) if mastered else 'all core concepts'}. "
+                "Engage them with advanced synthesis challenges, real-world edge cases, and architectural trade-offs."
             )
             opening = (
-                f"Congratulations on your outstanding performance on '{quiz_title}'! "
-                "Would you like to explore advanced application scenarios or move to the next chapter?"
+                f"Hi! Congratulations on your outstanding performance on '{quiz_title}'! "
+                "You demonstrated rock-solid understanding across every topic tested. "
+                "Would you like to explore an advanced engineering challenge or discuss real-world edge cases?"
             )
-            return instruction, opening
+            return instruction, opening, "Reinforce mastery with real-world synthesis questions."
 
-        topics_str = ", ".join(f"'{t}'" for t in weak_topics)
-        first_topic = weak_topics[0]
-
-        default_instruction = (
-            f"You are an empathetic, step-by-step Socratic tutor. The student struggled with {topics_str}. "
-            "Do not provide direct answers immediately. Instead, break down the core concept into simple intuitive steps, "
-            "ask guided questions to identify their mental model, and validate their understanding before moving forward."
-        )
-
-        if sample_misconceptions:
-            default_opening = (
-                f"Hello! I noticed you encountered some challenging questions on {first_topic} during the '{quiz_title}' quiz. "
-                "Let's explore this together step by step. To start, how would you describe the core purpose of this concept in your own words?"
+        # 1. Build Cognitive Bridge Analogy & Praise
+        first_weak = weak[0]
+        if mastered:
+            first_strong = mastered[0]
+            cognitive_bridge = (
+                f"Build an intuitive bridge from the student's mastery in '{first_strong}' to clarify '{first_weak}'. "
+                f"Use '{first_strong}' as a familiar anchor to demonstrate how '{first_weak}' operates."
+            )
+            greeting_praise = (
+                f"Hi! Outstanding work on **{', '.join(mastered[:2])}** in your recent '{quiz_title}' quiz—"
+                "you've proven you have a strong conceptual foundation in those areas!"
             )
         else:
-            default_opening = (
-                f"Hello! Let's review the key principles behind {first_topic}. "
-                "What aspect of this topic felt least clear to you during the quiz?"
+            cognitive_bridge = (
+                f"Break down '{first_weak}' into intuitive, real-world search examples step-by-step."
+            )
+            greeting_praise = f"Hi! Let's work together to level up your understanding of '{quiz_title}'."
+
+        # 2. Extract Specific Question Mistake Context
+        relevant_mistake = None
+        for m in mistakes:
+            if m.get("topic") in weak or m.get("topic") == first_weak:
+                relevant_mistake = m
+                break
+        if not relevant_mistake and mistakes:
+            relevant_mistake = mistakes[0]
+
+        if relevant_mistake:
+            m_topic = relevant_mistake.get("topic", first_weak)
+            chosen = relevant_mistake.get("selected_answer", "")
+            correct = relevant_mistake.get("correct_answer", "")
+            socratic_question = (
+                f"In your quiz questions on **{m_topic}**, you selected:\n"
+                f"> *\"{chosen}\"*\n\n"
+                f"Let's explore that reasoning together! If a term or property behaves this way, what effect would that have on search results? "
+                f"How would you explain the key difference between your selection and *\"{correct}\"*?"
+            )
+        elif sample_misconceptions:
+            socratic_question = (
+                f"During the quiz on **{first_weak}**, there was some uncertainty around *\"{sample_misconceptions[0]}\"*.\n\n"
+                f"Let's break this down together step-by-step. To start, how would you describe the core objective of **{first_weak}** in your own words?"
+            )
+        else:
+            socratic_question = (
+                f"Let's take a closer look at **{first_weak}**.\n\n"
+                "What aspect of this concept felt most challenging or ambiguous during the quiz?"
             )
 
+        default_opening = f"{greeting_praise}\n\n{socratic_question}"
+
+        default_instruction = (
+            f"You are an empathetic, step-by-step Socratic tutor. "
+            f"Verified Strengths: {', '.join(mastered) if mastered else 'None recorded'}. "
+            f"Target Weaknesses: {', '.join(weak)}. "
+            f"Cognitive Bridge Directive: {cognitive_bridge} "
+            "Pedagogical Rules: Do not give away answers directly. Acknowledge what the student already understands, "
+            "ask guided questions to diagnose their mental model, and validate their understanding before moving forward."
+        )
+
         if not self.is_available:
-            return default_instruction, default_opening
+            return default_instruction, default_opening, cognitive_bridge
 
         prompt = (
-            f"You are an expert pedagogical designer. A student needs remedial tutoring on '{quiz_title}' for topics: {topics_str}. "
-            f"Misconceptions noted: {json.dumps(sample_misconceptions)}. "
-            "Generate JSON with two keys: 'instruction' (guiding the AI Tutor on how to teach) and "
-            "'opening_prompt' (the first warm, friendly Socratic question the AI Tutor will say to the student)."
+            f"You are an expert pedagogical designer creating an AI Tutor handoff package for '{quiz_title}'.\n"
+            f"Student's Verified Strengths: {json.dumps(mastered)}\n"
+            f"Student's Weaknesses (Topics missed): {json.dumps(weak)}\n"
+            f"Logged Mistake Context: {json.dumps(relevant_mistake if relevant_mistake else sample_misconceptions)}\n\n"
+            "Generate JSON with three keys:\n"
+            "1. 'instruction': A detailed pedagogical directive for the AI Tutor on how to teach, respecting the student's strengths and using analogies.\n"
+            "2. 'opening_prompt': A personalized, warm opening message to the student praising what they got right, quoting their specific quiz answer, and asking a friendly Socratic question.\n"
+            "3. 'cognitive_bridge_analogy': A one-sentence explanation of how to bridge their strong topic to their weak topic.\n"
+            "Return valid JSON only."
         )
 
         response_text = self._call_gemini(prompt)
         if response_text:
             try:
-                # Try parsing json if LLM returned json format
                 clean_text = response_text.strip()
                 if clean_text.startswith("```json"):
                     clean_text = clean_text[7:]
@@ -160,11 +211,15 @@ class LLMService:
                     clean_text = clean_text[:-3]
                 parsed = json.loads(clean_text)
                 if "instruction" in parsed and "opening_prompt" in parsed:
-                    return str(parsed["instruction"]), str(parsed["opening_prompt"])
+                    return (
+                        str(parsed["instruction"]),
+                        str(parsed["opening_prompt"]),
+                        str(parsed.get("cognitive_bridge_analogy", cognitive_bridge)),
+                    )
             except Exception:
                 pass
 
-        return default_instruction, default_opening
+        return default_instruction, default_opening, cognitive_bridge
 
     def generate_tutor_response(
         self,

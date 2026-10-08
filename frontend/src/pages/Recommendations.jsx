@@ -240,6 +240,7 @@ export default function Recommendations({
   });
   const [recoveredGaps, setRecoveredGaps] = useState({});
   const [activeDrills, setActiveDrills] = useState({});
+  const [digestFilter, setDigestFilter] = useState("all");
 
   useEffect(() => {
     loadDocuments();
@@ -352,6 +353,67 @@ export default function Recommendations({
 
   // Psychological & Gamification Calculations
   const scorePct = recommendationResult?.score_percentage || 0;
+
+  // Assessment Question Digest (Breakdown of correct vs. incorrect)
+  const questionsDigest = useMemo(() => {
+    if (
+      recommendationResult?.questions_digest &&
+      recommendationResult.questions_digest.length > 0
+    ) {
+      return recommendationResult.questions_digest;
+    }
+    if (Array.isArray(activeQuestions) && activeQuestions.length > 0) {
+      return activeQuestions.map((q) => ({
+        question_id: q.question_id,
+        topic: q.topic,
+        question_text: q.question_text,
+        selected_answer: q.selected_answer,
+        correct_answer: q.correct_answer,
+        is_correct: q.is_correct,
+        explanation:
+          q.explanation ||
+          (q.is_correct
+            ? "You answered this correctly."
+            : "Review this concept to master the material."),
+      }));
+    }
+    return [];
+  }, [recommendationResult, activeQuestions]);
+
+  const filteredDigest = useMemo(() => {
+    if (digestFilter === "missed") {
+      return questionsDigest.filter((q) => !q.is_correct);
+    }
+    if (digestFilter === "correct") {
+      return questionsDigest.filter((q) => q.is_correct);
+    }
+    return questionsDigest;
+  }, [questionsDigest, digestFilter]);
+
+  // Mastered & Weak Topic Categorization (Cognitive Balance Matrix)
+  const masteredTopics = useMemo(() => {
+    if (
+      recommendationResult?.mastered_topics &&
+      recommendationResult.mastered_topics.length > 0
+    ) {
+      return recommendationResult.mastered_topics;
+    }
+    return (recommendationResult?.topic_mastery || [])
+      .filter((tm) => tm.accuracy_percentage >= 70)
+      .map((tm) => tm.topic);
+  }, [recommendationResult]);
+
+  const weakTopics = useMemo(() => {
+    if (
+      recommendationResult?.weak_topics &&
+      recommendationResult.weak_topics.length > 0
+    ) {
+      return recommendationResult.weak_topics;
+    }
+    return (recommendationResult?.topic_mastery || [])
+      .filter((tm) => tm.accuracy_percentage < 70)
+      .map((tm) => tm.topic);
+  }, [recommendationResult]);
 
   const scholarMeta = useMemo(() => {
     if (scorePct >= 85) {
@@ -749,6 +811,208 @@ export default function Recommendations({
             </div>
           </section>
 
+          {/* 📝 ASSESSMENT QUESTION DIGEST (What was correct vs. incorrect) */}
+          {questionsDigest.length > 0 && (
+            <div className="rec-digest-panel">
+              <div className="rec-digest-header">
+                <div>
+                  <h3 className="rec-digest-title">
+                    <span>📝</span> Assessment Question Breakdown
+                  </h3>
+                  <p style={{ margin: "4px 0 0", fontSize: "0.88rem", opacity: 0.8 }}>
+                    Review your answers, see immediate corrections, and understand why.
+                  </p>
+                </div>
+                <div className="rec-digest-stats">
+                  <span className="rec-digest-stat-badge">
+                    {questionsDigest.filter((q) => q.is_correct).length} / {questionsDigest.length} Correct
+                  </span>
+                </div>
+              </div>
+
+              <div className="rec-digest-filter-bar">
+                <button
+                  type="button"
+                  className={`rec-digest-filter-btn ${digestFilter === "all" ? "active" : ""}`}
+                  onClick={() => setDigestFilter("all")}
+                >
+                  All Questions ({questionsDigest.length})
+                </button>
+                <button
+                  type="button"
+                  className={`rec-digest-filter-btn ${digestFilter === "missed" ? "active" : ""}`}
+                  onClick={() => setDigestFilter("missed")}
+                >
+                  <span>✗</span> Missed ({questionsDigest.filter((q) => !q.is_correct).length})
+                </button>
+                <button
+                  type="button"
+                  className={`rec-digest-filter-btn ${digestFilter === "correct" ? "active" : ""}`}
+                  onClick={() => setDigestFilter("correct")}
+                >
+                  <span>✓</span> Correct ({questionsDigest.filter((q) => q.is_correct).length})
+                </button>
+              </div>
+
+              <div className="rec-digest-list">
+                {filteredDigest.map((q, idx) => {
+                  const isCorrect = Boolean(q.is_correct);
+                  return (
+                    <div
+                      key={q.question_id || idx}
+                      className={`rec-digest-card ${isCorrect ? "correct" : "incorrect"}`}
+                    >
+                      <div className="rec-digest-card-top">
+                        <span
+                          className={`rec-digest-badge ${isCorrect ? "correct" : "incorrect"}`}
+                        >
+                          {isCorrect ? "✓ Correct" : "✗ Missed"}
+                        </span>
+                        {q.topic && (
+                          <span className="rec-digest-topic">{q.topic}</span>
+                        )}
+                      </div>
+
+                      <div className="rec-digest-question">
+                        {q.question_text}
+                      </div>
+
+                      <div className="rec-digest-answers-grid">
+                        <div
+                          className={`rec-digest-answer-box ${
+                            !isCorrect ? "student-wrong" : "correct-target"
+                          }`}
+                        >
+                          <div className="rec-digest-ans-label">
+                            {isCorrect ? "Your Selection (Correct):" : "Your Selection:"}
+                          </div>
+                          <div className="rec-digest-ans-text">
+                            {q.selected_answer || "No selection"}
+                          </div>
+                        </div>
+
+                        {!isCorrect && (
+                          <div className="rec-digest-answer-box correct-target">
+                            <div className="rec-digest-ans-label">Expected Answer:</div>
+                            <div className="rec-digest-ans-text">
+                              {q.correct_answer}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {q.explanation && (
+                        <div className="rec-digest-explanation">
+                          <strong>💡 Why:</strong> {q.explanation}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ⚖️ COGNITIVE BALANCE: VERIFIED STRENGTHS VS. PRIORITY GROWTH AREAS */}
+          <section className="rec-balance-section">
+            {/* Left Column: Strengths */}
+            <div className="rec-balance-card strengths">
+              <div className="rec-balance-header">
+                <div>
+                  <h3 className="rec-balance-title">
+                    <span>🌟</span> Verified Strengths
+                  </h3>
+                  <p className="rec-balance-desc">
+                    Concepts with solid retention (≥ 70% accuracy). Great foundation!
+                  </p>
+                </div>
+                <span className="rec-balance-badge strengths">
+                  {masteredTopics.length} Confirmed
+                </span>
+              </div>
+
+              {masteredTopics.length === 0 ? (
+                <div className="rec-balance-empty">
+                  Take more practice assessments or complete quick drills to establish verified strengths.
+                </div>
+              ) : (
+                <div className="rec-balance-list">
+                  {masteredTopics.map((top) => {
+                    const masteryObj = (recommendationResult.topic_mastery || []).find(
+                      (tm) => tm.topic === top
+                    );
+                    const pct = masteryObj ? masteryObj.accuracy_percentage : 100;
+                    return (
+                      <div key={top} className="rec-balance-item">
+                        <div>
+                          <div className="rec-balance-topic">
+                            <span>✓</span> {top}
+                          </div>
+                          <div className="rec-balance-sub">
+                            High conceptual retention demonstrated
+                          </div>
+                        </div>
+                        <span className="rec-balance-score-chip strengths">
+                          {pct}%
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Right Column: Weaknesses / Priority Growth Areas */}
+            <div className="rec-balance-card weaknesses">
+              <div className="rec-balance-header">
+                <div>
+                  <h3 className="rec-balance-title">
+                    <span>🎯</span> Priority Growth Areas
+                  </h3>
+                  <p className="rec-balance-desc">
+                    Targeted concepts to correct (&lt; 70% accuracy) for fastest grade leap.
+                  </p>
+                </div>
+                <span className="rec-balance-badge weaknesses">
+                  {weakTopics.length} Priority
+                </span>
+              </div>
+
+              {weakTopics.length === 0 ? (
+                <div className="rec-balance-empty">
+                  🎉 Fantastic work! All tested concepts are currently above the 70% mastery threshold.
+                </div>
+              ) : (
+                <div className="rec-balance-list">
+                  {weakTopics.map((top) => {
+                    const masteryObj = (recommendationResult.topic_mastery || []).find(
+                      (tm) => tm.topic === top
+                    );
+                    const pct = masteryObj ? masteryObj.accuracy_percentage : 0;
+                    const matchingGap = (recommendationResult.knowledge_gaps || []).find(
+                      (kg) => kg.topic === top
+                    );
+                    return (
+                      <div key={top} className="rec-balance-item">
+                        <div>
+                          <div className="rec-balance-topic">
+                            <span>⚡</span> {top}
+                          </div>
+                          <div className="rec-balance-sub">
+                            {matchingGap?.severity || "Needs"} attention · {masteryObj ? `${masteryObj.correct_count}/${masteryObj.total_questions} correct` : "Gap identified"}
+                          </div>
+                        </div>
+                        <span className="rec-balance-score-chip weaknesses">
+                          {pct}%
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
+
           {/* ⚡ THE QUICK WIN PRIORITY CARD (Dopamine Trigger: Low Hanging Fruit) */}
           {quickWin && !recoveredGaps[quickWin.gap_id] && (
             <div className="rec-quick-win-card">
@@ -1049,6 +1313,37 @@ export default function Recommendations({
                 <p className="rec-panel-desc">
                   Tailored Socratic review package formulated for the Tutor Agent.
                 </p>
+
+                {/* Recognized Strengths Pills */}
+                {recommendationResult.tutor_handoff?.mastered_topics?.length > 0 && (
+                  <div className="rec-tutor-strengths-box">
+                    <span className="rec-tutor-strengths-title">
+                      Recognized Strengths:
+                    </span>
+                    <div className="rec-tutor-strengths-chips">
+                      {recommendationResult.tutor_handoff.mastered_topics.map((top) => (
+                        <span key={top} className="rec-tutor-strength-chip">
+                          ✓ {top}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Cognitive Bridge Analogy */}
+                {recommendationResult.tutor_handoff?.cognitive_bridge_analogy && (
+                  <div className="rec-tutor-bridge-box">
+                    <div className="rec-tutor-bridge-header">
+                      <span>🌉</span>
+                      <span className="rec-tutor-bridge-title">
+                        Cognitive Bridge (Strength ➔ Gap Analogy)
+                      </span>
+                    </div>
+                    <p className="rec-tutor-bridge-text">
+                      {recommendationResult.tutor_handoff.cognitive_bridge_analogy}
+                    </p>
+                  </div>
+                )}
 
                 <div className="rec-tutor-bubble-box">
                   <div className="rec-tutor-avatar">LM</div>
@@ -1481,6 +1776,28 @@ export default function Recommendations({
                   ))}
                 </div>
               </div>
+
+              {recommendationResult.tutor_handoff.mastered_topics?.length > 0 && (
+                <div className="rec-contract-field">
+                  <label>Recognized Student Strengths (Anchors)</label>
+                  <div className="rec-tag-cluster">
+                    {recommendationResult.tutor_handoff.mastered_topics.map((t) => (
+                      <span key={t} className="rec-tag" style={{ background: "rgba(16, 185, 129, 0.15)", color: "#10b981", borderColor: "rgba(16, 185, 129, 0.3)" }}>
+                        ✓ {t}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {recommendationResult.tutor_handoff.cognitive_bridge_analogy && (
+                <div className="rec-contract-field">
+                  <label>Cognitive Bridge Analogy</label>
+                  <div className="rec-quote-box" style={{ borderColor: "rgba(99, 102, 241, 0.3)", background: "rgba(99, 102, 241, 0.05)" }}>
+                    🌉 {recommendationResult.tutor_handoff.cognitive_bridge_analogy}
+                  </div>
+                </div>
+              )}
 
               <div className="rec-contract-field">
                 <label>Pedagogical Directive for Tutor Agent</label>

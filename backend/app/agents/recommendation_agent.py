@@ -80,7 +80,33 @@ class RecommendationAgent:
                 gaps=knowledge_gaps,
             )
 
-            # 3. Enrich with Lecture Citations & Form Tutor Handoff Package
+            # 3. Calculate strengths (mastered topics), weaknesses, and question digest
+            mastered_topics = [
+                tm.topic
+                for tm in topic_masteries
+                if tm.mastery_status == "Mastered" or tm.accuracy_percentage >= 70.0
+            ]
+            weak_topics = [
+                tm.topic
+                for tm in topic_masteries
+                if tm.accuracy_percentage < 70.0
+            ]
+            questions_digest = [
+                {
+                    "question_id": q.question_id,
+                    "topic": q.topic,
+                    "difficulty": q.difficulty,
+                    "question_text": q.question_text,
+                    "selected_answer": q.selected_answer,
+                    "correct_answer": q.correct_answer,
+                    "is_correct": q.is_correct,
+                    "explanation": q.explanation,
+                }
+                for q in submission.questions
+            ]
+            mistake_details = [q for q in questions_digest if not q["is_correct"]]
+
+            # 4. Enrich with Lecture Citations & Form Tutor Handoff Package
             enriched_action_items, tutor_package = (
                 self.tutor_handoff_service.enrich_citations_and_build_handoff(
                     recommendation_id=recommendation_id,
@@ -89,10 +115,12 @@ class RecommendationAgent:
                     quiz_title=submission.quiz_title,
                     gaps=knowledge_gaps,
                     action_items=action_items,
+                    mastered_topics=mastered_topics,
+                    mistake_details=mistake_details,
                 )
             )
 
-            # 4. Persist Quiz Attempt to SQLite
+            # 5. Persist Quiz Attempt to SQLite
             total_correct = sum(1 for q in submission.questions if q.is_correct)
             quiz_record = QuizAttemptRecord(
                 attempt_id=attempt_id,
@@ -110,7 +138,7 @@ class RecommendationAgent:
             )
             self.database.save_quiz_attempt(quiz_record)
 
-            # 5. Persist Recommendation Record to SQLite
+            # 6. Persist Recommendation Record to SQLite
             rec_record = RecommendationRecord(
                 recommendation_id=recommendation_id,
                 attempt_id=attempt_id,
@@ -133,7 +161,7 @@ class RecommendationAgent:
             )
             self.database.save_recommendation(rec_record)
 
-            # 6. Return Structured API Response
+            # 7. Return Structured API Response
             return RecommendationResponse(
                 recommendation_id=recommendation_id,
                 attempt_id=attempt_id,
@@ -149,6 +177,9 @@ class RecommendationAgent:
                 knowledge_gaps=knowledge_gaps,
                 action_items=enriched_action_items,
                 tutor_handoff=tutor_package,
+                mastered_topics=mastered_topics,
+                weak_topics=weak_topics,
+                questions_digest=questions_digest,
             )
 
         except Exception as error:
@@ -202,9 +233,28 @@ class RecommendationAgent:
         total_questions = attempt.total_questions if attempt else 0
         overall_score = attempt.score if attempt else 0
 
+        questions_digest: list[dict[str, Any]] = []
+        if attempt and attempt.submission_data_json:
+            try:
+                raw_q = json.loads(attempt.submission_data_json)
+                if isinstance(raw_q, list):
+                    questions_digest = raw_q
+            except Exception:
+                questions_digest = []
+
         topic_mastery_list = [
             TopicMastery(**item)
             for item in json.loads(record.topic_mastery_json)
+        ]
+        mastered_topics = [
+            tm.topic
+            for tm in topic_mastery_list
+            if tm.mastery_status == "Mastered" or tm.accuracy_percentage >= 70.0
+        ]
+        weak_topics = [
+            tm.topic
+            for tm in topic_mastery_list
+            if tm.accuracy_percentage < 70.0
         ]
         knowledge_gaps_list = [
             KnowledgeGap(**item)
@@ -233,4 +283,7 @@ class RecommendationAgent:
             knowledge_gaps=knowledge_gaps_list,
             action_items=action_items_list,
             tutor_handoff=tutor_handoff,
+            mastered_topics=mastered_topics,
+            weak_topics=weak_topics,
+            questions_digest=questions_digest,
         )
