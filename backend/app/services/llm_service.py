@@ -449,7 +449,9 @@ class LLMService:
                 "Every question must test a different fact, relationship, procedure, or concept. Do not repeat a stem, "
                 "ask the same fact in different words, use generic curriculum questions, or copy a full paragraph as the answer. "
                 "Use specific lecture terminology and make each question answerable from the evidence. "
-                "For MCQs, provide four concise, distinct, plausible choices of the same kind, with exactly one correct choice. "
+                "For MCQs, provide four concise, distinct, plausible choices of the same grammatical and semantic kind, with exactly one correct choice. "
+                "Keep choices parallel in form and similar in length. Use complete terms or phrases, not sentence fragments, "
+                "dangling clauses, pronoun-led fragments, unrelated headings, or OCR debris. "
                 "Make distractors reflect likely misunderstandings of the lecture rather than unrelated joke answers. "
                 "The correct_answer must exactly match one option. Spread questions across different supplied chunks when possible. "
                 "Each object in the array MUST contain:\n"
@@ -560,6 +562,8 @@ class LLMService:
                     any(not option for option in options)
                     or len(set(option_keys)) != 4
                     or answer_key not in option_keys
+                    or any(not self._is_reasonable_mcq_option(option) for option in options)
+                    or not self._mcq_options_have_comparable_length(options)
                 ):
                     continue
             elif question_type == "true_false":
@@ -588,6 +592,45 @@ class LLMService:
                 break
 
         return accepted
+
+    @staticmethod
+    def _is_reasonable_mcq_option(option: str) -> bool:
+        """Reject answer fragments that look like extraction or OCR debris."""
+        cleaned = re.sub(r"\s+", " ", str(option)).strip()
+        words = re.findall(r"[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*", cleaned)
+        if not words or len(words) > 18:
+            return False
+
+        # These openings commonly signal a clipped sentence rather than a
+        # standalone answer choice. Articles such as "the" remain acceptable.
+        incomplete_starts = {
+            "this", "that", "these", "those", "it", "they", "he", "she",
+            "we", "you", "i", "here", "there",
+        }
+        incomplete_ends = {
+            "and", "or", "but", "as", "to", "of", "for", "with", "by",
+            "in", "on", "at", "from", "that", "which", "who", "when",
+            "where", "their", "its", "they", "this", "these", "those",
+            "a", "an", "the",
+        }
+        if words[0].lower() in incomplete_starts or words[-1].lower() in incomplete_ends:
+            return False
+        if re.search(r"\b(?:lorem|ipsum|undefined|null|n/?a)\b", cleaned, re.IGNORECASE):
+            return False
+        return True
+
+    @staticmethod
+    def _mcq_options_have_comparable_length(options: list[str]) -> bool:
+        """Avoid making the correct answer obvious through wildly different lengths."""
+        word_counts = [
+            len(re.findall(r"[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*", option))
+            for option in options
+        ]
+        if not word_counts:
+            return False
+        shortest = min(word_counts)
+        longest = max(word_counts)
+        return longest - shortest <= max(5, shortest * 2)
 
     def _extract_cloze_facts(
         self,
@@ -684,6 +727,7 @@ class LLMService:
                             (start, end)
                             for _, start, end in sorted(spans, reverse=True)
                             if self._normalize_question_text(sentence[start:end]) not in seen_answers
+                            and self._is_reasonable_mcq_option(sentence[start:end])
                         ),
                         None,
                     )
@@ -820,7 +864,11 @@ class LLMService:
                         "page": int(chunk.get("page_number", 1)),
                         "chunk_index": int(chunk.get("chunk_index", 0)),
                     })
-                elif labeled_fact and len(labeled_fact.group("detail").split()) >= 5:
+                elif (
+                    labeled_fact
+                    and len(labeled_fact.group("detail").split()) >= 5
+                    and self._is_reasonable_mcq_option(labeled_fact.group("detail"))
+                ):
                     subject = labeled_fact.group("label").strip()
                     detail = labeled_fact.group("detail").strip()
                     facts.append({
@@ -839,6 +887,8 @@ class LLMService:
                         "this", "it", "they", "what", "which", "who", "when", "where"
                     }
                     and not definition.group("subject").strip().lower().startswith(("to ", "if "))
+                    and len(definition.group("subject").split()) <= 5
+                    and self._is_reasonable_mcq_option(definition.group("subject"))
                     and not definition.group("predicate").strip().lower().startswith(
                         ("of ", "to ", "by ", "that ")
                     )
@@ -856,7 +906,12 @@ class LLMService:
                             "page": int(chunk.get("page_number", 1)),
                             "chunk_index": int(chunk.get("chunk_index", 0)),
                         })
-                elif action and action.group("subject").lower() not in {"this", "it", "they"}:
+                elif (
+                    action
+                    and action.group("subject").lower() not in {"this", "it", "they"}
+                    and len(action.group("subject").split()) <= 5
+                    and self._is_reasonable_mcq_option(action.group("subject"))
+                ):
                     subject = action.group("subject").strip()
                     verb = action.group("verb").lower()
                     answer = action.group("object").strip()
@@ -900,7 +955,10 @@ class LLMService:
                         "excludes": "exclude",
                         "removes": "remove",
                     }[verb]
-                    if len(answer.split()) >= 3:
+                    if (
+                        len(answer.split()) >= 3
+                        and self._is_reasonable_mcq_option(answer)
+                    ):
                         facts.append({
                             "text": sentence,
                             "subject": subject,
@@ -1006,26 +1064,28 @@ class LLMService:
                         for other in facts
                         if other is not fact and other["kind"] == "action"
                     ]
-                if len(distractors) < 3:
-                    distractors.extend(
-                        other["subject"]
-                        for other in facts
-                        if other is not fact and other["subject"] not in distractors
-                    )
 
+                answer_word_count = len(answer.split())
+                distractors = sorted(
+                    distractors,
+                    key=lambda item: abs(len(str(item).split()) - answer_word_count),
+                )
                 unique_distractors: list[str] = []
                 for distractor in distractors:
-                    if self._normalize_question_text(distractor) not in {
-                        self._normalize_question_text(answer),
-                        *(self._normalize_question_text(item) for item in unique_distractors),
+                    normalized_distractor = self._normalize_question_text(distractor)
+                    if self._is_reasonable_mcq_option(distractor) and normalized_distractor not in {
+                            self._normalize_question_text(answer),
+                            *(self._normalize_question_text(item) for item in unique_distractors),
                     }:
-                        unique_distractors.append(distractor)
+                        candidate_options = [answer, *unique_distractors, distractor]
+                        if self._mcq_options_have_comparable_length(candidate_options):
+                            unique_distractors.append(distractor)
                     if len(unique_distractors) == 3:
                         break
-                if len(unique_distractors) < 3:
+                if not unique_distractors:
                     raise ValueError(
-                        "The retrieved PDF evidence does not contain enough distinct answer choices "
-                        "to create reliable multiple-choice questions."
+                        "The retrieved material does not contain a clean, distinct distractor "
+                        "for a reliable multiple-choice question."
                     )
                 options = [answer, *unique_distractors]
                 shift = index % len(options)
