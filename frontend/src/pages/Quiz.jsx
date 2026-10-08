@@ -61,6 +61,7 @@ function Quiz({ onNavigateToRecommendations }) {
   const [isLoadingSaved, setIsLoadingSaved] = useState(false);
   const [deletingQuizId, setDeletingQuizId] = useState(null);
   const [quizPendingDelete, setQuizPendingDelete] = useState(null);
+  const [libraryFilter, setLibraryFilter] = useState("all");
 
   // Notifications
   const [errorMessage, setErrorMessage] = useState("");
@@ -70,6 +71,14 @@ function Quiz({ onNavigateToRecommendations }) {
     () => getQuizStats(savedQuizzes, documents),
     [savedQuizzes, documents],
   );
+
+  const filteredQuizzes = useMemo(() => {
+    if (libraryFilter === "all") return savedQuizzes;
+    return savedQuizzes.filter(
+      (q) => (q.difficulty || "mixed").toLowerCase() === libraryFilter,
+    );
+  }, [savedQuizzes, libraryFilter]);
+
 
   const selectedDocObj = useMemo(
     () => documents.find((d) => d.document_id === selectedDocumentId),
@@ -387,10 +396,10 @@ function Quiz({ onNavigateToRecommendations }) {
                 <span className="quiz-empty-connection" />
               </div>
               <p className="quiz-section-kicker">Knowledge Vault required</p>
-              <h3>No lecture materials found</h3>
+              <h3>No course materials found</h3>
               <p>
-                Please upload a course PDF in the <strong>Knowledge Vault (Materials)</strong>{" "}
-                tab before generating personalized assessments.
+                Upload a course PDF or a clear PNG/JPG image containing readable text in the{" "}
+                <strong> Knowledge Vault (Materials)</strong> tab before generating personalized assessments.
               </p>
             </div>
           ) : (
@@ -416,7 +425,7 @@ function Quiz({ onNavigateToRecommendations }) {
                 <form className="quiz-config-form" onSubmit={handleGenerateQuiz}>
                   <div className="quiz-form-row">
                     <div className="quiz-form-group">
-                      <label htmlFor="doc-select">Target Lecture PDF</label>
+                      <label htmlFor="doc-select">Target Course Material</label>
                       <select
                         id="doc-select"
                         className="quiz-form-control"
@@ -614,30 +623,85 @@ function Quiz({ onNavigateToRecommendations }) {
                 className="quiz-library-section"
                 aria-labelledby="quiz-library-heading"
               >
-                <div className="quiz-library-heading">
-                  <div>
-                    <p className="quiz-section-kicker">Assessment Library</p>
-                    <h2 id="quiz-library-heading">Available Quizzes</h2>
-                    <p>
-                      Saved assessments for{" "}
-                      <strong>
-                        {selectedDocObj?.original_filename || "selected document"}
-                      </strong>
-                    </p>
+                <div className="quiz-library-header-wrap">
+                  <div className="quiz-library-heading">
+                    <div className="quiz-library-title-group">
+                      <div className="quiz-library-title-row">
+                        <p className="quiz-section-kicker">Assessment Library</p>
+                        {savedQuizzes.length > 0 && (
+                          <span className="quiz-library-count-badge">
+                            {savedQuizzes.length}{" "}
+                            {savedQuizzes.length === 1 ? "Quiz" : "Quizzes"}
+                          </span>
+                        )}
+                      </div>
+                      <h2 id="quiz-library-heading">Available Quizzes</h2>
+                      <p>
+                        Saved assessments for{" "}
+                        <strong>
+                          {selectedDocObj?.original_filename || "selected document"}
+                        </strong>
+                      </p>
+                    </div>
+                    <div className="quiz-library-actions">
+                      <button
+                        className="quiz-button quiz-button-secondary quiz-refresh-btn"
+                        disabled={isLoadingSaved || isGenerating}
+                        onClick={() => loadSavedQuizzes(selectedDocumentId)}
+                        title="Reload assessments for this lecture"
+                        type="button"
+                      >
+                        <QuizIcon
+                          className={isLoadingSaved ? "quiz-icon-spinning" : ""}
+                          name="refresh"
+                          size={16}
+                        />
+                        <span>Refresh library</span>
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    className="quiz-button quiz-button-secondary"
-                    disabled={isLoadingSaved || isGenerating}
-                    onClick={() => loadSavedQuizzes(selectedDocumentId)}
-                    type="button"
-                  >
-                    <QuizIcon
-                      className={isLoadingSaved ? "quiz-icon-spinning" : ""}
-                      name="refresh"
-                      size={17}
-                    />
-                    Refresh library
-                  </button>
+
+                  {/* Filter chips when multiple quizzes are present */}
+                  {savedQuizzes.length > 1 && (
+                    <div className="quiz-library-filter-bar">
+                      <div
+                        aria-label="Filter quizzes by difficulty"
+                        className="quiz-filter-pills"
+                        role="tablist"
+                      >
+                        {["all", "easy", "medium", "hard", "mixed"].map(
+                          (filterKey) => {
+                            const count =
+                              filterKey === "all"
+                                ? savedQuizzes.length
+                                : savedQuizzes.filter(
+                                    (q) =>
+                                      (q.difficulty || "mixed").toLowerCase() ===
+                                      filterKey,
+                                  ).length;
+                            if (count === 0 && filterKey !== "all") return null;
+                            const isActive = libraryFilter === filterKey;
+                            return (
+                              <button
+                                className={`quiz-filter-chip ${
+                                  isActive ? "active" : ""
+                                }`}
+                                key={filterKey}
+                                onClick={() => setLibraryFilter(filterKey)}
+                                type="button"
+                              >
+                                {filterKey === "all"
+                                  ? "All"
+                                  : filterKey.charAt(0).toUpperCase() +
+                                    filterKey.slice(1)}
+                                <span className="quiz-filter-count">{count}</span>
+                              </button>
+                            );
+                          },
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {isLoadingSaved ? (
@@ -659,9 +723,21 @@ function Quiz({ onNavigateToRecommendations }) {
                       form above!
                     </p>
                   </div>
+                ) : filteredQuizzes.length === 0 ? (
+                  <div className="quiz-empty-filter-state">
+                    <QuizIcon name="search" size={24} />
+                    <p>No quizzes match the “{libraryFilter}” difficulty filter.</p>
+                    <button
+                      className="quiz-button quiz-button-quiet quiz-button-small"
+                      onClick={() => setLibraryFilter("all")}
+                      type="button"
+                    >
+                      Show all quizzes
+                    </button>
+                  </div>
                 ) : (
                   <div className="saved-quiz-grid">
-                    {savedQuizzes.map((q) => (
+                    {filteredQuizzes.map((q) => (
                       <SavedQuizCard
                         documentName={selectedDocObj?.original_filename}
                         isDeleting={deletingQuizId === q.quiz_id}

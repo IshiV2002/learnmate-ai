@@ -1,5 +1,12 @@
 export const navigationItems = [
   {
+    id: "home",
+    label: "Home",
+    description: "Your study overview",
+    title: "Home",
+    icon: "home",
+  },
+  {
     id: "materials",
     label: "Materials",
     description: "Library & retrieval",
@@ -10,7 +17,7 @@ export const navigationItems = [
     id: "tutor",
     label: "Tutor",
     description: "Guided understanding",
-    title: "Socratic AI Tutor",
+    title: "Study Tutor",
     icon: "tutor",
   },
   {
@@ -24,11 +31,30 @@ export const navigationItems = [
     id: "recommendations",
     label: "Recommendations",
     description: "Adaptive next steps",
-    title: "Personalized Recommendations",
+    title: "Study Recommendations",
     icon: "recommendations",
   },
 ];
 
+const studyPageIds = new Set(["materials", "tutor", "quiz", "recommendations"]);
+
 export function getNavigationItem(pageId) {
   return navigationItems.find((item) => item.id === pageId) || navigationItems[0];
+}
+
+export function getNavigationDirection(currentPageId, nextPageId) {
+  const currentIndex = navigationItems.findIndex((item) => item.id === currentPageId);
+  const nextIndex = navigationItems.findIndex((item) => item.id === nextPageId);
+
+  if (currentIndex < 0 || nextIndex < 0 || nextIndex >= currentIndex) {
+    return "forward";
+  }
+
+  return "backward";
+}
+
+export function getNavigationTransition(currentPageId, nextPageId) {
+  return studyPageIds.has(currentPageId) && studyPageIds.has(nextPageId)
+    ? "book"
+    : "soft";
 }

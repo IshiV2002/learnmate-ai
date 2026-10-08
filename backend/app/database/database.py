@@ -48,14 +48,32 @@ class DocumentDatabase:
                                 full_name TEXT NOT NULL,
                                 email TEXT NOT NULL UNIQUE,
                                 password_hash TEXT NOT NULL,
-                                created_at TEXT NOT NULL
+                                created_at TEXT NOT NULL,
+                                google_subject TEXT
                             )
                             """
                         )
+                        user_columns = {
+                            row[1]
+                            for row in connection.execute(
+                                "PRAGMA table_info(users)"
+                            ).fetchall()
+                        }
+                        if "google_subject" not in user_columns:
+                            connection.execute(
+                                "ALTER TABLE users ADD COLUMN google_subject TEXT"
+                            )
                         connection.execute(
                             """
                             CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email
                             ON users(email)
+                            """
+                        )
+                        connection.execute(
+                            """
+                            CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_subject
+                            ON users(google_subject)
+                            WHERE google_subject IS NOT NULL
                             """
                         )
                         connection.execute(
@@ -245,6 +263,7 @@ class DocumentDatabase:
             email=row["email"],
             password_hash=row["password_hash"],
             created_at=row["created_at"],
+            google_subject=row["google_subject"],
         )
 
     @staticmethod
@@ -335,15 +354,16 @@ class DocumentDatabase:
     # -----------------------------------------------------------------
 
     def create_user(self, user: UserRecord) -> None:
-        """Create a user while storing only a one-way password hash."""
+        """Create a password or federated user without storing plaintext secrets."""
         try:
             with closing(self._connect()) as connection:
                 with connection:
                     connection.execute(
                         """
                         INSERT INTO users (
-                            user_id, full_name, email, password_hash, created_at
-                        ) VALUES (?, ?, ?, ?, ?)
+                            user_id, full_name, email, password_hash, created_at,
+                            google_subject
+                        ) VALUES (?, ?, ?, ?, ?, ?)
                         """,
                         (
                             user.user_id,
@@ -351,6 +371,7 @@ class DocumentDatabase:
                             user.email,
                             user.password_hash,
                             user.created_at,
+                            user.google_subject,
                         ),
                     )
         except sqlite3.IntegrityError as error:
@@ -372,6 +393,45 @@ class DocumentDatabase:
             raise DocumentDatabaseError("The user could not be read.") from error
 
         return None if row is None else self._row_to_user(row)
+
+    def get_user_by_google_subject(self, google_subject: str) -> UserRecord | None:
+        """Look up a user by Google's stable account identifier."""
+        try:
+            with closing(self._connect()) as connection:
+                row = connection.execute(
+                    "SELECT * FROM users WHERE google_subject = ?",
+                    (google_subject,),
+                ).fetchone()
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError("The user could not be read.") from error
+
+        return None if row is None else self._row_to_user(row)
+
+    def link_google_identity(self, user_id: str, google_subject: str) -> None:
+        """Attach a verified Google identity to an existing local account."""
+        try:
+            with closing(self._connect()) as connection:
+                with connection:
+                    cursor = connection.execute(
+                        """
+                        UPDATE users
+                        SET google_subject = ?
+                        WHERE user_id = ? AND google_subject IS NULL
+                        """,
+                        (google_subject, user_id),
+                    )
+                    if cursor.rowcount != 1:
+                        raise DocumentDatabaseError(
+                            "The Google identity could not be linked."
+                        )
+        except sqlite3.IntegrityError as error:
+            raise DocumentDatabaseError(
+                "This Google identity is already linked."
+            ) from error
+        except (OSError, sqlite3.Error) as error:
+            raise DocumentDatabaseError(
+                "The Google identity could not be linked."
+            ) from error
 
     def get_user_by_id(self, user_id: str) -> UserRecord | None:
         """Look up a registered user by the ID stored in a JWT subject."""
@@ -601,16 +661,25 @@ class DocumentDatabase:
         return self._row_to_quiz(row)
 
     def list_document_quizzes(self, document_id: str) -> list[QuizRecord]:
-        """List all quizzes generated for a specific document."""
+        """List all quizzes generated for a specific document (including mixed-document quizzes)."""
+        clean_id = document_id.strip()
         try:
             with closing(self._connect()) as connection:
                 rows = connection.execute(
                     """
                     SELECT * FROM quizzes
                     WHERE document_id = ?
+                       OR document_id LIKE ?
+                       OR document_id LIKE ?
+                       OR document_id LIKE ?
                     ORDER BY created_at DESC
                     """,
-                    (document_id,),
+                    (
+                        clean_id,
+                        f"{clean_id},%",
+                        f"%,{clean_id},%",
+                        f"%,{clean_id}",
+                    ),
                 ).fetchall()
         except (OSError, sqlite3.Error) as error:
             raise DocumentDatabaseError(

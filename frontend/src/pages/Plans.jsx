@@ -1,62 +1,77 @@
+import Icon from "../components/ui/Icon.jsx";
+
 const plans = [
   {
     name: "Free Student",
-    badge: "Prototype plan",
-    price: "Free",
-    audience: "For students trying LearnMate or studying occasionally.",
-    description: "Use the complete learning cycle with your own course material.",
+    badge: "Start for free",
+    price: "$0",
+    cadence: "/ month",
+    audience: "For light revision and trying the full study workflow.",
+    description: "A practical starting point for occasional study sessions.",
     features: [
-      ["Learning material uploads", "available"],
-      ["Retrieval, Tutor, Quiz, and Recommendation Agents", "available"],
-      ["Basic learning history", "available"],
-      ["Secure personal account", "available"],
-      ["Limited monthly usage", "planned"],
+      ["Monthly study credits", "100 credits"],
+      ["Material library", "Up to 3 sources"],
+      ["Tutor support", "5 sessions / month"],
+      ["Quiz generation", "3 quizzes / month"],
+      ["Learning history", "Last 14 days"],
     ],
     action: "start",
+    tone: "free",
   },
   {
-    name: "Student Pro",
-    badge: "Coming soon",
-    price: "Proposed monthly plan",
-    audience: "For students who expect to use LearnMate regularly.",
-    description: "More room to learn, practise, and build a longer learning journey.",
+    name: "Study Plus",
+    badge: "Most popular",
+    price: "$20",
+    cadence: "/ month",
+    audience: "For students studying several times each week.",
+    description: "More space for notes, practice and regular guided learning.",
     features: [
-      ["Everything in Free Student", "available"],
-      ["Higher material and AI usage", "planned"],
-      ["Advanced personalized recommendations", "planned"],
-      ["Extended learning history and insights", "planned"],
-      ["Future multilingual learning support", "planned"],
+      ["Monthly study credits", "1,000 credits"],
+      ["Material library", "Up to 25 sources"],
+      ["Tutor support", "50 sessions / month"],
+      ["Quiz generation", "30 quizzes / month"],
+      ["Learning history", "Last 6 months"],
     ],
     action: "planned",
+    tone: "plus",
+    featured: true,
   },
   {
-    name: "University / Institutional",
-    badge: "Planned institutional plan",
-    price: "Custom institutional plan",
-    audience: "For universities, departments, and online learning organizations.",
-    description: "Bring LearnMate to courses and student communities at a larger scale.",
+    name: "Study Pro",
+    badge: "For intensive study",
+    price: "$30",
+    cadence: "/ month",
+    audience: "For students managing heavier modules or exam periods.",
+    description: "Higher limits, longer history and priority study support.",
     features: [
-      ["Institution-wide student access", "planned"],
-      ["Course-level learning spaces", "planned"],
-      ["Approved course material libraries", "planned"],
-      ["Access management and institution branding", "planned"],
-      ["Future LMS integration and analytics", "planned"],
+      ["Monthly study credits", "2,500 credits"],
+      ["Material library", "Up to 75 sources"],
+      ["Tutor support", "150 sessions / month"],
+      ["Quiz generation", "100 quizzes / month"],
+      ["Learning history", "Last 12 months"],
     ],
-    action: "institution",
+    action: "planned",
+    tone: "pro",
   },
 ];
 
 const comparisonRows = [
-  ["Material uploads", "Included", "Higher limits — Planned", "Course libraries — Planned"],
-  ["Retrieval Agent", "Included", "Higher usage — Planned", "Institution access — Planned"],
-  ["Tutor Agent", "Included", "Higher usage — Planned", "Institution access — Planned"],
-  ["Quiz Agent", "Included", "Higher usage — Planned", "Course settings — Planned"],
-  ["Recommendation Agent", "Included", "Advanced — Planned", "Institution options — Planned"],
-  ["Learning history", "Basic", "Extended — Planned", "Reporting — Planned"],
-  ["Multilingual support", "Not included", "Planned", "Planned"],
-  ["Institution management", "Not included", "Not included", "Planned"],
-  ["LMS integration", "Not included", "Not included", "Planned"],
+  ["Monthly price", "$0", "$20", "$30"],
+  ["Study credits", "100 / month", "1,000 / month", "2,500 / month"],
+  ["Material library", "3 sources", "25 sources", "75 sources"],
+  ["Tutor sessions", "5 / month", "50 / month", "150 / month"],
+  ["Generated quizzes", "3 / month", "30 / month", "100 / month"],
+  ["Study recommendations", "Basic", "Detailed", "Detailed + priority"],
+  ["Learning history", "14 days", "6 months", "12 months"],
+  ["Support", "Standard", "Priority email", "Priority support"],
   ["Privacy and security", "Included", "Included", "Included"],
+];
+
+const creditExamples = [
+  ["Add and index a source", "10 credits"],
+  ["Tutor response", "2 credits"],
+  ["Generate a quiz", "5 credits"],
+  ["Create a study review", "3 credits"],
 ];
 
 const faqs = [
@@ -69,12 +84,12 @@ const faqs = [
     "LearnMate processes them into searchable sections and preserves page references for grounded learning activities. Your account can access only its own documents.",
   ],
   [
-    "Are Student Pro and institutional plans available now?",
-    "Not yet. They are planned offerings, and LearnMate currently has no checkout or subscription system.",
+    "Are Study Plus, Study Pro and institutional plans available now?",
+    "Not yet. Study Plus, Study Pro and institutional access are planned offerings. LearnMate currently has no checkout or subscription system.",
   ],
   [
-    "What would Student Pro add?",
-    "The proposed Pro plan focuses on higher usage, more materials, longer history, and advanced personalization—not stronger basic privacy or security.",
+    "What do the paid student plans add?",
+    "The proposed paid plans add more monthly credits, larger material libraries, more Tutor and Quiz use, longer history, and priority support—not stronger basic privacy or security.",
   ],
   [
     "Can a university use LearnMate?",
@@ -86,26 +101,16 @@ const faqs = [
   ],
 ];
 
-function FeatureStatus({ status }) {
-  return (
-    <span className={`plans-feature-status plans-feature-status-${status}`}>
-      {status === "available" ? "Available now" : "Planned"}
-    </span>
-  );
-}
-
 function ComparisonStatus({ children }) {
   const text = String(children);
-  const tone = text.includes("Planned")
-    ? "planned"
-    : text === "Not included"
+  const tone = text === "Not included"
       ? "muted"
       : "current";
 
   return <span className={`plans-status plans-status-${tone}`}>{children}</span>;
 }
 
-function Plans({ isAuthenticated, onGetStarted }) {
+function Plans({ isAuthenticated, onGetStarted, onToggleTheme, theme = "light" }) {
   return (
     <main className="plans-page">
       <a className="skip-link" href="#plans-main">Skip to plans</a>
@@ -114,7 +119,7 @@ function Plans({ isAuthenticated, onGetStarted }) {
         <button className="plans-brand" onClick={onGetStarted} type="button">
           <span className="app-brand-mark" aria-hidden="true">LM</span>
           <span>
-            <strong>LearnMate AI</strong>
+            <strong>LearnMate</strong>
             <small>Learning plans</small>
           </span>
         </button>
@@ -124,9 +129,20 @@ function Plans({ isAuthenticated, onGetStarted }) {
           <a href="#institutions">Universities</a>
           <a href="#faq">FAQ</a>
         </nav>
-        <button className="plans-nav-action" onClick={onGetStarted} type="button">
-          {isAuthenticated ? "Return to workspace" : "Sign in or get started"}
-        </button>
+        <div className="plans-nav-actions">
+          <button
+            aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+            className="plans-theme-toggle"
+            onClick={onToggleTheme}
+            type="button"
+          >
+            <Icon name={theme === "light" ? "moon" : "sun"} size={17} />
+            <span>{theme === "light" ? "Dark" : "Light"}</span>
+          </button>
+          <button className="plans-nav-action" onClick={onGetStarted} type="button">
+            {isAuthenticated ? "Return to workspace" : "Sign in or get started"}
+          </button>
+        </div>
       </header>
 
       <div id="plans-main">
@@ -136,7 +152,7 @@ function Plans({ isAuthenticated, onGetStarted }) {
             <h1 id="plans-heading">Choose how you want to learn.</h1>
             <p className="plans-hero-intro">
               Start with LearnMate for free. Planned upgrades will give regular
-              learners more materials, more AI support, and deeper personalized
+              learners more materials, more guided support, and deeper personalized
               learning.
             </p>
             <div className="plans-hero-actions">
@@ -146,7 +162,7 @@ function Plans({ isAuthenticated, onGetStarted }) {
               </button>
             </div>
             <p className="plans-prototype-note">
-              Student Pro and institutional plans are planned offerings. No payments are accepted in this prototype.
+              Study Plus, Study Pro and institutional plans are proposed offerings. No payments are accepted in this prototype.
             </p>
           </div>
 
@@ -154,19 +170,19 @@ function Plans({ isAuthenticated, onGetStarted }) {
             <div className="plans-preview-glow" aria-hidden="true" />
             <p>Your learning path</p>
             <div className="plans-preview-plan plans-preview-plan-active">
-              <span>Available prototype</span>
+              <span>$0 / month · available prototype</span>
               <strong>Free Student</strong>
               <small>Upload · Learn · Practise · Improve</small>
             </div>
             <div className="plans-preview-plan">
-              <span>Coming soon</span>
-              <strong>Student Pro</strong>
-              <small>More materials and deeper support</small>
+              <span>$20 / month · proposed</span>
+              <strong>Study Plus</strong>
+              <small>1,000 credits and room for regular study</small>
             </div>
             <div className="plans-preview-plan">
-              <span>Planned</span>
-              <strong>University</strong>
-              <small>Learning support across courses</small>
+              <span>$30 / month · proposed</span>
+              <strong>Study Pro</strong>
+              <small>2,500 credits for intensive study</small>
             </div>
           </div>
         </section>
@@ -180,17 +196,18 @@ function Plans({ isAuthenticated, onGetStarted }) {
 
           <div className="plans-pricing-grid">
             {plans.map((plan) => (
-              <article className="plans-pricing-card" key={plan.name}>
+              <article className={`plans-pricing-card plans-pricing-card-${plan.tone} ${plan.featured ? "plans-pricing-card-featured" : ""}`} key={plan.name}>
+                {plan.featured && <span className="plans-popular-ribbon">Student favourite</span>}
                 <p className="plans-plan-label">{plan.badge}</p>
                 <h3>{plan.name}</h3>
-                <p className="plans-price">{plan.price}</p>
+                <p className="plans-price"><strong>{plan.price}</strong><span>{plan.cadence}</span></p>
                 <p className="plans-plan-audience">{plan.audience}</p>
                 <p className="plans-plan-description">{plan.description}</p>
                 <ul>
-                  {plan.features.map(([feature, status]) => (
+                  {plan.features.map(([feature, value]) => (
                     <li key={feature}>
                       <span>{feature}</span>
-                      <FeatureStatus status={status} />
+                      <strong className="plans-feature-value">{value}</strong>
                     </li>
                   ))}
                 </ul>
@@ -200,15 +217,23 @@ function Plans({ isAuthenticated, onGetStarted }) {
                   </button>
                 )}
                 {plan.action === "planned" && (
-                  <span className="plans-card-action plans-card-action-muted">Planned Pro</span>
-                )}
-                {plan.action === "institution" && (
-                  <a className="plans-card-action plans-card-action-secondary" href="#institutions">
-                    Learn about institutional plans
-                  </a>
+                  <span className="plans-card-action plans-card-action-muted">Planned — no checkout</span>
                 )}
               </article>
             ))}
+          </div>
+
+          <div className="plans-credit-guide" aria-labelledby="credit-guide-heading">
+            <div>
+              <p className="plans-eyebrow">How proposed credits work</p>
+              <h3 id="credit-guide-heading">Credits keep monthly usage clear.</h3>
+              <p>Credits are a proposed usage unit for the future plans. They are shown for comparison only and are not currently charged or enforced.</p>
+            </div>
+            <dl>
+              {creditExamples.map(([activity, cost]) => (
+                <div key={activity}><dt>{activity}</dt><dd>{cost}</dd></div>
+              ))}
+            </dl>
           </div>
 
           <div className="plans-comparison" id="compare" aria-labelledby="comparison-heading">
@@ -225,8 +250,8 @@ function Plans({ isAuthenticated, onGetStarted }) {
                   <tr>
                     <th scope="col">Feature</th>
                     <th scope="col">Free Student</th>
-                    <th scope="col">Student Pro</th>
-                    <th scope="col">University</th>
+                    <th scope="col">Study Plus · Proposed</th>
+                    <th scope="col">Study Pro · Proposed</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -259,7 +284,7 @@ function Plans({ isAuthenticated, onGetStarted }) {
                 <li>Build a longer learning history</li>
                 <li>Receive deeper personalized guidance</li>
               </ul>
-              <small>These Student Pro benefits are planned and not currently enforced.</small>
+              <small>These paid-plan benefits are proposed and not currently enforced.</small>
             </article>
             <article>
               <span className="plans-card-number">For universities</span>

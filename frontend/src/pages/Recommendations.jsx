@@ -1,141 +1,217 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "../auth/AuthContext.jsx";
 import {
   analyzeQuizSubmission,
   getDocuments,
+  getStudentRecommendations,
+  getTutorHandoff,
 } from "../services/api.js";
-import { useAuth } from "../auth/AuthContext.jsx";
 import "./Recommendations.css";
 
+// Built-in preset quizzes for sandbox testing and grading demonstrations
 const PRESET_QUIZZES = [
   {
-    id: "quiz_ir_vsm",
-    title: "Information Retrieval: Vector Space & Scoring",
-    description: "5 questions covering Inverted Indexes, Term Weighting, and Vector Space Normalization.",
+    id: "preset_ir_basics",
+    title: "Information Retrieval Fundamentals",
     questions: [
       {
-        question_id: "q1",
-        topic: "Term Weighting",
+        question_id: "q1_inverted_index",
+        topic: "Inverted Index Construction",
         difficulty: "easy",
-        cognitive_level: "recall",
-        question_text: "What does TF stand for in TF-IDF?",
-        selected_answer: "Term Frequency",
-        correct_answer: "Term Frequency",
+        question_text:
+          "What is the primary architectural purpose of an Inverted Index in search systems?",
+        selected_answer: "Mapping keywords to the list of documents containing them",
+        correct_answer: "Mapping keywords to the list of documents containing them",
         is_correct: true,
-        explanation: "TF measures how frequently a term occurs in a document.",
       },
       {
-        question_id: "q2",
-        topic: "Term Weighting",
+        question_id: "q2_tfidf",
+        topic: "TF-IDF Weighting",
         difficulty: "medium",
-        cognitive_level: "understanding",
-        question_text: "Why is logarithmic scaling (log(1 + tf)) applied to Term Frequency?",
-        selected_answer: "To make 10 occurrences tenfold more important than 1",
-        correct_answer: "To reflect diminishing returns of repeated term occurrences",
+        question_text:
+          "In the TF-IDF weighting scheme, what does high Inverse Document Frequency (IDF) signify?",
+        selected_answer: "The term occurs very frequently across the entire corpus",
+        correct_answer: "The term is rare and highly discriminative across the collection",
         is_correct: false,
-        explanation: "Sublinear scaling prevents very frequent terms from overly dominating scores.",
       },
       {
-        question_id: "q3",
-        topic: "Inverted Index",
-        difficulty: "easy",
-        cognitive_level: "recall",
-        question_text: "In an inverted index, what does a postings list contain for a term?",
-        selected_answer: "All words in alphabetical order",
-        correct_answer: "A list of document IDs (and positions) where the term occurs",
-        is_correct: false,
-        explanation: "Postings lists store occurrences of a term across documents.",
-      },
-      {
-        question_id: "q4",
-        topic: "Inverted Index",
-        difficulty: "medium",
-        cognitive_level: "understanding",
-        question_text: "How do skip pointers optimize postings list intersection?",
-        selected_answer: "By skipping ahead without inspecting every posting element",
-        correct_answer: "By skipping ahead without inspecting every posting element",
-        is_correct: true,
-        explanation: "Skip pointers enable faster merge without linear traversal.",
-      },
-      {
-        question_id: "q5",
-        topic: "Vector Space Scoring",
+        question_id: "q3_cosine",
+        topic: "Cosine Similarity Calculation",
         difficulty: "hard",
-        cognitive_level: "application",
-        question_text: "Why is Euclidean length normalization (L2 norm) applied to document vectors?",
-        selected_answer: "To shorten long queries",
-        correct_answer: "To neutralize the unfair advantage long documents have due to high word counts",
+        question_text:
+          "Why is Cosine Similarity favored over Euclidean distance in the Vector Space Model for text?",
+        selected_answer: "It is length-normalized and evaluates directional orientation of document vectors",
+        correct_answer: "It is length-normalized and evaluates directional orientation of document vectors",
+        is_correct: true,
+      },
+      {
+        question_id: "q4_evaluation",
+        topic: "Evaluation Metrics (P@K & MAP)",
+        difficulty: "medium",
+        question_text:
+          "How does Mean Average Precision (MAP) differ from Precision at Rank K (P@K)?",
+        selected_answer: "MAP rewards relevant documents returned earlier in the ranked list across multiple queries",
+        correct_answer: "MAP rewards relevant documents returned earlier in the ranked list across multiple queries",
+        is_correct: true,
+      },
+      {
+        question_id: "q5_bm25",
+        topic: "BM25 Probabilistic Ranking",
+        difficulty: "hard",
+        question_text:
+          "What critical saturation mechanism does BM25 introduce to prevent term repetition abuse?",
+        selected_answer: "Document length exponential scaling",
+        correct_answer: "Term frequency saturation parameterized by k1",
         is_correct: false,
-        explanation: "Length normalization ensures long documents do not dominate relevance.",
       },
     ],
   },
   {
-    id: "quiz_ai_ethics",
-    title: "AI Ethics, Fairness & Explainability",
-    description: "4 questions assessing Algorithmic Bias, Fairness Metrics, and Model Interpretability.",
+    id: "preset_vector_space",
+    title: "Vector Space Models & Semantic Embeddings",
     questions: [
       {
-        question_id: "q1",
-        topic: "Algorithmic Bias",
-        difficulty: "medium",
-        cognitive_level: "understanding",
-        question_text: "What is the primary cause of historical bias in machine learning models?",
-        selected_answer: "Insufficient CPU processing power",
-        correct_answer: "Unrepresentative or historically biased training datasets",
-        is_correct: false,
-        explanation: "Models replicate biases present in their training distributions.",
-      },
-      {
-        question_id: "q2",
-        topic: "Algorithmic Bias",
+        question_id: "vsm_q1",
+        topic: "Vector Space Model Foundations",
         difficulty: "easy",
-        cognitive_level: "recall",
-        question_text: "Can bias mitigation be performed during data pre-processing?",
-        selected_answer: "Yes, through sample re-weighting and re-sampling",
-        correct_answer: "Yes, through sample re-weighting and re-sampling",
+        question_text:
+          "In a standard Vector Space Model, how are documents and queries represented?",
+        selected_answer: "As multi-dimensional vectors where each dimension corresponds to a vocabulary term",
+        correct_answer: "As multi-dimensional vectors where each dimension corresponds to a vocabulary term",
         is_correct: true,
-        explanation: "Pre-processing techniques balance representation before model training.",
       },
       {
-        question_id: "q3",
-        topic: "Explainability & SHAP",
-        difficulty: "hard",
-        cognitive_level: "application",
-        question_text: "What mathematical foundation powers SHAP (SHapley Additive exPlanations)?",
-        selected_answer: "Cooperative game theory Shapley values",
-        correct_answer: "Cooperative game theory Shapley values",
-        is_correct: true,
-        explanation: "SHAP calculates fair marginal contribution of each feature to prediction.",
-      },
-      {
-        question_id: "q4",
-        topic: "Explainability & SHAP",
+        question_id: "vsm_q2",
+        topic: "Dense Semantic Embeddings",
         difficulty: "medium",
-        cognitive_level: "understanding",
-        question_text: "What is the distinction between global and local interpretability?",
-        selected_answer: "Global explains one instance, local explains the entire model",
-        correct_answer: "Global explains overall model behavior, local explains a single prediction",
+        question_text:
+          "What fundamental limitation of lexical sparse search do dense transformer embeddings solve?",
+        selected_answer: "Vocabulary mismatch and synonymy by projecting semantically similar concepts together",
+        correct_answer: "Vocabulary mismatch and synonymy by projecting semantically similar concepts together",
+        is_correct: true,
+      },
+      {
+        question_id: "vsm_q3",
+        topic: "ChromaDB & Approximate Nearest Neighbors",
+        difficulty: "hard",
+        question_text:
+          "What algorithmic family does ChromaDB rely upon to rapidly retrieve top-K semantic chunks?",
+        selected_answer: "Linear brute-force cosine distance search",
+        correct_answer: "Hierarchical Navigable Small World (HNSW) graphs",
         is_correct: false,
-        explanation: "Local interpretability focuses on reasons for a single inference outcome.",
       },
     ],
   },
 ];
 
+// Curated interactive concept drills for instant on-the-spot recovery
+const CONCEPT_DRILLS = {
+  "Inverted Index": {
+    question: "In an Inverted Index, what does each entry in a postings list record?",
+    options: [
+      "The document ID and term frequency where the keyword occurs",
+      "A complete duplicate copy of the entire raw document text",
+      "The student's search history and query timestamps",
+      "An alphabetical list of discardable stop words",
+    ],
+    correctIndex: 0,
+    explanation: "Postings lists record document IDs (and term frequencies/positions) for each indexed word, allowing near-instant intersection during search.",
+  },
+  "TF-IDF": {
+    question: "Why does Inverse Document Frequency (IDF) penalize words like 'the' or 'is'?",
+    options: [
+      "Because they appear across almost every document, offering very low discriminative value",
+      "Because stop words always have fewer than four characters",
+      "Because IDF is inversely proportional to document file size in megabytes",
+      "Because common words cause RAM overflows during vector multiplication",
+    ],
+    correctIndex: 0,
+    explanation: "IDF lowers the weight of omnipresent words that appear across all documents, elevating discriminative domain keywords.",
+  },
+  "Cosine": {
+    question: "Why is Cosine Similarity favored over Euclidean distance for comparing text documents?",
+    options: [
+      "It measures the angle between vectors, normalizing for differing document lengths",
+      "It automatically converts negative term weights into positive values",
+      "It only functions when document vectors have exactly 10 dimensions",
+      "It ignores the vocabulary of the document collection entirely",
+    ],
+    correctIndex: 0,
+    explanation: "Cosine similarity measures vector orientation rather than magnitude, ensuring a 10-page chapter isn't unfairly distant from a 1-page summary.",
+  },
+  "BM25": {
+    question: "What key advantage does the BM25 formula introduce regarding term frequency?",
+    options: [
+      "It applies term frequency saturation so extreme repetitions don't dominate the score",
+      "It eliminates the need for an inverted index",
+      "It computes similarity strictly in binary 0 or 1 integers",
+      "It ignores document length completely",
+    ],
+    correctIndex: 0,
+    explanation: "BM25's k1 parameter caps the marginal gain of repeated keywords, preventing keyword stuffing from distorting rank relevance.",
+  },
+  "Evaluation": {
+    question: "What does Precision at Rank K (P@K) measure in Information Retrieval evaluation?",
+    options: [
+      "The proportion of retrieved documents in the top K results that are relevant",
+      "The exact latency in milliseconds required to rank K documents",
+      "The percentage of all relevant documents in the entire corpus retrieved",
+      "The position where the first irrelevant document occurred",
+    ],
+    correctIndex: 0,
+    explanation: "Precision@K computes (relevant docs in top K) / K, reflecting what fraction of the immediate results are actually useful.",
+  },
+  "ChromaDB": {
+    question: "Why do modern vector databases like ChromaDB use HNSW indexing?",
+    options: [
+      "To perform sub-linear Approximate Nearest Neighbor search across high-dimensional vectors",
+      "To convert vector embeddings into plain SQL text tables",
+      "To bypass GPU requirements by saving embeddings as JPEG images",
+      "To replace dense embeddings with simple keyword matching",
+    ],
+    correctIndex: 0,
+    explanation: "HNSW (Hierarchical Navigable Small World) allows sub-linear graph traversal to find nearest vectors in milliseconds.",
+  },
+};
+
+function getDrillForTopic(topic, gapExplanation) {
+  for (const [key, drill] of Object.entries(CONCEPT_DRILLS)) {
+    if (topic.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(topic.toLowerCase())) {
+      return drill;
+    }
+  }
+  return {
+    question: `Key Concept Check for "${topic}": Which statement best describes the fundamental principle?`,
+    options: [
+      `It establishes structured representations to optimize retrieval relevance and ranking accuracy.`,
+      `It discards all document text to minimize database storage consumption.`,
+      `It operates solely on unindexed raw strings without semantic weighting.`,
+    ],
+    correctIndex: 0,
+    explanation: gapExplanation || `Mastering ${topic} ensures search and generation agents correctly retrieve and rank passages.`,
+  };
+}
+
 export default function Recommendations({
   initialSubmission,
   initialRecommendation,
   onLaunchTutor = null,
+  onNavigate = null,
+  onToggleTheme,
+  theme = "light",
 }) {
   const { user } = useAuth();
-  const [theme, setTheme] = useState(
-    () => localStorage.getItem("learnmate_rec_theme") || "dark"
-  );
+  const studentId = user?.user_id || "guest_student";
+
+  // Data States
   const [documents, setDocuments] = useState([]);
   const [selectedDocId, setSelectedDocId] = useState(
     initialSubmission?.document_id || ""
   );
-  const studentId = user?.user_id || "guest_student";
+  const [studentHistory, setStudentHistory] = useState([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  // Preset & Simulator States
   const [selectedPreset, setSelectedPreset] = useState(PRESET_QUIZZES[0]);
   const [activeQuestions, setActiveQuestions] = useState(
     initialSubmission?.questions || PRESET_QUIZZES[0].questions
@@ -146,19 +222,29 @@ export default function Recommendations({
   );
   const [errorMessage, setErrorMessage] = useState("");
   const [showTutorModal, setShowTutorModal] = useState(false);
-  const [activeTab, setActiveTab] = useState(
-    initialRecommendation || initialSubmission ? "dashboard" : "take_quiz"
-  );
   const [copiedContract, setCopiedContract] = useState(false);
 
-  function toggleTheme() {
-    const nextTheme = theme === "dark" ? "light" : "dark";
-    setTheme(nextTheme);
-    localStorage.setItem("learnmate_rec_theme", nextTheme);
-  }
+  // Navigation tab
+  const [activeTab, setActiveTab] = useState(
+    initialRecommendation || initialSubmission ? "dashboard" : "dashboard"
+  );
+
+  // Gamification & Psychological States
+  const [completedMissions, setCompletedMissions] = useState(() => {
+    try {
+      const saved = localStorage.getItem("learnmate_completed_missions");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [recoveredGaps, setRecoveredGaps] = useState({});
+  const [activeDrills, setActiveDrills] = useState({});
 
   useEffect(() => {
     loadDocuments();
+    loadStudentHistory();
+
     if (initialRecommendation) {
       setRecommendationResult(initialRecommendation);
       setActiveTab("dashboard");
@@ -167,16 +253,22 @@ export default function Recommendations({
     }
   }, [initialRecommendation, initialSubmission]);
 
-  async function analyzeExternalSubmission(submission) {
-    setIsSubmitting(true);
+  async function loadStudentHistory() {
+    if (!studentId || studentId === "guest_student") return;
+    setIsLoadingHistory(true);
     try {
-      const res = await analyzeQuizSubmission(submission);
-      setRecommendationResult(res);
-      setActiveTab("dashboard");
-    } catch (err) {
-      setErrorMessage(err?.message || "Failed to analyze quiz submission.");
+      const history = await getStudentRecommendations(studentId);
+      if (Array.isArray(history) && history.length > 0) {
+        setStudentHistory(history);
+        if (!initialRecommendation && !initialSubmission && !recommendationResult) {
+          setRecommendationResult(history[0]);
+          setActiveTab("dashboard");
+        }
+      }
+    } catch {
+      // Historical recommendations optional for unauthenticated or first-time students
     } finally {
-      setIsSubmitting(false);
+      setIsLoadingHistory(false);
     }
   }
 
@@ -192,12 +284,26 @@ export default function Recommendations({
     }
   }
 
+  async function analyzeExternalSubmission(submission) {
+    setIsSubmitting(true);
+    setErrorMessage("");
+    try {
+      const res = await analyzeQuizSubmission(submission);
+      setRecommendationResult(res);
+      setActiveTab("dashboard");
+      loadStudentHistory();
+    } catch (err) {
+      setErrorMessage(err?.message || "Failed to analyze quiz submission.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   function handlePresetChange(presetId) {
     const preset =
       PRESET_QUIZZES.find((p) => p.id === presetId) || PRESET_QUIZZES[0];
     setSelectedPreset(preset);
     setActiveQuestions(JSON.parse(JSON.stringify(preset.questions)));
-    setRecommendationResult(null);
   }
 
   function toggleQuestionCorrectness(qIndex) {
@@ -206,38 +312,25 @@ export default function Recommendations({
     if (updated[qIndex].is_correct) {
       updated[qIndex].selected_answer = updated[qIndex].correct_answer;
     } else {
-      updated[qIndex].selected_answer =
-        "Alternative / misconception answer selected";
+      updated[qIndex].selected_answer = "Incorrect / Suboptimal Answer Choice";
     }
     setActiveQuestions(updated);
   }
 
-  async function handleAnalyze() {
+  async function handleRunAnalysis() {
     setIsSubmitting(true);
     setErrorMessage("");
-
-    let targetDocId = selectedDocId;
-    if (!targetDocId && documents.length > 0) {
-      targetDocId = documents[0].document_id;
-    }
-
-    if (!targetDocId) {
-      targetDocId = "doc_demo_ir_01";
-    }
-
-    const payload = {
-      student_id: studentId,
-      document_id: targetDocId,
-      quiz_id: selectedPreset.id,
-      quiz_title: selectedPreset.title,
-      time_spent_seconds: 180,
-      questions: activeQuestions,
-    };
-
     try {
+      const payload = {
+        student_id: studentId,
+        document_id: selectedDocId || (documents[0]?.document_id || "doc_demo"),
+        quiz_attempt_id: "sim_" + Date.now(),
+        questions: activeQuestions,
+      };
       const res = await analyzeQuizSubmission(payload);
       setRecommendationResult(res);
       setActiveTab("dashboard");
+      loadStudentHistory();
     } catch (err) {
       setErrorMessage(
         err?.message ||
@@ -257,10 +350,161 @@ export default function Recommendations({
     setTimeout(() => setCopiedContract(false), 2000);
   }
 
+  // Psychological & Gamification Calculations
+  const scorePct = recommendationResult?.score_percentage || 0;
+
+  const scholarMeta = useMemo(() => {
+    if (scorePct >= 85) {
+      return {
+        tier: "Grandmaster Scholar",
+        className: "tier-grandmaster",
+        icon: "🏆",
+        message: "Exam Ready! Your conceptual foundation is rock-solid. Keep up the high retention!",
+        boostPercent: 5,
+        statusLabel: "Mastery: Elite",
+      };
+    }
+    if (scorePct >= 70) {
+      return {
+        tier: "Proficient Challenger",
+        className: "tier-challenger",
+        icon: "⚔️",
+        message: "Strong performance! You have a solid grasp. Polish the Quick Win below to hit 90%+.",
+        boostPercent: 12,
+        statusLabel: "Mastery: Proficient",
+      };
+    }
+    if (scorePct >= 50) {
+      return {
+        tier: "Apprentice Explorer",
+        className: "tier-explorer",
+        icon: "🛡️",
+        message: "Great baseline! Targeting your weak spots with the AI Coach will yield rapid score gains.",
+        boostPercent: 18,
+        statusLabel: "Mastery: Developing",
+      };
+    }
+    return {
+      tier: "Rising Scholar",
+      className: "tier-rising",
+      icon: "🚀",
+      message: "High growth potential! Every expert was once a beginner. Start with the 5-minute Quick Win below.",
+      boostPercent: 25,
+      statusLabel: "Mastery: High Growth",
+    };
+  }, [scorePct]);
+
+  // High-ROI Quick Win Selection (Lowest severity or medium difficulty gap)
+  const quickWin = useMemo(() => {
+    if (!recommendationResult?.knowledge_gaps?.length) return null;
+    const gaps = recommendationResult.knowledge_gaps;
+    return (
+      gaps.find((g) => g.severity?.toLowerCase() === "low") ||
+      gaps.find((g) => g.severity?.toLowerCase() === "medium") ||
+      gaps[0]
+    );
+  }, [recommendationResult]);
+
+  // Interactive Study Quest Missions
+  const studyMissions = useMemo(() => {
+    if (!recommendationResult) return [];
+    const missions = [];
+
+    if (quickWin) {
+      missions.push({
+        id: "mission-quickwin",
+        type: "⚡ Quick Win",
+        title: `Master ${quickWin.topic}`,
+        desc: quickWin.explanation || "Highest return on investment for your study session.",
+        time: 4,
+        actionType: "drill",
+        gap: quickWin,
+      });
+    }
+
+    if (recommendationResult.tutor_handoff?.suggested_opening_prompt) {
+      missions.push({
+        id: "mission-tutor",
+        type: "💬 AI Tutor",
+        title: `Socratic Review on ${recommendationResult.tutor_handoff.target_topics?.slice(0, 2).join(", ") || "Key Concepts"}`,
+        desc: recommendationResult.tutor_handoff.suggested_opening_prompt,
+        time: 5,
+        actionType: "tutor",
+      });
+    }
+
+    (recommendationResult.action_items || []).forEach((act, idx) => {
+      missions.push({
+        id: `mission-act-${idx}`,
+        type: act.action_type || "📖 Remediation",
+        title: act.title,
+        desc: act.description,
+        time: act.estimated_minutes || 5,
+        actionType: act.action_type?.toLowerCase().includes("tutor") ? "tutor" : "material",
+      });
+    });
+
+    return missions;
+  }, [recommendationResult, quickWin]);
+
+  const currentRecId = recommendationResult?.recommendation_id || "default";
+  const completedList = completedMissions[currentRecId] || [];
+  const completedCount = completedList.length;
+  const questPercent =
+    studyMissions.length > 0
+      ? Math.round((completedCount / studyMissions.length) * 100)
+      : 0;
+
+  function toggleMission(missionId) {
+    setCompletedMissions((prev) => {
+      const existing = prev[currentRecId] || [];
+      const updated = existing.includes(missionId)
+        ? existing.filter((id) => id !== missionId)
+        : [...existing, missionId];
+      const next = { ...prev, [currentRecId]: updated };
+      try {
+        localStorage.setItem("learnmate_completed_missions", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }
+
+  // Micro-Drill Handlers
+  function toggleDrill(gapId) {
+    setActiveDrills((prev) => ({
+      ...prev,
+      [gapId]: prev[gapId] ? null : { selectedOpt: null, isSubmitted: false, isCorrect: false },
+    }));
+  }
+
+  function handleSelectDrillOption(gapId, optIdx) {
+    setActiveDrills((prev) => ({
+      ...prev,
+      [gapId]: { ...prev[gapId], selectedOpt: optIdx },
+    }));
+  }
+
+  function handleSubmitDrill(gapId, drill) {
+    const drillState = activeDrills[gapId];
+    if (!drillState || drillState.selectedOpt === null) return;
+    const isCorrect = drillState.selectedOpt === drill.correctIndex;
+    setActiveDrills((prev) => ({
+      ...prev,
+      [gapId]: { ...prev[gapId], isSubmitted: true, isCorrect },
+    }));
+
+    if (isCorrect) {
+      setRecoveredGaps((prev) => ({ ...prev, [gapId]: true }));
+      // Automatically check off corresponding quick-win mission if applicable
+      if (quickWin?.gap_id === gapId) {
+        toggleMission("mission-quickwin");
+      }
+    }
+  }
+
   // Circular gauge calculations
   const gaugeRadius = 64;
   const gaugeCircumference = 2 * Math.PI * gaugeRadius;
-  const scorePct = recommendationResult?.score_percentage || 0;
   const strokeDashoffset =
     gaugeCircumference - (gaugeCircumference * scorePct) / 100;
   const gaugeColor =
@@ -277,28 +521,19 @@ export default function Recommendations({
         <div className="rec-hero-header-bar">
           <div className="rec-badge">
             <span className="rec-pulse-dot" />
-            AI Recommendation Agent & Study Coach
+            AI Study Coach & Knowledge Diagnostics
           </div>
 
           <button
             type="button"
             className="rec-theme-toggle"
-            onClick={toggleTheme}
+            onClick={onToggleTheme}
             aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
             title={`Toggle ${theme === "dark" ? "Light" : "Dark"} Mode`}
           >
             <span className="rec-theme-icon">
               {theme === "dark" ? (
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="5" />
                   <line x1="12" y1="1" x2="12" y2="3" />
                   <line x1="12" y1="21" x2="12" y2="23" />
@@ -310,16 +545,7 @@ export default function Recommendations({
                   <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
                 </svg>
               ) : (
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
                 </svg>
               )}
@@ -328,38 +554,31 @@ export default function Recommendations({
           </button>
         </div>
 
-        <h1 className="rec-hero-title">Personalized Knowledge Gap Analysis</h1>
+        <h1 className="rec-hero-title">Your Personalized Revision Guide</h1>
         <p className="rec-hero-subtitle">
-          Intelligently inspects student assessment logs, calculates fine-grained topic mastery,
-          provides explainable pedagogical justifications, and formulates targeted Socratic review packages for the Tutor Agent.
+          Diagnose knowledge gaps from assessment attempts, identify high-yield Quick Wins,
+          and unlock tailored 1-on-1 Socratic tutoring sessions.
         </p>
-        <div className="rec-hero-disclaimer">
-          <span>ℹ️</span>
-          <span>
-            These suggestions reflect evidence from the current assessment attempt, providing formative guidance rather than a permanent measure of capability.
-          </span>
-        </div>
 
         <nav className="rec-nav-bar" aria-label="Recommendation Modes">
+          <button
+            type="button"
+            className={`rec-nav-btn ${activeTab === "dashboard" ? "active" : ""}`}
+            onClick={() => setActiveTab("dashboard")}
+          >
+            <span>📊</span>
+            <span>Study Hub & Diagnostics</span>
+            {recommendationResult && (
+              <span className="rec-status-indicator">Active</span>
+            )}
+          </button>
           <button
             type="button"
             className={`rec-nav-btn ${activeTab === "take_quiz" ? "active" : ""}`}
             onClick={() => setActiveTab("take_quiz")}
           >
-            <span>📝</span>
-            <span>Assessment & Mistake Simulator</span>
-          </button>
-          <button
-            type="button"
-            className={`rec-nav-btn ${activeTab === "dashboard" ? "active" : ""}`}
-            onClick={() => setActiveTab("dashboard")}
-            disabled={!recommendationResult}
-          >
-            <span>📊</span>
-            <span>Explainable Gap Dashboard</span>
-            {recommendationResult && (
-              <span className="rec-status-indicator">Ready</span>
-            )}
+            <span>🧪</span>
+            <span>Diagnostic Sandbox</span>
           </button>
         </nav>
       </section>
@@ -372,179 +591,107 @@ export default function Recommendations({
         </div>
       )}
 
-      {/* VIEW 1: Assessment Simulator */}
-      {activeTab === "take_quiz" && (
-        <div>
-          {/* Panel 1: Configuration */}
-          <div className="rec-panel">
-            <div className="rec-panel-header">
-              <div>
-                <h2 className="rec-panel-title">
-                  <span>⚙️</span> 1. Configure Student Assessment
-                </h2>
-                <p className="rec-panel-desc">
-                  Select student context, course material, and assessment questions.
-                </p>
-              </div>
-            </div>
-
-            <div className="rec-form-grid">
-              <div className="rec-form-group">
-                <label className="rec-label">Student Profile</label>
-                <input
-                  type="text"
-                  value={user?.full_name || "Learner"}
-                  readOnly
-                  className="rec-input"
-                />
-              </div>
-
-              <div className="rec-form-group">
-                <label className="rec-label">Course Material / Knowledge Base</label>
-                <select
-                  value={selectedDocId}
-                  onChange={(e) => setSelectedDocId(e.target.value)}
-                  className="rec-select"
+      {/* VIEW 1: Assessment History Switcher (Shown on Dashboard when history exists) */}
+      {activeTab === "dashboard" && studentHistory.length > 0 && (
+        <div className="rec-history-bar">
+          <span className="rec-history-label">📂 Your Assessments:</span>
+          <div className="rec-history-chips">
+            {studentHistory.map((rec, idx) => {
+              const isCurrent =
+                rec.recommendation_id === recommendationResult?.recommendation_id;
+              const chipColor =
+                rec.score_percentage >= 80
+                  ? "var(--rec-emerald)"
+                  : rec.score_percentage >= 50
+                  ? "var(--rec-amber)"
+                  : "var(--rec-rose)";
+              return (
+                <button
+                  key={rec.recommendation_id}
+                  type="button"
+                  className={`rec-history-chip ${isCurrent ? "active" : ""}`}
+                  onClick={() => {
+                    setRecommendationResult(rec);
+                    setActiveTab("dashboard");
+                  }}
                 >
-                  {documents.length === 0 && (
-                    <option value="doc_demo_ir_01">
-                      Lecture_4_Vector_Space_Model.pdf (Demo Document)
-                    </option>
-                  )}
-                  {documents.map((doc) => (
-                    <option key={doc.document_id} value={doc.document_id}>
-                      {doc.original_filename} ({doc.page_count} pages)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="rec-form-group full-width">
-                <label className="rec-label">Assessment Domain Presets</label>
-                <div className="rec-preset-grid">
-                  {PRESET_QUIZZES.map((preset) => (
-                    <div
-                      key={preset.id}
-                      className={`rec-preset-card ${
-                        selectedPreset.id === preset.id ? "active" : ""
-                      }`}
-                      onClick={() => handlePresetChange(preset.id)}
-                      tabIndex={0}
-                      role="button"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          handlePresetChange(preset.id);
-                        }
-                      }}
-                    >
-                      <div className="rec-preset-title">{preset.title}</div>
-                      <div className="rec-preset-desc">{preset.description}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Panel 2: Interactive Question Logs */}
-          <div className="rec-panel">
-            <div className="rec-panel-header">
-              <div>
-                <h2 className="rec-panel-title">
-                  <span>📋</span> 2. Assessment Question Mistake Logs
-                </h2>
-                <p className="rec-panel-desc">
-                  Click the toggle badge on any question to flip between correct and incorrect answers to test dynamic gap analysis.
-                </p>
-              </div>
-              <div className="rec-q-badge" style={{ fontSize: "0.85rem", padding: "6px 14px" }}>
-                Score: {activeQuestions.filter((q) => q.is_correct).length} / {activeQuestions.length} Correct
-              </div>
-            </div>
-
-            <div className="rec-question-list">
-              {activeQuestions.map((q, idx) => (
-                <div
-                  key={q.question_id}
-                  className={`rec-question-card ${
-                    q.is_correct ? "correct" : "incorrect"
-                  }`}
-                >
-                  <div className="rec-question-header">
-                    <span className="rec-q-badge">Q{idx + 1}</span>
-                    <span className="rec-topic-pill">{q.topic}</span>
-                    <span className={`rec-diff-badge rec-diff-${q.difficulty}`}>
-                      {q.difficulty}
-                    </span>
-                    {q.cognitive_level && (
-                      <span className="rec-q-badge" style={{ opacity: 0.8 }}>
-                        {q.cognitive_level}
-                      </span>
-                    )}
-
-                    <button
-                      type="button"
-                      className={`rec-toggle-btn ${
-                        q.is_correct ? "btn-correct" : "btn-incorrect"
-                      }`}
-                      onClick={() => toggleQuestionCorrectness(idx)}
-                      aria-label={`Toggle correctness for question ${idx + 1}`}
-                    >
-                      <span>{q.is_correct ? "✓" : "✗"}</span>
-                      <span>{q.is_correct ? "Marked Correct" : "Marked Incorrect"}</span>
-                    </button>
-                  </div>
-
-                  <div className="rec-question-text">{q.question_text}</div>
-
-                  <div className="rec-answers-grid">
-                    <div className="rec-answer-box">
-                      <span className="rec-answer-label">Student Chosen Answer</span>
-                      <div>{q.selected_answer}</div>
-                    </div>
-                    {!q.is_correct && (
-                      <div className="rec-answer-box rec-answer-correct">
-                        <span className="rec-answer-label">Ground Truth Correct Answer</span>
-                        <div>{q.correct_answer}</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="rec-actions-bar">
-              <button
-                type="button"
-                className="rec-btn-primary"
-                onClick={handleAnalyze}
-                disabled={isSubmitting}
-              >
-                <span>{isSubmitting ? "⏳" : "⚡"}</span>
-                <span>
-                  {isSubmitting
-                    ? "Synthesizing Recommendations..."
-                    : "Run Recommendation Agent Analysis"}
-                </span>
-              </button>
-            </div>
+                  <span>🎯 Attempt #{studentHistory.length - idx}:</span>
+                  <strong style={{ color: chipColor }}>
+                    {rec.score_percentage}%
+                  </strong>
+                  <span className="rec-chip-date">
+                    ({rec.overall_score}/{rec.total_questions})
+                  </span>
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              className="rec-history-chip sandbox-chip"
+              onClick={() => setActiveTab("take_quiz")}
+            >
+              <span>🧪 Custom Sandbox</span>
+            </button>
           </div>
         </div>
       )}
 
-      {/* VIEW 2: Results Dashboard */}
+      {/* VIEW 2: Empty Launchpad State (When no assessment has been taken yet) */}
+      {activeTab === "dashboard" && !recommendationResult && (
+        <div className="rec-launchpad-card">
+          <div className="rec-launchpad-icon">🎓</div>
+          <h2 className="rec-launchpad-title">Welcome to Your AI Knowledge Coach</h2>
+          <p className="rec-launchpad-desc">
+            Your personal coach analyzes your lecture quizzes, detects underlying
+            misconceptions, maps them to cited lecture slides, and generates
+            interactive study quests with 1-click AI Tutoring.
+          </p>
+          <div className="rec-launchpad-actions">
+            {onNavigate && (
+              <button
+                type="button"
+                className="rec-quick-win-btn-primary"
+                onClick={() => onNavigate("quiz")}
+              >
+                <span>🎯</span>
+                <span>Take a Quiz to Diagnose Gaps</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className="rec-quick-win-btn-secondary"
+              onClick={() => {
+                analyzeExternalSubmission({
+                  student_id: studentId,
+                  document_id: selectedDocId || (documents[0]?.document_id || "doc_demo"),
+                  quiz_attempt_id: "demo_diagnostic_run",
+                  questions: PRESET_QUIZZES[0].questions,
+                });
+              }}
+            >
+              <span>⚡</span>
+              <span>Try Instant Sample Diagnostic</span>
+            </button>
+            <button
+              type="button"
+              className="rec-quick-win-btn-secondary"
+              onClick={() => setActiveTab("take_quiz")}
+            >
+              <span>🧪</span>
+              <span>Open Diagnostic Sandbox</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW 3: Results Dashboard */}
       {activeTab === "dashboard" && recommendationResult && (
         <div>
-          {/* Top Score Banner */}
+          {/* Top Score & Scholar Persona Banner */}
           <section className="rec-score-hero">
             <div className="rec-score-gauge-box">
               <svg className="rec-gauge-svg" viewBox="0 0 160 160">
-                <circle
-                  className="rec-gauge-bg"
-                  cx="80"
-                  cy="80"
-                  r={gaugeRadius}
-                />
+                <circle className="rec-gauge-bg" cx="80" cy="80" r={gaugeRadius} />
                 <circle
                   className="rec-gauge-fill"
                   cx="80"
@@ -567,17 +714,31 @@ export default function Recommendations({
             </div>
 
             <div className="rec-score-details">
-              <div className="rec-mastery-pill">
-                <span>Signal:</span>
-                <strong style={{ color: gaugeColor }}>
-                  {recommendationResult.mastery_level}
-                </strong>
+              <div>
+                <span className={`rec-scholar-badge ${scholarMeta.className}`}>
+                  <span>{scholarMeta.icon}</span> {scholarMeta.tier}
+                </span>
               </div>
-              <h2 className="rec-report-title">{selectedPreset.title}</h2>
-              <blockquote className="rec-summary-quote">
-                "{recommendationResult.summary}"
-              </blockquote>
-              <div className="rec-meta-tags">
+
+              <h2 className="rec-report-title">
+                {selectedPreset?.title || "Course Material Assessment"}
+              </h2>
+
+              <p className="rec-summary-quote">
+                "{scholarMeta.message}"
+              </p>
+
+              <div className="rec-boost-box">
+                <span>⚡ Exam Readiness:</span>
+                <strong>{recommendationResult.score_percentage}%</strong>
+                <span className="rec-boost-arrow">──▶</span>
+                <span className="rec-boost-val">
+                  Target: {Math.min(100, recommendationResult.score_percentage + scholarMeta.boostPercent)}%
+                </span>
+                <span>(with Quick Win practice)</span>
+              </div>
+
+              <div className="rec-meta-tags" style={{ marginTop: "14px" }}>
                 <span className="rec-meta-tag">
                   <span>👤</span> Student: <strong>{recommendationResult.student_id}</strong>
                 </span>
@@ -588,7 +749,229 @@ export default function Recommendations({
             </div>
           </section>
 
-          {/* Grid Layout: Mastery + Socratic Tutor Handoff */}
+          {/* ⚡ THE QUICK WIN PRIORITY CARD (Dopamine Trigger: Low Hanging Fruit) */}
+          {quickWin && !recoveredGaps[quickWin.gap_id] && (
+            <div className="rec-quick-win-card">
+              <div className="rec-quick-win-top-bar">
+                <span className="rec-quick-win-badge">
+                  <span>⚡</span> 5-Minute Quick Win · Highest ROI
+                </span>
+                <span className="rec-quick-win-boost-badge">
+                  <span>🚀</span> Estimated +{scholarMeta.boostPercent}% Readiness Leap
+                </span>
+              </div>
+
+              <h3 className="rec-quick-win-title">
+                Master Concept: "{quickWin.topic}"
+              </h3>
+              <p className="rec-quick-win-desc">
+                {quickWin.explanation}
+              </p>
+
+              <div className="rec-quick-win-actions">
+                <button
+                  type="button"
+                  className="rec-quick-win-btn-primary"
+                  onClick={() => {
+                    if (onLaunchTutor) {
+                      onLaunchTutor(recommendationResult.tutor_handoff);
+                    } else {
+                      setShowTutorModal(true);
+                    }
+                  }}
+                >
+                  <span>💬</span>
+                  <span>Launch 5-Min Socratic Coach</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="rec-quick-win-btn-secondary"
+                  onClick={() => toggleDrill(quickWin.gap_id)}
+                >
+                  <span>🧠</span>
+                  <span>{activeDrills[quickWin.gap_id] ? "Close Micro-Drill" : "Take 30-Second Micro-Drill"}</span>
+                </button>
+
+                {onNavigate && (
+                  <button
+                    type="button"
+                    className="rec-quick-win-btn-secondary"
+                    onClick={() => onNavigate("materials")}
+                  >
+                    <span>📖</span>
+                    <span>Review Lecture Slides</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Inline Micro-Drill for Quick Win */}
+              {activeDrills[quickWin.gap_id] && (() => {
+                const drill = getDrillForTopic(quickWin.topic, quickWin.explanation);
+                const drillState = activeDrills[quickWin.gap_id];
+                return (
+                  <div className="rec-micro-drill-card">
+                    <div className="rec-drill-prompt">{drill.question}</div>
+                    <div className="rec-drill-options">
+                      {drill.options.map((opt, oIdx) => {
+                        let btnClass = "";
+                        if (drillState.isSubmitted) {
+                          if (oIdx === drill.correctIndex) btnClass = "selected-correct";
+                          else if (oIdx === drillState.selectedOpt) btnClass = "selected-incorrect";
+                        } else if (drillState.selectedOpt === oIdx) {
+                          btnClass = "selected-correct";
+                        }
+                        return (
+                          <button
+                            key={oIdx}
+                            type="button"
+                            className={`rec-drill-option-btn ${btnClass}`}
+                            disabled={drillState.isSubmitted}
+                            onClick={() => handleSelectDrillOption(quickWin.gap_id, oIdx)}
+                          >
+                            <strong>{String.fromCharCode(65 + oIdx)}.</strong> {opt}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {!drillState.isSubmitted ? (
+                      <button
+                        type="button"
+                        className="rec-quick-win-btn-primary"
+                        disabled={drillState.selectedOpt === null}
+                        onClick={() => handleSubmitDrill(quickWin.gap_id, drill)}
+                      >
+                        Check Answer
+                      </button>
+                    ) : (
+                      <div className={`rec-drill-feedback ${drillState.isCorrect ? "success" : "error"}`}>
+                        <span>
+                          {drillState.isCorrect
+                            ? "🎉 Spot on! Concept recovered (+50 XP). Your mastery level increased!"
+                            : "💡 Not quite. " + drill.explanation}
+                        </span>
+                        {drillState.isCorrect && (
+                          <span className="rec-gap-evidence-pill" style={{ background: "rgba(16,185,129,0.2)" }}>
+                            ✓ Solved
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* 🗺️ INTERACTIVE STUDY QUEST / ACTION CHECKLIST */}
+          <div className="rec-quest-panel">
+            <div className="rec-quest-header-row">
+              <div className="rec-quest-title-box">
+                <h3>
+                  <span>🗺️</span> Your Actionable Recovery Quest
+                </h3>
+                <p>
+                  Check off tasks as you review to level up your topic retention.
+                </p>
+              </div>
+
+              <div className="rec-quest-progress-box">
+                <div className="rec-quest-progress-label">
+                  <span>Quest Progress</span>
+                  <strong>{questPercent}% ({completedCount}/{studyMissions.length})</strong>
+                </div>
+                <div className="rec-quest-track">
+                  <div
+                    className="rec-quest-bar"
+                    style={{ width: `${questPercent}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="rec-quest-list">
+              {studyMissions.map((mission) => {
+                const isDone = completedList.includes(mission.id);
+                return (
+                  <div
+                    key={mission.id}
+                    className={`rec-quest-item ${isDone ? "completed" : ""}`}
+                  >
+                    <button
+                      type="button"
+                      className="rec-quest-checkbox-btn"
+                      onClick={() => toggleMission(mission.id)}
+                      aria-label={`Mark mission as ${isDone ? "incomplete" : "complete"}`}
+                    >
+                      <div className="rec-quest-checkbox">
+                        {isDone ? "✓" : ""}
+                      </div>
+                    </button>
+
+                    <div className="rec-quest-body">
+                      <div className="rec-quest-meta-line">
+                        <span className="rec-quest-type-tag">{mission.type}</span>
+                        <span className="rec-quest-time-tag">⏱️ ~{mission.time} mins</span>
+                        {isDone && (
+                          <span className="rec-gap-evidence-pill" style={{ background: "rgba(16,185,129,0.2)", color: "#10b981" }}>
+                            ✓ Mission Cleared
+                          </span>
+                        )}
+                      </div>
+
+                      <h4 className="rec-quest-item-title">{mission.title}</h4>
+                      <p className="rec-quest-item-desc">{mission.desc}</p>
+
+                      <div className="rec-quest-cta-row">
+                        {mission.actionType === "tutor" && (
+                          <button
+                            type="button"
+                            className="rec-quest-action-btn"
+                            onClick={() => {
+                              toggleMission(mission.id);
+                              if (onLaunchTutor) {
+                                onLaunchTutor(recommendationResult.tutor_handoff);
+                              } else {
+                                setShowTutorModal(true);
+                              }
+                            }}
+                          >
+                            <span>💬</span>
+                            <span>Ask AI Tutor Now</span>
+                          </button>
+                        )}
+
+                        {mission.actionType === "drill" && mission.gap && (
+                          <button
+                            type="button"
+                            className="rec-quest-action-btn"
+                            onClick={() => toggleDrill(mission.gap.gap_id)}
+                          >
+                            <span>🧠</span>
+                            <span>Take Quick Drill</span>
+                          </button>
+                        )}
+
+                        {mission.actionType === "material" && onNavigate && (
+                          <button
+                            type="button"
+                            className="rec-quest-action-btn"
+                            onClick={() => onNavigate("materials")}
+                          >
+                            <span>📖</span>
+                            <span>Open Lecture Slide</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Grid Layout: Topic Mastery + Socratic Tutor Handoff */}
           <div className="rec-dashboard-grid">
             {/* Topic Mastery Breakdown */}
             <div className="rec-panel" style={{ margin: 0 }}>
@@ -598,44 +981,55 @@ export default function Recommendations({
                     <span>📊</span> Topic Mastery Breakdown
                   </h3>
                   <p className="rec-panel-desc">
-                    Calculated accuracy & severity weighting per evaluated topic.
+                    Fine-grained accuracy and difficulty weighting per lecture concept.
                   </p>
                 </div>
               </div>
 
               <div className="rec-mastery-list">
                 {recommendationResult.topic_mastery.map((tm) => {
-                  const statusClass = tm.mastery_status
-                    .toLowerCase()
-                    .replace(/\s+/g, "-");
+                  const isRecovered = Object.keys(recoveredGaps).some((gId) =>
+                    recommendationResult.knowledge_gaps.some(
+                      (kg) => kg.gap_id === gId && kg.topic === tm.topic
+                    )
+                  );
+                  const effectivePct = isRecovered
+                    ? Math.min(100, tm.accuracy_percentage + 40)
+                    : tm.accuracy_percentage;
+
                   const fillClass =
-                    tm.accuracy_percentage >= 80
+                    effectivePct >= 80
                       ? "fill-emerald"
-                      : tm.accuracy_percentage >= 50
+                      : effectivePct >= 50
                       ? "fill-amber"
                       : "fill-rose";
 
                   return (
                     <div key={tm.topic} className="rec-mastery-item">
                       <div className="rec-mastery-top-row">
-                        <span className="rec-mastery-topic">{tm.topic}</span>
+                        <span className="rec-mastery-topic">
+                          {tm.topic}{" "}
+                          {isRecovered && <span style={{ color: "#10b981", fontSize: "0.78rem" }}>★ Micro-Drill Boost</span>}
+                        </span>
                         <span
-                          className={`rec-mastery-status-pill status-${statusClass}`}
+                          className={`rec-mastery-status-pill ${
+                            isRecovered ? "status-mastered" : `status-${tm.mastery_status.toLowerCase().replace(/\s+/g, "-")}`
+                          }`}
                         >
-                          {tm.mastery_status}
+                          {isRecovered ? "Recovered" : tm.mastery_status}
                         </span>
                       </div>
                       <div className="rec-progress-track">
                         <div
                           className={`rec-progress-fill ${fillClass}`}
-                          style={{ width: `${tm.accuracy_percentage}%` }}
+                          style={{ width: `${effectivePct}%` }}
                         />
                       </div>
                       <div className="rec-mastery-bottom-row">
                         <span>
                           {tm.correct_count} of {tm.total_questions} questions correct
                         </span>
-                        <strong>{tm.accuracy_percentage}%</strong>
+                        <strong>{effectivePct}%</strong>
                       </div>
                     </div>
                   );
@@ -653,7 +1047,7 @@ export default function Recommendations({
                   <span>🤖</span> AI Tutor Remedial Handoff
                 </h3>
                 <p className="rec-panel-desc">
-                  The Recommendation Agent has generated a tailored Socratic coaching package for the Tutor Agent.
+                  Tailored Socratic review package formulated for the Tutor Agent.
                 </p>
 
                 <div className="rec-tutor-bubble-box">
@@ -691,47 +1085,57 @@ export default function Recommendations({
             </div>
           </div>
 
-          {/* Identified Knowledge Gaps & Pedagogical Explainability */}
+          {/* Identified Knowledge Gaps with Interactive On-the-Spot Micro-Drills */}
           <div className="rec-panel">
             <div className="rec-panel-header">
               <div>
                 <h3 className="rec-panel-title">
-                  <span>🔍</span> Identified Knowledge Gaps & Pedagogical Explainability
+                  <span>🔍</span> Knowledge Gaps & Pedagogical Explainability
                 </h3>
                 <p className="rec-panel-desc">
-                  Transparent, evidence-based reasoning behind each identified area of weakness.
+                  Transparent reasoning behind identified gaps, with on-the-spot concept challenges.
                 </p>
               </div>
             </div>
 
             {recommendationResult.knowledge_gaps.length === 0 ? (
               <div className="rec-empty-gaps">
-                ✨ No critical knowledge gaps detected in this assessment attempt.
+                ✨ No critical knowledge gaps detected in this assessment attempt. Excellent retention!
               </div>
             ) : (
               <div className="rec-gaps-grid">
                 {recommendationResult.knowledge_gaps.map((gap) => {
                   const sevClass = gap.severity.toLowerCase();
+                  const isRecovered = recoveredGaps[gap.gap_id];
+                  const drill = getDrillForTopic(gap.topic, gap.explanation);
+                  const drillState = activeDrills[gap.gap_id];
+
                   return (
                     <div
                       key={gap.gap_id}
                       className={`rec-gap-card ${sevClass}`}
+                      style={{
+                        borderColor: isRecovered ? "#10b981" : undefined,
+                      }}
                     >
                       <div className="rec-gap-header">
-                        <span
-                          className={`rec-gap-severity-badge ${sevClass}`}
-                        >
+                        <span className={`rec-gap-severity-badge ${sevClass}`}>
                           {gap.severity} Severity
                         </span>
                         <span className="rec-gap-evidence-pill">
                           {gap.missed_questions_count} missed{" "}
-                          {gap.missed_questions_count === 1
-                            ? "question"
-                            : "questions"}
+                          {gap.missed_questions_count === 1 ? "question" : "questions"}
                         </span>
                       </div>
 
-                      <h4 className="rec-gap-topic-title">{gap.topic}</h4>
+                      <h4 className="rec-gap-topic-title">
+                        {gap.topic}
+                        {isRecovered && (
+                          <span style={{ color: "#10b981", fontSize: "0.85rem", marginLeft: "8px" }}>
+                            ✓ Recovered!
+                          </span>
+                        )}
+                      </h4>
 
                       <div className="rec-explainability-box">
                         <div className="rec-explainability-title">
@@ -754,6 +1158,70 @@ export default function Recommendations({
                           </ul>
                         </div>
                       )}
+
+                      {/* On-the-spot concept recovery button */}
+                      {isRecovered ? (
+                        <div className="rec-gap-resolved-badge">
+                          <span>🎉</span> Concept Mastered on the spot (+50 XP)
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="rec-gap-drill-toggle-btn"
+                          onClick={() => toggleDrill(gap.gap_id)}
+                        >
+                          <span>🧠</span>
+                          <span>{drillState ? "Close Concept Challenge" : "Test Myself on This (30s Drill)"}</span>
+                        </button>
+                      )}
+
+                      {/* Interactive Micro-Drill Accordion */}
+                      {drillState && !isRecovered && (
+                        <div className="rec-micro-drill-card">
+                          <div className="rec-drill-prompt">{drill.question}</div>
+                          <div className="rec-drill-options">
+                            {drill.options.map((opt, oIdx) => {
+                              let btnClass = "";
+                              if (drillState.isSubmitted) {
+                                if (oIdx === drill.correctIndex) btnClass = "selected-correct";
+                                else if (oIdx === drillState.selectedOpt) btnClass = "selected-incorrect";
+                              } else if (drillState.selectedOpt === oIdx) {
+                                btnClass = "selected-correct";
+                              }
+                              return (
+                                <button
+                                  key={oIdx}
+                                  type="button"
+                                  className={`rec-drill-option-btn ${btnClass}`}
+                                  disabled={drillState.isSubmitted}
+                                  onClick={() => handleSelectDrillOption(gap.gap_id, oIdx)}
+                                >
+                                  <strong>{String.fromCharCode(65 + oIdx)}.</strong> {opt}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {!drillState.isSubmitted ? (
+                            <button
+                              type="button"
+                              className="rec-quick-win-btn-primary"
+                              disabled={drillState.selectedOpt === null}
+                              onClick={() => handleSubmitDrill(gap.gap_id, drill)}
+                            >
+                              Check Answer
+                            </button>
+                          ) : (
+                            <div className={`rec-drill-feedback ${drillState.isCorrect ? "success" : "error"}`}>
+                              <span>
+                                {drillState.isCorrect
+                                  ? "🎉 Excellent! Concept recovered."
+                                  : "💡 Insight: " + drill.explanation}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -761,51 +1229,216 @@ export default function Recommendations({
             )}
           </div>
 
-          {/* Prioritized Actionable Study Plan */}
+          {/* 🎯 CLOSED-LOOP RECOVERY BANNER (Action Oriented) */}
+          <div className="rec-recovery-cta-panel">
+            <div className="rec-recovery-cta-text">
+              <h3>
+                <span>🚀</span> Ready to Solidify Your Mastery?
+              </h3>
+              <p>
+                Take a targeted 3-question recovery quiz with the Quiz Agent, or start a personalized
+                1-on-1 Socratic discussion with your AI Tutor.
+              </p>
+            </div>
+            <div className="rec-recovery-cta-btns">
+              <button
+                type="button"
+                className="rec-btn-tutor-launch"
+                onClick={() => {
+                  if (onLaunchTutor) {
+                    onLaunchTutor(recommendationResult.tutor_handoff);
+                  } else {
+                    setShowTutorModal(true);
+                  }
+                }}
+              >
+                <span>💬</span>
+                <span>Chat with AI Tutor</span>
+              </button>
+              {onNavigate && (
+                <button
+                  type="button"
+                  className="rec-quick-win-btn-primary"
+                  onClick={() => onNavigate("quiz")}
+                >
+                  <span>🎯</span>
+                  <span>Take Recovery Quiz</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW 4: Assessment & Mistake Simulator (Sandbox Tab) */}
+      {activeTab === "take_quiz" && (
+        <div>
+          {/* Panel 1: Configuration */}
           <div className="rec-panel">
             <div className="rec-panel-header">
               <div>
-                <h3 className="rec-panel-title">
-                  <span>🎯</span> Prioritized Actionable Study Plan
-                </h3>
+                <h2 className="rec-panel-title">
+                  <span>⚙️</span> 1. Configure Diagnostic Scenario
+                </h2>
                 <p className="rec-panel-desc">
-                  Curated sequence of remediation steps prioritized by gap severity and cognitive progression.
+                  Select student context, course material, and assessment questions to test.
                 </p>
               </div>
             </div>
 
-            <div className="rec-plan-list">
-              {recommendationResult.action_items.map((item) => (
-                <div key={item.priority} className="rec-plan-item">
-                  <div className="rec-plan-priority-badge">
-                    #{item.priority}
+            <div className="rec-grid-two-col">
+              <div className="rec-form-group">
+                <label className="rec-form-label" htmlFor="student-id-field">
+                  Student Identifier
+                </label>
+                <input
+                  id="student-id-field"
+                  className="rec-form-input"
+                  type="text"
+                  value={studentId}
+                  disabled
+                />
+              </div>
+
+              <div className="rec-form-group">
+                <label className="rec-form-label" htmlFor="doc-select-field">
+                  Associated Course Material
+                </label>
+                <select
+                  id="doc-select-field"
+                  className="rec-form-select"
+                  value={selectedDocId}
+                  onChange={(e) => setSelectedDocId(e.target.value)}
+                >
+                  {documents.length === 0 ? (
+                    <option value="doc_demo">
+                      Information_Retrieval_Lecture_Notes.pdf (Demo)
+                    </option>
+                  ) : (
+                    documents.map((d) => (
+                      <option key={d.document_id} value={d.document_id}>
+                        {d.original_filename} ({d.chunk_count || 0} chunks)
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+            </div>
+
+            <div className="rec-form-group" style={{ marginTop: "16px" }}>
+              <label className="rec-form-label">
+                Select Formative Assessment Preset:
+              </label>
+              <div className="rec-preset-buttons-row">
+                {PRESET_QUIZZES.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={`rec-preset-btn ${
+                      selectedPreset.id === preset.id ? "active" : ""
+                    }`}
+                    onClick={() => handlePresetChange(preset.id)}
+                  >
+                    <span>📑</span>
+                    <span>{preset.title}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Panel 2: Questions Simulator */}
+          <div className="rec-panel">
+            <div className="rec-panel-header">
+              <div>
+                <h2 className="rec-panel-title">
+                  <span>📝</span> 2. Student Responses & Mistake Simulator
+                </h2>
+                <p className="rec-panel-desc">
+                  Toggle correctness to simulate mistakes and verify explainable gap calculations.
+                </p>
+              </div>
+            </div>
+
+            <div className="rec-questions-list">
+              {activeQuestions.map((q, qIndex) => (
+                <div
+                  key={q.question_id}
+                  className={`rec-question-card ${
+                    q.is_correct ? "correct" : "incorrect"
+                  }`}
+                >
+                  <div className="rec-question-card-header">
+                    <span className="rec-question-num">
+                      Question {qIndex + 1}
+                    </span>
+                    <span className="rec-question-topic">
+                      <span>🏷️</span> {q.topic}
+                    </span>
+                    <span className={`rec-difficulty-badge ${q.difficulty}`}>
+                      {q.difficulty} difficulty
+                    </span>
                   </div>
-                  <div className="rec-plan-details">
-                    <div className="rec-plan-meta-row">
-                      <span className="rec-plan-type-pill">
-                        {item.action_type}
+
+                  <p className="rec-question-text">{q.question_text}</p>
+
+                  <div className="rec-answer-box">
+                    <div>
+                      <span className="rec-answer-label">
+                        Student's Selected Answer:
                       </span>
-                      <span className="rec-plan-time">
-                        ⏱️ {item.estimated_minutes} mins
-                      </span>
+                      <div className="rec-answer-val">{q.selected_answer}</div>
                     </div>
-                    <h4 className="rec-plan-title">{item.title}</h4>
-                    <p className="rec-plan-desc">{item.description}</p>
+                    {!q.is_correct && (
+                      <div style={{ marginTop: "8px" }}>
+                        <span
+                          className="rec-answer-label"
+                          style={{ color: "var(--rec-emerald)" }}
+                        >
+                          Expected Ground-Truth Answer:
+                        </span>
+                        <div
+                          className="rec-answer-val"
+                          style={{ color: "var(--rec-emerald)" }}
+                        >
+                          {q.correct_answer}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rec-question-toggle-row">
+                    <label className="rec-toggle-label">
+                      <input
+                        type="checkbox"
+                        checked={q.is_correct}
+                        onChange={() => toggleQuestionCorrectness(qIndex)}
+                      />
+                      <span>
+                        Simulate Student Verdict:{" "}
+                        <strong>{q.is_correct ? "✓ Correct" : "✗ Incorrect"}</strong>
+                      </span>
+                    </label>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
 
-          <div style={{ marginTop: "24px" }}>
-            <button
-              type="button"
-              className="rec-btn-secondary"
-              onClick={() => setActiveTab("take_quiz")}
-            >
-              <span>←</span>
-              <span>Test Another Assessment Scenario</span>
-            </button>
+            <div className="rec-actions-bar">
+              <button
+                type="button"
+                className="rec-btn-primary"
+                onClick={handleRunAnalysis}
+                disabled={isSubmitting}
+              >
+                <span>🚀</span>
+                <span>
+                  {isSubmitting
+                    ? "Synthesizing Recommendations..."
+                    : "Run Recommendation Agent Analysis"}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
       )}

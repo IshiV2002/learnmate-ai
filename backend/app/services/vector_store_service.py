@@ -3,7 +3,11 @@ from typing import TypedDict
 
 import chromadb
 
-from app.core.config import CHROMA_COLLECTION_NAME, CHROMA_DATA_DIRECTORY
+from app.core.config import (
+    CHROMA_COLLECTION_NAME,
+    CHROMA_DATA_DIRECTORY,
+    MAX_RETRIEVAL_COSINE_DISTANCE,
+)
 from app.services.text_processing_service import TextChunk
 
 
@@ -28,8 +32,15 @@ class VectorStoreService:
         self,
         persistence_directory: Path = CHROMA_DATA_DIRECTORY,
         collection_name: str = CHROMA_COLLECTION_NAME,
+        max_cosine_distance: float = MAX_RETRIEVAL_COSINE_DISTANCE,
     ) -> None:
+        if not 0 < max_cosine_distance <= 2:
+            raise ValueError(
+                "max_cosine_distance must be greater than 0 and no greater than 2."
+            )
+
         self.persistence_directory = persistence_directory
+        self.max_cosine_distance = max_cosine_distance
         self.persistence_directory.mkdir(parents=True, exist_ok=True)
 
         try:
@@ -85,18 +96,28 @@ class VectorStoreService:
             self.delete_document(document_id, ignore_errors=True)
             raise VectorStoreError("Document chunks could not be indexed.") from error
 
-    def search_document(
+    def search_documents(
         self,
-        document_id: str,
+        document_ids: list[str],
         query_embedding: list[float],
         top_k: int,
     ) -> list[VectorSearchResult]:
-        """Search only chunks belonging to the requested document."""
+        """Search across one or multiple documents by IDs."""
+        cleaned_ids = [doc_id.strip() for doc_id in document_ids if doc_id and doc_id.strip()]
+        if not cleaned_ids:
+            return []
+
+        where_clause = (
+            {"document_id": cleaned_ids[0]}
+            if len(cleaned_ids) == 1
+            else {"document_id": {"$in": cleaned_ids}}
+        )
+
         try:
             query_result = self.collection.query(
                 query_embeddings=[query_embedding],
                 n_results=top_k,
-                where={"document_id": document_id},
+                where=where_clause,
                 include=["documents", "metadatas", "distances"],
             )
         except Exception as error:
@@ -119,17 +140,73 @@ class VectorStoreService:
             if text is None or metadata is None:
                 continue
 
+            numeric_distance = float(distance)
+            if numeric_distance > self.max_cosine_distance:
+                continue
+
             results.append(
                 {
                     "text": text,
                     "page_number": int(metadata["page_number"]),
                     "chunk_index": int(metadata["chunk_index"]),
                     "source": str(metadata["original_filename"]),
-                    "distance": float(distance),
+                    "distance": numeric_distance,
                 }
             )
 
         return results
+
+    def search_document(
+        self,
+        document_id: str,
+        query_embedding: list[float],
+        top_k: int,
+    ) -> list[VectorSearchResult]:
+        """Search only chunks belonging to the requested document."""
+        return self.search_documents([document_id], query_embedding, top_k)
+
+    def get_document_chunks(self, document_ids: list[str]) -> list[VectorSearchResult]:
+        """Return every indexed chunk for selected documents in source order."""
+        cleaned_ids = [doc_id.strip() for doc_id in document_ids if doc_id and doc_id.strip()]
+        if not cleaned_ids:
+            return []
+
+        where_clause = (
+            {"document_id": cleaned_ids[0]}
+            if len(cleaned_ids) == 1
+            else {"document_id": {"$in": cleaned_ids}}
+        )
+        try:
+            records = self.collection.get(
+                where=where_clause,
+                include=["documents", "metadatas"],
+            )
+        except Exception as error:
+            raise VectorStoreError("Document chunks could not be loaded.") from error
+
+        chunks: list[VectorSearchResult] = []
+        for text, metadata in zip(records.get("documents") or [], records.get("metadatas") or []):
+            if text is None or metadata is None:
+                continue
+            chunks.append(
+                {
+                    "text": str(text),
+                    "page_number": int(metadata["page_number"]),
+                    "chunk_index": int(metadata["chunk_index"]),
+                    "source": str(metadata["original_filename"]),
+                    "distance": 0.0,
+                }
+            )
+
+        return sorted(
+            chunks,
+            key=lambda chunk: (
+                chunk["source"],
+                chunk["page_number"],
+                chunk["chunk_index"],
+            ),
+        )
+
 
     def count_document_chunks(self, document_id: str) -> int:
         """Return the number of stored chunks for one document."""

@@ -1,9 +1,8 @@
-import Badge from "../ui/Badge.jsx";
 import Button from "../ui/Button.jsx";
 import Icon from "../ui/Icon.jsx";
 import { getNavigationItem } from "./navigation.js";
 
-function TopBar({ currentPage, onLogout, onOpenMenu, onViewPlans, user }) {
+function TopBar({ currentPage, onLogout, onOpenMenu, onToggleTheme, onViewPlans, theme, user }) {
   const page = getNavigationItem(currentPage);
 
   return (
@@ -16,24 +15,29 @@ function TopBar({ currentPage, onLogout, onOpenMenu, onViewPlans, user }) {
           onClick={onOpenMenu}
         />
         <div className="topbar-copy">
-          <p className="topbar-kicker">Knowledge workspace</p>
+          <p className="topbar-kicker">Your study space</p>
           <p className="topbar-title">{page.title}</p>
         </div>
       </div>
 
       <div className="topbar-actions">
         <Button className="topbar-plans-button" onClick={onViewPlans}>Plans</Button>
-        <Badge tone="accent">
-          <span className="system-dot" aria-hidden="true" />
-          Multi-agent learning
-        </Badge>
+        <Button
+          aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+          className="theme-toggle"
+          icon={<Icon name={theme === "light" ? "moon" : "sun"} size={18} />}
+          onClick={onToggleTheme}
+          title={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+        >
+          {theme === "light" ? "Dark" : "Light"}
+        </Button>
         <div className="topbar-user">
           <span className="topbar-avatar" aria-hidden="true">
             {user.full_name.charAt(0).toUpperCase()}
           </span>
           <span className="topbar-user-copy">
             <strong>{user.full_name}</strong>
-            <small>Private workspace</small>
+            <small>Student workspace</small>
           </span>
         </div>
         <Button onClick={onLogout}>Sign out</Button>

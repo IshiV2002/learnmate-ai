@@ -1,28 +1,49 @@
 export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
-const ALLOWED_PDF_TYPES = ["application/pdf", "application/x-pdf"];
+const ALLOWED_MATERIAL_TYPES = {
+  ".jpeg": ["image/jpeg", "image/jpg"],
+  ".jpg": ["image/jpeg", "image/jpg"],
+  ".pdf": ["application/pdf", "application/x-pdf"],
+  ".png": ["image/png"],
+};
 
-export function validatePdf(file) {
+function getFileExtension(filename = "") {
+  const normalizedFilename = filename.toLowerCase();
+  return Object.keys(ALLOWED_MATERIAL_TYPES).find((extension) =>
+    normalizedFilename.endsWith(extension),
+  );
+}
+
+export function validateMaterial(file) {
   if (!file) {
-    return "Choose a PDF before uploading.";
+    return "Choose a PDF or image before uploading.";
   }
 
-  const hasPdfExtension = file.name.toLowerCase().endsWith(".pdf");
-  const hasAllowedType = file.type === "" || ALLOWED_PDF_TYPES.includes(file.type);
+  const extension = getFileExtension(file.name);
+  const hasAllowedType =
+    extension &&
+    (file.type === "" || ALLOWED_MATERIAL_TYPES[extension].includes(file.type));
 
-  if (!hasPdfExtension || !hasAllowedType) {
-    return "Only PDF files are supported.";
+  if (!extension || !hasAllowedType) {
+    return "Only PDF, PNG, JPG, and JPEG files are supported.";
   }
 
   if (file.size === 0) {
-    return "The selected PDF is empty.";
+    return "The selected file is empty.";
   }
 
   if (file.size > MAX_FILE_SIZE_BYTES) {
-    return "The PDF must be 10 MB or smaller.";
+    return "The file must be 10 MB or smaller.";
   }
 
   return "";
+}
+
+export function getMaterialType(filename) {
+  const extension = getFileExtension(filename);
+  return extension === ".png" || extension === ".jpg" || extension === ".jpeg"
+    ? "Image"
+    : "PDF";
 }
 
 export function formatFileSize(fileSizeBytes) {

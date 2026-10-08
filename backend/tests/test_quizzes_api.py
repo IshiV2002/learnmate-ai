@@ -20,15 +20,31 @@ TEST_USER = make_test_user("quiz-test-user")
 class MockRetrievalAgent:
     """Return course evidence so API tests exercise grounded quiz generation."""
 
+    def __init__(self) -> None:
+        self.searched_document_ids: list[str] = []
+
     def search(self, document_id: str, query: str, top_k: int = 4) -> list[dict]:
+        self.searched_document_ids.append(document_id)
+        is_ocr_image = document_id == "doc_api_image_01"
         return [
             {
-                "page_number": 2,
+                "page_number": 1 if is_ocr_image else 2,
                 "chunk_index": 0,
-                "source": "ir_scoring.pdf",
+                "source": "whiteboard.png" if is_ocr_image else "ir_scoring.pdf",
                 "text": (
-                    "Cosine similarity compares normalized document vectors, while "
-                    "TF-IDF represents the importance of terms in those vectors."
+                    "Chlorophyll absorbs light energy during photosynthesis. "
+                    "Photosynthesis takes place in chloroplasts inside plant cells. "
+                    "The light-dependent reactions capture energy and split water molecules. "
+                    "The Calvin cycle uses captured energy to convert carbon dioxide into sugar. "
+                    "Glucose stores chemical energy, and oxygen is released as a byproduct."
+                    if is_ocr_image
+                    else (
+                        "Cosine similarity measures the angle between normalized document vectors. "
+                        "TF-IDF weighting represents term importance using term frequency and inverse document frequency. "
+                        "Term frequency counts how often a term appears in a document. "
+                        "Inverse document frequency reduces the weight of terms that appear in many documents. "
+                        "Vector normalization scales document vectors to unit length before similarity comparison."
+                    )
                 ),
                 "distance": 0.08,
             }
@@ -57,9 +73,24 @@ class QuizzesAPITests(unittest.TestCase):
             )
         )
 
+        self.database.create_document(
+            DocumentRecord(
+                document_id="doc_api_image_01",
+                original_filename="whiteboard.png",
+                stored_filename="whiteboard_ocr.stored.pdf",
+                page_count=1,
+                pages_with_text=1,
+                chunk_count=1,
+                file_size_bytes=1800,
+                created_at="2026-01-01T00:00:00+00:00",
+                user_id=TEST_USER.user_id,
+            )
+        )
+
+        self.mock_retrieval = MockRetrievalAgent()
         self.test_quiz_agent = quizzes.QuizAgent(
             database=self.database,
-            retrieval_agent=MockRetrievalAgent(),  # type: ignore[arg-type]
+            retrieval_agent=self.mock_retrieval,  # type: ignore[arg-type]
         )
         self.test_rec_agent = recommendations.RecommendationAgent(
             database=self.database,
@@ -109,6 +140,23 @@ class QuizzesAPITests(unittest.TestCase):
         self.assertEqual(len(data["questions"]), 3)
         self.assertNotIn("correct_answer", data["questions"][0])
         self.assertNotIn("explanation", data["questions"][0])
+
+    def test_generate_quiz_from_ocr_indexed_image(self) -> None:
+        response = self.client.post(
+            "/quizzes/generate",
+            json={
+                "document_id": "doc_api_image_01",
+                "num_questions": 3,
+                "question_types": ["mcq"],
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(data["document_id"], "doc_api_image_01")
+        self.assertTrue(data["title"].startswith("whiteboard Quiz"))
+        self.assertEqual(len(data["questions"]), 3)
+        self.assertIn("doc_api_image_01", self.mock_retrieval.searched_document_ids)
 
     def test_get_quiz_hides_answers_by_default(self) -> None:
         # 1. Generate

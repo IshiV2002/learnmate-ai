@@ -19,7 +19,12 @@ from app.agents.retrieval_agent import RetrievalAgent
 from app.database.database import DocumentDatabase, DocumentDatabaseError
 from app.database.models import DocumentRecord
 from app.main import app
+from app.services.image_ocr_service import (
+    ImageOCRUnavailableError,
+    ImagePixelLimitError,
+)
 from app.services.pdf_service import extract_pdf_pages
+from app.services.rate_limit_service import SlidingWindowRateLimiter
 from app.services.vector_store_service import VectorStoreService
 from tests.auth_helpers import make_test_user
 
@@ -141,6 +146,142 @@ class DocumentUploadTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(stored_record)
         self.assertEqual(stored_record.original_filename, "lecture.pdf")
 
+    async def test_valid_png_upload_is_ocr_processed_and_indexed(self) -> None:
+        image_content = documents.PNG_SIGNATURE + b"test-image-content"
+        normalized_pdf = create_test_pdf(["OCR lecture notes"])
+        upload = create_upload(image_content, "whiteboard.png", "image/png")
+
+        with patch.object(
+            documents,
+            "extract_image_page",
+            return_value=(
+                [{"page_number": 1, "text": "OCR lecture notes"}],
+                normalized_pdf,
+            ),
+        ):
+            response = await documents.upload_document(TEST_USER, upload)
+
+        metadata = response["document"]
+        stored_files = list(self.upload_directory.glob("*.pdf"))
+        self.assertEqual(
+            response["message"],
+            "Image uploaded, OCR processed, and indexed successfully",
+        )
+        self.assertEqual(metadata["original_filename"], "whiteboard.png")
+        self.assertEqual(metadata["page_count"], 1)
+        self.assertEqual(metadata["pages_with_text"], 1)
+        self.assertEqual(metadata["chunk_count"], 1)
+        self.assertEqual(metadata["file_size_bytes"], len(image_content))
+        self.assertNotIn("stored_filename", metadata)
+        self.assertEqual(len(stored_files), 1)
+        self.assertEqual(stored_files[0].read_bytes(), normalized_pdf)
+        self.assertEqual(
+            self.fake_retrieval_agent.indexed_document_ids,
+            [metadata["document_id"]],
+        )
+
+    async def test_valid_jpeg_extension_and_signature_are_supported(self) -> None:
+        image_content = documents.JPEG_SIGNATURE + b"test-image-content"
+        upload = create_upload(image_content, "lecture.jpeg", "image/jpeg")
+
+        with patch.object(
+            documents,
+            "extract_image_page",
+            return_value=(
+                [{"page_number": 1, "text": "JPEG lecture notes"}],
+                create_test_pdf(["JPEG lecture notes"]),
+            ),
+        ):
+            response = await documents.upload_document(TEST_USER, upload)
+
+        self.assertEqual(response["document"]["original_filename"], "lecture.jpeg")
+        self.assertEqual(response["document"]["chunk_count"], 1)
+
+    async def test_image_content_type_must_match_extension(self) -> None:
+        upload = create_upload(
+            documents.PNG_SIGNATURE + b"image",
+            "lecture.png",
+            "image/jpeg",
+        )
+
+        with self.assertRaises(HTTPException) as raised_error:
+            await documents.upload_document(TEST_USER, upload)
+
+        self.assertEqual(raised_error.exception.status_code, 415)
+
+    async def test_image_signature_must_match_declared_format(self) -> None:
+        upload = create_upload(
+            documents.JPEG_SIGNATURE + b"image",
+            "lecture.png",
+            "image/png",
+        )
+
+        with self.assertRaises(HTTPException) as raised_error:
+            await documents.upload_document(TEST_USER, upload)
+
+        self.assertEqual(raised_error.exception.status_code, 400)
+
+    async def test_image_without_readable_text_is_rejected_and_removed(self) -> None:
+        upload = create_upload(
+            documents.PNG_SIGNATURE + b"image",
+            "blank.png",
+            "image/png",
+        )
+
+        with patch.object(
+            documents,
+            "extract_image_page",
+            return_value=([{"page_number": 1, "text": ""}], create_test_pdf([""])),
+        ):
+            with self.assertRaises(HTTPException) as raised_error:
+                await documents.upload_document(TEST_USER, upload)
+
+        self.assertEqual(raised_error.exception.status_code, 422)
+        self.assertIn("no readable text", raised_error.exception.detail)
+        self.assertEqual(self.fake_retrieval_agent.indexed_document_ids, [])
+        self.assertEqual(self.database.list_documents(), [])
+        self.assertEqual(list(self.upload_directory.glob("*.pdf")), [])
+
+    async def test_excessive_image_dimensions_are_rejected(self) -> None:
+        upload = create_upload(
+            documents.PNG_SIGNATURE + b"image",
+            "huge.png",
+            "image/png",
+        )
+
+        with patch.object(
+            documents,
+            "extract_image_page",
+            side_effect=ImagePixelLimitError(
+                "The uploaded image dimensions are too large to process safely."
+            ),
+        ):
+            with self.assertRaises(HTTPException) as raised_error:
+                await documents.upload_document(TEST_USER, upload)
+
+        self.assertEqual(raised_error.exception.status_code, 413)
+        self.assertEqual(self.fake_retrieval_agent.indexed_document_ids, [])
+
+    async def test_missing_ocr_configuration_returns_service_unavailable(self) -> None:
+        upload = create_upload(
+            documents.PNG_SIGNATURE + b"image",
+            "notes.png",
+            "image/png",
+        )
+
+        with patch.object(
+            documents,
+            "extract_image_page",
+            side_effect=ImageOCRUnavailableError(
+                "Image OCR is unavailable because Tesseract language data is not configured."
+            ),
+        ):
+            with self.assertRaises(HTTPException) as raised_error:
+                await documents.upload_document(TEST_USER, upload)
+
+        self.assertEqual(raised_error.exception.status_code, 503)
+        self.assertEqual(self.fake_retrieval_agent.indexed_document_ids, [])
+
     async def test_document_ids_are_unique(self) -> None:
         first_upload = create_upload(
             create_test_pdf(["First lecture"]),
@@ -178,6 +319,45 @@ class DocumentUploadTests(unittest.IsolatedAsyncioTestCase):
                 "The PDF contains no extractable text. "
                 "Scanned or image-only PDFs are not currently supported."
             ),
+        )
+        self.assertEqual(self.fake_retrieval_agent.indexed_document_ids, [])
+        self.assertEqual(self.database.list_documents(), [])
+        self.assertEqual(list(self.upload_directory.glob("*.pdf")), [])
+
+    async def test_corrupt_pdf_is_rejected_before_storage(self) -> None:
+        upload = create_upload(
+            b"%PDF-1.7\nsynthetic truncated test input",
+            "corrupt.pdf",
+            "application/pdf",
+        )
+
+        with self.assertRaises(HTTPException) as raised_error:
+            await documents.upload_document(TEST_USER, upload)
+
+        self.assertEqual(raised_error.exception.status_code, 400)
+        self.assertEqual(
+            raised_error.exception.detail,
+            "The uploaded PDF could not be opened or processed.",
+        )
+        self.assertEqual(self.fake_retrieval_agent.indexed_document_ids, [])
+        self.assertEqual(self.database.list_documents(), [])
+        self.assertEqual(list(self.upload_directory.glob("*.pdf")), [])
+
+    async def test_truncated_pdf_is_rejected_before_storage(self) -> None:
+        truncated_pdf = create_test_pdf(["Truncated PDF test content"])[:128]
+        upload = create_upload(
+            truncated_pdf,
+            "truncated.pdf",
+            "application/pdf",
+        )
+
+        with self.assertRaises(HTTPException) as raised_error:
+            await documents.upload_document(TEST_USER, upload)
+
+        self.assertEqual(raised_error.exception.status_code, 400)
+        self.assertEqual(
+            raised_error.exception.detail,
+            "The uploaded PDF could not be opened or processed.",
         )
         self.assertEqual(self.fake_retrieval_agent.indexed_document_ids, [])
         self.assertEqual(self.database.list_documents(), [])
@@ -297,11 +477,18 @@ class DocumentSearchApiTests(unittest.TestCase):
             return_value=self.database,
         )
         self.database_patch.start()
+        self.rate_limiter_patch = patch.object(
+            documents,
+            "_search_rate_limiter",
+            SlidingWindowRateLimiter(max_requests=10, window_seconds=10),
+        )
+        self.rate_limiter_patch.start()
         app.dependency_overrides[get_current_user] = lambda: TEST_USER
         self.client = TestClient(app)
 
     def tearDown(self) -> None:
         self.client.close()
+        self.rate_limiter_patch.stop()
         self.database_patch.stop()
         self.retrieval_agent_patch.stop()
         app.dependency_overrides.pop(get_current_user, None)
@@ -314,6 +501,62 @@ class DocumentSearchApiTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 422)
+
+    def test_excessive_query_length_is_rejected_before_search(self) -> None:
+        response = self.client.post(
+            "/documents/search",
+            json={
+                "document_id": "document-1",
+                "query": "a" * (documents.MAX_SEARCH_QUERY_CHARACTERS + 1),
+                "top_k": 3,
+            },
+        )
+
+        self.assertEqual(response.status_code, 422)
+
+    def test_maximum_query_length_is_accepted(self) -> None:
+        self.database.create_document(make_document_record("document-1"))
+
+        response = self.client.post(
+            "/documents/search",
+            json={
+                "document_id": "document-1",
+                "query": "a" * documents.MAX_SEARCH_QUERY_CHARACTERS,
+                "top_k": 3,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_authenticated_search_burst_is_rate_limited(self) -> None:
+        self.database.create_document(make_document_record("document-1"))
+
+        with patch.object(
+            documents,
+            "_search_rate_limiter",
+            SlidingWindowRateLimiter(max_requests=2, window_seconds=60),
+        ):
+            responses = [
+                self.client.post(
+                    "/documents/search",
+                    json={
+                        "document_id": "document-1",
+                        "query": f"machine learning request {index}",
+                        "top_k": 3,
+                    },
+                )
+                for index in range(3)
+            ]
+
+        self.assertEqual(
+            [response.status_code for response in responses],
+            [200, 200, 429],
+        )
+        self.assertEqual(
+            responses[-1].json(),
+            {"detail": "Too many semantic search requests. Try again shortly."},
+        )
+        self.assertEqual(responses[-1].headers["retry-after"], "60")
 
     def test_local_frontend_origin_is_allowed_by_cors(self) -> None:
         response = self.client.options(

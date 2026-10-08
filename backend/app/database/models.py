@@ -2,7 +2,7 @@ from dataclasses import asdict, dataclass
 import json
 import re
 from typing import Any, Literal
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 @dataclass(frozen=True)
@@ -14,6 +14,7 @@ class UserRecord:
     email: str
     password_hash: str
     created_at: str
+    google_subject: str | None = None
 
     def to_public_dict(self) -> dict[str, str]:
         return {
@@ -71,6 +72,17 @@ class LoginRequest(BaseModel):
         return value.strip().lower()
 
 
+class GoogleLoginRequest(BaseModel):
+    """Google Identity Services credential submitted for server verification."""
+
+    credential: str = Field(..., min_length=100, max_length=10_000)
+
+    @field_validator("credential")
+    @classmethod
+    def clean_credential(cls, value: str) -> str:
+        return value.strip()
+
+
 class UserResponse(BaseModel):
     user_id: str
     full_name: str
@@ -87,7 +99,7 @@ class AuthenticationResponse(BaseModel):
 
 @dataclass(frozen=True)
 class DocumentRecord:
-    """Metadata kept for one successfully indexed PDF."""
+    """Metadata kept for one successfully indexed learning material."""
 
     document_id: str
     original_filename: str
@@ -490,7 +502,13 @@ class QuizQuestionItem(BaseModel):
 class QuizGenerationRequest(BaseModel):
     """Input payload to dynamically generate a quiz from lecture context."""
 
-    document_id: str = Field(..., min_length=1, description="Associated document ID")
+    document_id: str | None = Field(
+        default=None, description="Associated document ID (or primary document ID)"
+    )
+    document_ids: list[str] = Field(
+        default_factory=list,
+        description="List of document IDs for multi-document/mixed quizzes",
+    )
     topic: str | None = Field(
         default=None, description="Optional topic focus filter (e.g. 'Inverted Index')"
     )
@@ -508,13 +526,31 @@ class QuizGenerationRequest(BaseModel):
         description="Desired question formats",
     )
 
-    @field_validator("document_id")
+    @model_validator(mode="before")
     @classmethod
-    def clean_document_id(cls, value: str) -> str:
-        cleaned = value.strip()
-        if not cleaned:
-            raise ValueError("document_id cannot be blank.")
-        return cleaned
+    def validate_and_normalize_documents(cls, values: Any) -> Any:
+        if isinstance(values, dict):
+            raw_doc_id = values.get("document_id")
+            raw_doc_ids = values.get("document_ids") or []
+
+            cleaned_ids: list[str] = []
+            if isinstance(raw_doc_ids, list):
+                for did in raw_doc_ids:
+                    if isinstance(did, str) and did.strip():
+                        cleaned_ids.append(did.strip())
+
+            if isinstance(raw_doc_id, str) and raw_doc_id.strip():
+                for part in raw_doc_id.split(","):
+                    p = part.strip()
+                    if p and p not in cleaned_ids:
+                        cleaned_ids.append(p)
+
+            if not cleaned_ids:
+                raise ValueError("At least one document ID must be provided.")
+
+            values["document_ids"] = cleaned_ids
+            values["document_id"] = cleaned_ids[0] if len(cleaned_ids) == 1 else ",".join(cleaned_ids)
+        return values
 
 
 class StudentAnswerItem(BaseModel):

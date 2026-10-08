@@ -11,6 +11,7 @@ export function AuthProvider({ children }) {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   function logout() {
+    window.google?.accounts?.id?.disableAutoSelect();
     sessionStorage.removeItem(TOKEN_STORAGE_KEY);
     setApiAccessToken(null);
     setUser(null);

@@ -4,8 +4,9 @@ import AmbientBackground from "./AmbientBackground.jsx";
 import MobileNavigation from "./MobileNavigation.jsx";
 import Sidebar from "./Sidebar.jsx";
 import TopBar from "./TopBar.jsx";
+import BookOpeningTransition from "../transitions/BookOpeningTransition.jsx";
 
-function AppShell({ children, currentPage, onLogout, onNavigate, onViewPlans, user }) {
+function AppShell({ children, currentPage, navigationDirection, navigationTransition, onEntryAnimationComplete, onLogout, onNavigate, onToggleTheme, onViewPlans, playEntryAnimation, theme, user }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const contentRef = useRef(null);
   const previousPage = useRef(currentPage);
@@ -35,13 +36,24 @@ function AppShell({ children, currentPage, onLogout, onNavigate, onViewPlans, us
           currentPage={currentPage}
           onLogout={onLogout}
           onOpenMenu={() => setMobileMenuOpen(true)}
+          onToggleTheme={onToggleTheme}
           onViewPlans={onViewPlans}
+          theme={theme}
           user={user}
         />
         <main className="app-content" id="main-content" ref={contentRef} tabIndex={-1}>
-          <div className="app-page-frame" key={currentPage}>{children}</div>
+          <div
+            className={`app-page-frame app-page-frame-${navigationTransition} app-page-frame-${navigationDirection}`}
+            key={currentPage}
+          >
+            {children}
+          </div>
         </main>
       </div>
+
+      {playEntryAnimation && (
+        <BookOpeningTransition onComplete={onEntryAnimationComplete} />
+      )}
 
       {mobileMenuOpen && (
         <MobileNavigation

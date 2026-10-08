@@ -68,7 +68,7 @@ function QuizGenerationJourney({ topic, documentName, status }) {
 
       {!isComplete && !isError && (
         <p className="quiz-journey-note">
-          The Retrieval Agent fetches semantic chunks from your indexed PDF while the Quiz Agent designs Bloom-aligned questions with page citations.
+          The Retrieval Agent fetches semantic text from your indexed PDF or OCR-processed image while the Quiz Agent designs Bloom-aligned questions with page citations.
         </p>
       )}
     </div>

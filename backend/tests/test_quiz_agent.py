@@ -23,14 +23,21 @@ class MockRetrievalAgent:
                 "page_number": 2,
                 "chunk_index": 0,
                 "source": "ir_lecture_1.pdf",
-                "text": "An inverted index is a database index storing a mapping from words to their locations in a document.",
+                "text": (
+                    "An inverted index is a database index that maps terms to document positions. "
+                    "TF-IDF weighting calculates a product of term frequency and inverse document frequency to measure term importance. "
+                    "Cosine similarity measures the angle between two document vectors."
+                ),
                 "distance": 0.08,
             },
             {
                 "page_number": 3,
                 "chunk_index": 1,
                 "source": "ir_lecture_1.pdf",
-                "text": "TF-IDF weighting calculates the product of Term Frequency and Inverse Document Frequency to assess term importance.",
+                "text": (
+                    "Tokenization converts text into individual tokens before indexing. "
+                    "Stop-word removal excludes common terms that contribute little meaning."
+                ),
                 "distance": 0.12,
             },
         ]

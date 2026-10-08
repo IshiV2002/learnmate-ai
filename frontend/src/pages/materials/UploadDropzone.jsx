@@ -22,7 +22,7 @@ function UploadDropzone({
       onDrop={onDrop}
     >
       <input
-        accept=".pdf,application/pdf"
+        accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
         className="visually-hidden"
         disabled={disabled}
         id="material-file"
@@ -40,12 +40,12 @@ function UploadDropzone({
 
       <div className="vault-dropzone-copy">
         <p className="vault-dropzone-label">
-          {selectedFile ? "Knowledge source selected" : "Drop your course PDF into the vault"}
+          {selectedFile ? "Knowledge source selected" : "Drop a course PDF or image into the vault"}
         </p>
         <p className="vault-dropzone-detail">
           {selectedFile
             ? `${selectedFile.name} · ${formatFileSize(selectedFile.size)}`
-            : "Drag and drop a text-based PDF here, or choose one from your device."}
+            : "Drag and drop a PDF, PNG, JPG, or JPEG here, or choose one from your device."}
         </p>
       </div>
 
@@ -55,11 +55,11 @@ function UploadDropzone({
         onClick={onOpenPicker}
         type="button"
       >
-        {selectedFile ? "Choose another" : "Browse PDF"}
+        {selectedFile ? "Choose another" : "Browse files"}
       </button>
 
       <p className="vault-upload-requirements" id="upload-requirements">
-        PDF only <span aria-hidden="true">•</span> Maximum 10 MB <span aria-hidden="true">•</span> Text-based files work best
+        PDF, PNG, JPG, or JPEG <span aria-hidden="true">•</span> Maximum 10 MB <span aria-hidden="true">•</span> Clear, high-contrast images work best
       </p>
     </div>
   );
