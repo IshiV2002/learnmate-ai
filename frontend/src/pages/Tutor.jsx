@@ -57,8 +57,38 @@ export default function Tutor({
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
+  // Responsive chat viewport state (Maximize / Focus mode)
+  const [isChatMaximized, setIsChatMaximized] = useState(false);
+
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+
+  // Close maximized chat on Escape key for convenience
+  useEffect(() => {
+    if (!isChatMaximized) return;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setIsChatMaximized(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isChatMaximized]);
+
+  const handleToggleChatMaximize = () => {
+    setIsChatMaximized((prev) => {
+      const next = !prev;
+      if (next) {
+        setTimeout(() => {
+          document.getElementById("tutor-workspace-heading")?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        }, 80);
+      }
+      return next;
+    });
+  };
 
   // Compute workspace stats
   const stats = useMemo(
@@ -591,9 +621,9 @@ export default function Tutor({
           </span>
         </div>
 
-        <div className="tutor-workspace-grid">
+        <div className={`tutor-workspace-grid ${isChatMaximized ? "tutor-workspace-grid-maximized" : ""}`}>
           {/* Main Chat Stream Card */}
-          <div className="tutor-chat-card">
+          <div className={`tutor-chat-card ${isChatMaximized ? "tutor-chat-card-maximized" : ""}`}>
             <div className="tutor-chat-header">
               <div className="tutor-session-status">
                 <span className="tutor-pulse-dot" aria-hidden="true" />
@@ -626,6 +656,35 @@ export default function Tutor({
                     <span>Start New Session</span>
                   </button>
                 )}
+                {isChatMaximized && activeCitations.length > 0 && (
+                  <button
+                    className="tutor-citations-nav-pill"
+                    onClick={() => {
+                      document.querySelector(".tutor-evidence-drawer")?.scrollIntoView({
+                        behavior: "smooth",
+                      });
+                    }}
+                    title="Scroll down to view verified lecture citations"
+                    type="button"
+                  >
+                    <TutorIcon name="book" size={13} />
+                    <span>{activeCitations.length} Citations Below</span>
+                  </button>
+                )}
+                <button
+                  aria-label={isChatMaximized ? "Restore standard chat view" : "Maximize chat view"}
+                  className={`tutor-expand-btn ${isChatMaximized ? "tutor-expand-btn-active" : ""}`}
+                  onClick={handleToggleChatMaximize}
+                  title={
+                    isChatMaximized
+                      ? "Minimize chat back to standard split view"
+                      : "Maximize chat view for spacious reading and diagrams"
+                  }
+                  type="button"
+                >
+                  <TutorIcon name={isChatMaximized ? "minimize" : "maximize"} size={13} />
+                  <span>{isChatMaximized ? "Minimize" : "Maximize"}</span>
+                </button>
               </div>
             </div>
 
