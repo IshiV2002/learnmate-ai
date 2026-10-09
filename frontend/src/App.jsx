@@ -25,6 +25,7 @@ function App() {
   const [handoffSubmission, setHandoffSubmission] = useState(null);
   const [handoffRecommendation, setHandoffRecommendation] = useState(null);
   const [tutorHandoff, setTutorHandoff] = useState(null);
+  const [selectedStudyDocument, setSelectedStudyDocument] = useState(null);
   const [showPlans, setShowPlans] = useState(
     () => window.location.pathname === "/plans",
   );
@@ -77,8 +78,17 @@ function App() {
 
   const handleLaunchTutorHandoff = (handoff) => {
     setTutorHandoff(handoff);
+    if (handoff?.document_id) {
+      setSelectedStudyDocument({ document_id: handoff.document_id });
+    }
     navigateToPage("tutor");
   };
+
+  function handleStudyDocument(document, destination) {
+    setSelectedStudyDocument(document);
+    setTutorHandoff(null);
+    navigateToPage(destination);
+  }
 
   function handleAuthentication(authentication, authenticationMode) {
     setNavigationDirection("forward");
@@ -136,9 +146,14 @@ function App() {
       user={user}
     >
       {currentPage === "home" && <Home onNavigate={navigateToPage} user={user} />}
-      {currentPage === "materials" && <Materials />}
+      {currentPage === "materials" && (
+        <Materials onStudyDocument={handleStudyDocument} />
+      )}
       {currentPage === "quiz" && (
-        <Quiz onNavigateToRecommendations={handleNavigateToRecommendations} />
+        <Quiz
+          initialDocumentId={selectedStudyDocument?.document_id || ""}
+          onNavigateToRecommendations={handleNavigateToRecommendations}
+        />
       )}
       {currentPage === "recommendations" && (
         <Recommendations
@@ -152,6 +167,7 @@ function App() {
       )}
       {currentPage === "tutor" && (
         <Tutor
+          initialDocumentId={selectedStudyDocument?.document_id || ""}
           initialHandoff={tutorHandoff}
           onClearHandoff={() => setTutorHandoff(null)}
         />

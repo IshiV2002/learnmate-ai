@@ -14,7 +14,7 @@ import ProcessingJourney from "./materials/ProcessingJourney.jsx";
 import UploadDropzone from "./materials/UploadDropzone.jsx";
 import { getLibraryStats, validateMaterial } from "./materials/materialsUtils.js";
 
-function Materials() {
+function Materials({ onStudyDocument }) {
   const [documents, setDocuments] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -26,6 +26,7 @@ function Materials() {
   const [uploadFileName, setUploadFileName] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [recentlyUploadedDocument, setRecentlyUploadedDocument] = useState(null);
   const fileInputRef = useRef(null);
   const libraryStats = useMemo(() => getLibraryStats(documents), [documents]);
 
@@ -58,6 +59,7 @@ function Materials() {
     const validationMessage = validateMaterial(file);
 
     setSuccessMessage("");
+    setRecentlyUploadedDocument(null);
     setErrorMessage(validationMessage);
     setUploadStatus("idle");
     setUploadFileName("");
@@ -132,14 +134,21 @@ function Materials() {
       clearSelectedFile();
       setUploadFileName(currentFileName);
 
-      const refreshed = await loadDocuments(false);
-
-      if (refreshed) {
-        setUploadStatus("complete");
-        setSuccessMessage(
-          result.message || "Your material was uploaded and indexed successfully.",
-        );
+      if (result.document) {
+        setDocuments((currentDocuments) => [
+          result.document,
+          ...currentDocuments.filter(
+            (document) => document.document_id !== result.document.document_id,
+          ),
+        ]);
       }
+
+      await loadDocuments(false);
+      setUploadStatus("complete");
+      setRecentlyUploadedDocument(result.document || null);
+      setSuccessMessage(
+        result.message || "Your material was uploaded and indexed successfully.",
+      );
     } catch (error) {
       setUploadStatus("error");
       setErrorMessage(error.message);
@@ -166,6 +175,10 @@ function Materials() {
 
       if (refreshed) {
         setSuccessMessage(`${filename} was removed from the Knowledge Vault.`);
+        if (recentlyUploadedDocument?.document_id === documentId) {
+          setRecentlyUploadedDocument(null);
+          setUploadStatus("idle");
+        }
       }
       setDocumentPendingDelete(null);
     } catch (error) {
@@ -176,14 +189,20 @@ function Materials() {
     }
   }
 
+  function continueWithDocument(document, destination) {
+    if (document && onStudyDocument) {
+      onStudyDocument(document, destination);
+    }
+  }
+
   return (
     <div className="materials-page">
       <header className="vault-hero">
         <div className="vault-hero-copy">
           <p className="vault-eyebrow">Materials · Knowledge Vault</p>
-          <h1>Turn course material into searchable knowledge.</h1>
+          <h1>Upload your notes, then choose how to study.</h1>
           <p className="vault-hero-description">
-            Add trusted course PDFs and images to create a private library of page-aware sections that LearnMate agents can retrieve when supporting your study.
+            Add a course PDF or image once, then use the same material with the Tutor or turn it into a practice quiz.
           </p>
           <div className="vault-hero-trust">
             <span><MaterialIcon name="shield" size={16} /> Server-validated materials</span>
@@ -281,6 +300,39 @@ function Materials() {
         </form>
 
         <ProcessingJourney fileName={uploadFileName} status={uploadStatus} />
+
+        {uploadStatus === "complete" && recentlyUploadedDocument && (
+          <section className="vault-next-step" aria-labelledby="vault-next-step-heading">
+            <span className="vault-next-step-icon" aria-hidden="true">
+              <MaterialIcon name="sparkles" size={24} />
+            </span>
+            <div className="vault-next-step-copy">
+              <p className="vault-section-kicker">Your material is ready</p>
+              <h3 id="vault-next-step-heading">What would you like to do next?</h3>
+              <p>
+                <strong>{recentlyUploadedDocument.original_filename}</strong> is selected. Use the Tutor to understand it, or make a quiz to check your memory and unlock recommendations.
+              </p>
+            </div>
+            <div className="vault-next-step-actions">
+              <button
+                className="vault-button vault-button-primary"
+                onClick={() => continueWithDocument(recentlyUploadedDocument, "tutor")}
+                type="button"
+              >
+                <MaterialIcon name="tutor" size={18} />
+                Study with Tutor
+              </button>
+              <button
+                className="vault-button vault-button-secondary"
+                onClick={() => continueWithDocument(recentlyUploadedDocument, "quiz")}
+                type="button"
+              >
+                <MaterialIcon name="quiz" size={18} />
+                Make a Quiz
+              </button>
+            </div>
+          </section>
+        )}
       </section>
 
       <section className="vault-transparency" aria-labelledby="vault-transparency-heading">
@@ -302,7 +354,7 @@ function Materials() {
           <div>
             <p className="vault-section-kicker">Indexed sources</p>
             <h2 id="vault-library-heading">Your knowledge library</h2>
-            <p>Every card represents a real uploaded source currently available to retrieval.</p>
+            <p>Choose a source below, then open the Tutor or make a quiz from it.</p>
           </div>
           <button
             className="vault-button vault-button-secondary"
@@ -340,6 +392,8 @@ function Materials() {
                 isDeleting={deletingDocumentId === document.document_id}
                 key={document.document_id}
                 onDelete={setDocumentPendingDelete}
+                onQuiz={(selectedDocument) => continueWithDocument(selectedDocument, "quiz")}
+                onTutor={(selectedDocument) => continueWithDocument(selectedDocument, "tutor")}
               />
             ))}
           </div>
