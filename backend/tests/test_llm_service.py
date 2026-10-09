@@ -169,6 +169,63 @@ class LLMServiceTests(unittest.TestCase):
         self.assertNotIn("conflicting evidence", reply.lower())
         self.assertIn("Core Definition", reply)
 
+    def test_find_numeric_conflict_ignores_assessment_marks_breakdown(self) -> None:
+        service = LLMService(api_key="")
+        syllabus_chunk = {
+            "page_number": 2,
+            "source": "Lecture 01.pdf",
+            "text": (
+                "Course Assessment: 1. Assignment 1 (Practical Assignment + Lab Tasks) - 15 Marks + 5 Marks "
+                "2. Assignment 2 (Group Assignment) - 20 Marks "
+                "3. Mid Exam - 20 Marks "
+                "4. Final Exam - 40 Marks"
+            ),
+        }
+
+        conflict = service._find_numeric_conflict([syllabus_chunk])
+        self.assertIsNone(conflict)
+
+    def test_tutor_synthesizes_relevance_and_indexing_continuation(self) -> None:
+        service = LLMService(api_key="")
+        reply, followups, concept_check = service.generate_tutor_response(
+            topic_focus="Relevance and Document Indexing",
+            mode="socratic",
+            pedagogical_directive=None,
+            lecture_chunks=[
+                {
+                    "page_number": 12,
+                    "source": "Lecture 01.pdf",
+                    "text": "Information Need and Relevance: An information need is the topic about which the user desires to know.",
+                },
+                {
+                    "page_number": 14,
+                    "source": "Lecture 01.pdf",
+                    "text": "Information Relevance: Are the retrieved documents about the target subject? up-to-date? from a trusted source?",
+                },
+                {
+                    "page_number": 37,
+                    "source": "Lecture 01.pdf",
+                    "text": "The index we just built maps dictionary terms to postings lists.",
+                },
+            ],
+            history=[
+                {"role": "student", "content": "What is information retrieval?"},
+                {
+                    "role": "tutor",
+                    "content": "Would you like to explore how search systems determine relevance, or how they index large document collections?",
+                },
+                {"role": "student", "content": "yes"},
+            ],
+            student_message="yes",
+        )
+
+        self.assertNotIn("conflicting evidence", reply.lower())
+        self.assertIn("index", reply.lower())
+        self.assertIn("relevance", reply.lower())
+        self.assertIn("mermaid", reply.lower())
+        self.assertEqual(len(followups), 3)
+        self.assertIsNotNone(concept_check)
+
     def test_offline_fallback_creates_five_distinct_grounded_mcqs(self) -> None:
         service = LLMService(api_key="")
         context_chunks = [

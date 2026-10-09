@@ -284,3 +284,156 @@ class TutorAgentTests(unittest.TestCase):
         self.assertNotIn("Course Foundations", response.reply)
         self.assertIn("Key Concepts", response.reply)
 
+    def test_resolve_conversational_turn(self) -> None:
+        previous_tutor_prompt = [
+            {
+                "role": "tutor",
+                "content": (
+                    "To connect this with your course material, would you like to explore how search "
+                    "systems determine relevance, or how they index large document collections?"
+                ),
+            }
+        ]
+
+        # 1. Affirmative answer "yes"
+        query, topic, is_followup = TutorAgent.resolve_conversational_turn(
+            student_message="yes",
+            previous_messages=previous_tutor_prompt,
+            session_topic="Information Retrieval",
+        )
+        self.assertTrue(is_followup)
+        self.assertIn("relevance", query)
+        self.assertIn("index", query)
+        self.assertEqual(topic, "Relevance and Document Indexing")
+
+        # 2. Affirmative answer "sure"
+        query, topic, is_followup = TutorAgent.resolve_conversational_turn(
+            student_message="sure",
+            previous_messages=previous_tutor_prompt,
+            session_topic="Information Retrieval",
+        )
+        self.assertTrue(is_followup)
+        self.assertEqual(topic, "Relevance and Document Indexing")
+
+        # 3. Topic option "relevance"
+        query, topic, is_followup = TutorAgent.resolve_conversational_turn(
+            student_message="relevance",
+            previous_messages=previous_tutor_prompt,
+            session_topic="Information Retrieval",
+        )
+        self.assertTrue(is_followup)
+        self.assertEqual(topic, "Information Relevance")
+        self.assertIn("determine relevance", query)
+
+        # 4. Topic option "indexing"
+        query, topic, is_followup = TutorAgent.resolve_conversational_turn(
+            student_message="how they index",
+            previous_messages=previous_tutor_prompt,
+            session_topic="Information Retrieval",
+        )
+        self.assertTrue(is_followup)
+        self.assertEqual(topic, "Document Indexing")
+        self.assertIn("inverted index", query)
+
+        # 5. Direct conceptual question
+        query, topic, is_followup = TutorAgent.resolve_conversational_turn(
+            student_message="What is an inverted index?",
+            previous_messages=previous_tutor_prompt,
+            session_topic="Information Retrieval",
+        )
+        self.assertFalse(is_followup)
+        self.assertEqual(query, "What is an inverted index?")
+        self.assertEqual(topic, "Inverted Index")
+
+    def test_tutor_agent_handles_conversational_affirmation_without_confusion(self) -> None:
+        searched_queries = []
+
+        class MultiTurnMockRetrieval:
+            def search(self, document_id: str, query: str, top_k: int = 3) -> list[dict]:
+                searched_queries.append(query)
+                if "relevance" in query and "index" in query:
+                    return [
+                        {
+                            "page_number": 12,
+                            "chunk_index": 0,
+                            "source": "Lecture 01.pdf",
+                            "text": (
+                                "Information Need and Relevance: An information need is the topic about which the user desires to know. "
+                                "A query is what the user conveys to the computer. A document is relevant if the user perceives that it contains valuable information."
+                            ),
+                            "distance": 0.05,
+                        },
+                        {
+                            "page_number": 14,
+                            "chunk_index": 0,
+                            "source": "Lecture 01.pdf",
+                            "text": (
+                                "Information Relevance: Are the retrieved documents about the target subject? up-to-date? from a trusted source? satisfying user needs?"
+                            ),
+                            "distance": 0.06,
+                        },
+                        {
+                            "page_number": 37,
+                            "chunk_index": 0,
+                            "source": "Lecture 01.pdf",
+                            "text": (
+                                "The inverted index we just built maps dictionary terms to postings lists of DocIDs for fast query evaluation."
+                            ),
+                            "distance": 0.08,
+                        },
+                    ]
+                return [
+                    {
+                        "page_number": 5,
+                        "chunk_index": 0,
+                        "source": "Lecture 01.pdf",
+                        "text": (
+                            "Information Retrieval is finding material of an unstructured nature that satisfies an information need from within large collections."
+                        ),
+                        "distance": 0.05,
+                    }
+                ]
+
+        agent = TutorAgent(
+            database=self.database,
+            retrieval_agent=MultiTurnMockRetrieval(),  # type: ignore[arg-type]
+        )
+        session = agent.start_session(
+            TutorSessionInitRequest(
+                student_id="student_99",
+                document_id="doc_vsm_01",
+                mode="socratic",
+                topic_focus="Information Retrieval",
+            )
+        )
+
+        # First turn: student asks what IR is
+        first_resp = agent.respond(
+            TutorChatRequest(
+                session_id=session.session_id,
+                message="What is information retrieval?",
+            )
+        )
+        self.assertIn("would you like to explore how search systems determine", first_resp.reply)
+
+        # Second turn: student replies with "yes"
+        second_resp = agent.respond(
+            TutorChatRequest(
+                session_id=session.session_id,
+                message="yes",
+            )
+        )
+
+        # Verify search query used by retrieval agent was resolved contextually, not just searching "yes"
+        self.assertNotIn("yes", searched_queries[-1].lower().split())
+        self.assertIn("relevance", searched_queries[-1].lower())
+        self.assertIn("index", searched_queries[-1].lower())
+
+        # Verify tutor response explains relevance and document indexing without confusion
+        self.assertIn("relevance", second_resp.reply.lower())
+        self.assertIn("index", second_resp.reply.lower())
+        self.assertNotIn("conflicting evidence", second_resp.reply.lower())
+        self.assertNotIn("compare the surrounding text", " ".join(second_resp.suggested_followups).lower())
+        self.assertGreaterEqual(len(second_resp.citations), 2)
+
+
