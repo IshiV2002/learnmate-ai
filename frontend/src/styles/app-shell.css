@@ -361,8 +361,23 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  padding-left: 10px;
+  min-height: 46px;
+  padding: 6px 9px 6px 11px;
+  border: 0;
   border-left: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.topbar-user:hover,
+.topbar-user:focus-visible {
+  color: var(--color-accent-strong);
+  background: var(--color-surface-hover);
 }
 
 .topbar-avatar {
@@ -483,7 +498,8 @@
   }
 
   .topbar-user {
-    padding-left: 0;
+    min-height: 40px;
+    padding: 3px;
     border-left: 0;
   }
 

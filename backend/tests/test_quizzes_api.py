@@ -223,6 +223,15 @@ class QuizzesAPITests(unittest.TestCase):
         self.assertEqual(eval_data["score"], 1.0)
         self.assertTrue(eval_data["results"][0]["is_correct"])
 
+        attempts_res = self.client.get("/quizzes/attempts")
+        self.assertEqual(attempts_res.status_code, 200)
+        attempts = attempts_res.json()
+        self.assertEqual(len(attempts), 1)
+        self.assertEqual(attempts[0]["quiz_id"], quiz_id)
+        self.assertEqual(attempts[0]["score"], 1)
+        self.assertNotIn("student_id", attempts[0])
+        self.assertNotIn("submission_data", attempts[0])
+
     def test_evaluate_and_recommend_endpoint(self) -> None:
         gen_res = self.client.post(
             "/quizzes/generate",

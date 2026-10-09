@@ -8,11 +8,16 @@ import {
 import "./Materials.css";
 import DeleteDocumentModal from "./materials/DeleteDocumentModal.jsx";
 import KnowledgeSourceCard from "./materials/KnowledgeSourceCard.jsx";
+import LibraryGraphic from "./materials/LibraryGraphic.jsx";
 import LibrarySkeleton from "./materials/LibrarySkeleton.jsx";
 import MaterialIcon from "./materials/MaterialIcon.jsx";
 import ProcessingJourney from "./materials/ProcessingJourney.jsx";
 import UploadDropzone from "./materials/UploadDropzone.jsx";
-import { getLibraryStats, validateMaterial } from "./materials/materialsUtils.js";
+import {
+  filterAndSortMaterials,
+  getLibraryStats,
+  validateMaterial,
+} from "./materials/materialsUtils.js";
 
 function Materials({ onStudyDocument }) {
   const [documents, setDocuments] = useState([]);
@@ -27,8 +32,15 @@ function Materials({ onStudyDocument }) {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [recentlyUploadedDocument, setRecentlyUploadedDocument] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [sortOrder, setSortOrder] = useState("newest");
   const fileInputRef = useRef(null);
   const libraryStats = useMemo(() => getLibraryStats(documents), [documents]);
+  const visibleDocuments = useMemo(
+    () => filterAndSortMaterials(documents, searchQuery, typeFilter, sortOrder),
+    [documents, searchQuery, sortOrder, typeFilter],
+  );
 
   async function loadDocuments(showLoading = true) {
     if (showLoading) {
@@ -174,7 +186,7 @@ function Materials({ onStudyDocument }) {
       const refreshed = await loadDocuments(false);
 
       if (refreshed) {
-        setSuccessMessage(`${filename} was removed from the Knowledge Vault.`);
+        setSuccessMessage(`${filename} was removed from your course library.`);
         if (recentlyUploadedDocument?.document_id === documentId) {
           setRecentlyUploadedDocument(null);
           setUploadStatus("idle");
@@ -199,32 +211,23 @@ function Materials({ onStudyDocument }) {
     <div className="materials-page">
       <header className="vault-hero">
         <div className="vault-hero-copy">
-          <p className="vault-eyebrow">Materials · Knowledge Vault</p>
-          <h1>Upload your notes, then choose how to study.</h1>
+          <p className="vault-eyebrow">Course materials</p>
+          <h1>Keep your study sources organised.</h1>
           <p className="vault-hero-description">
-            Add a course PDF or image once, then use the same material with the Tutor or turn it into a practice quiz.
+            Build a clear library of lecture notes, readings and diagrams. Choose any source when you want an explanation or a practice quiz.
           </p>
           <div className="vault-hero-trust">
-            <span><MaterialIcon name="shield" size={16} /> Server-validated materials</span>
-            <span><MaterialIcon name="search" size={16} /> Page references preserved</span>
+            <span><MaterialIcon name="shield" size={16} /> Private to your account</span>
+            <span><MaterialIcon name="pages" size={16} /> Page references included</span>
           </div>
         </div>
 
-        <div className="vault-knowledge-map" aria-label="Knowledge Vault statistics">
-          <div className="vault-map-visual" aria-hidden="true">
-            <span className="vault-map-ring vault-map-ring-one" />
-            <span className="vault-map-ring vault-map-ring-two" />
-            <span className="vault-map-line vault-map-line-one" />
-            <span className="vault-map-line vault-map-line-two" />
-            <span className="vault-map-node vault-map-node-one" />
-            <span className="vault-map-node vault-map-node-two" />
-            <span className="vault-map-node vault-map-node-three" />
-            <span className="vault-map-core"><MaterialIcon name="search" size={22} /></span>
-          </div>
+        <div className="vault-library-overview" aria-label="Course library statistics">
+          <LibraryGraphic />
           <div className="vault-stat-grid">
             <div>
               <span>{isLoading ? "—" : libraryStats.documents}</span>
-              <small>Sources</small>
+              <small>Materials</small>
             </div>
             <div>
               <span>{isLoading ? "—" : libraryStats.pages}</span>
@@ -250,7 +253,7 @@ function Materials({ onStudyDocument }) {
         {successMessage && (
           <div className="vault-feedback vault-feedback-success" role="status">
             <span className="vault-feedback-icon" aria-hidden="true"><MaterialIcon name="check" size={17} /></span>
-            <div><strong>Knowledge Vault updated</strong><p>{successMessage}</p></div>
+            <div><strong>Course library updated</strong><p>{successMessage}</p></div>
             <button aria-label="Dismiss success message" onClick={() => setSuccessMessage("")} type="button"><MaterialIcon name="close" size={16} /></button>
           </div>
         )}
@@ -259,13 +262,13 @@ function Materials({ onStudyDocument }) {
       <section className="vault-panel vault-upload-panel" aria-labelledby="vault-upload-heading">
         <div className="vault-section-heading">
           <div>
-            <span className="vault-section-number">01</span>
+            <span className="vault-section-icon"><MaterialIcon name="upload" size={20} /></span>
             <div>
-              <p className="vault-section-kicker">Add knowledge</p>
-              <h2 id="vault-upload-heading">Upload a course PDF or image</h2>
+              <p className="vault-section-kicker">Add a material</p>
+              <h2 id="vault-upload-heading">Upload lecture notes or a diagram</h2>
             </div>
           </div>
-          <span className="vault-security-label"><MaterialIcon name="shield" size={15} /> Backend validation remains authoritative</span>
+          <span className="vault-security-label"><MaterialIcon name="shield" size={15} /> Files are checked before they are added</span>
         </div>
 
         <form className="vault-upload-form" onSubmit={handleUpload}>
@@ -283,7 +286,7 @@ function Materials({ onStudyDocument }) {
 
           <div className="vault-upload-actions">
             <p>
-              Frontend checks improve feedback; the server still performs all security and file validation.
+              Supported formats: PDF, PNG, JPG and JPEG. Maximum file size: 10 MB.
             </p>
             <div>
               {selectedFile && (
@@ -293,7 +296,7 @@ function Materials({ onStudyDocument }) {
               )}
               <button className="vault-button vault-button-primary" disabled={!selectedFile || isUploading} type="submit">
                 <MaterialIcon name="upload" size={18} />
-                {isUploading ? "Uploading and processing…" : "Add to Knowledge Vault"}
+                {isUploading ? "Uploading and preparing…" : "Upload material"}
               </button>
             </div>
           </div>
@@ -304,7 +307,7 @@ function Materials({ onStudyDocument }) {
         {uploadStatus === "complete" && recentlyUploadedDocument && (
           <section className="vault-next-step" aria-labelledby="vault-next-step-heading">
             <span className="vault-next-step-icon" aria-hidden="true">
-              <MaterialIcon name="sparkles" size={24} />
+              <MaterialIcon name="check" size={24} />
             </span>
             <div className="vault-next-step-copy">
               <p className="vault-section-kicker">Your material is ready</p>
@@ -336,25 +339,27 @@ function Materials({ onStudyDocument }) {
       </section>
 
       <section className="vault-transparency" aria-labelledby="vault-transparency-heading">
-        <div className="vault-transparency-icon" aria-hidden="true"><MaterialIcon name="search" size={23} /></div>
+        <div className="vault-transparency-icon" aria-hidden="true"><MaterialIcon name="pages" size={23} /></div>
         <div>
-          <p className="vault-section-kicker">How retrieval works</p>
-          <h2 id="vault-transparency-heading">Grounded in your material, with page context.</h2>
+          <p className="vault-section-kicker">Source-based study</p>
+          <h2 id="vault-transparency-heading">Your original material stays at the centre.</h2>
           <p>
-            LearnMate extracts text into searchable sections and keeps page references so Tutor and Quiz agents can retrieve relevant source material. Images are read using OCR, which can make mistakes. Retrieval improves grounding, but it does not guarantee every AI response is correct—always check important answers against the original source.
+            Tutor explanations and generated quizzes use sections from your selected source. Page references help you return to the original notes and verify important answers.
           </p>
         </div>
-        <div className="vault-pipeline" aria-label="Knowledge indexing pipeline">
-          <span>PDF or image</span><i aria-hidden="true" /><span>Page-aware sections</span><i aria-hidden="true" /><span>Agent retrieval</span>
+        <div className="vault-study-uses" aria-label="Ways to use an uploaded material">
+          <span><MaterialIcon name="tutor" size={16} /> Tutor explanations</span>
+          <span><MaterialIcon name="quiz" size={16} /> Practice quizzes</span>
+          <span><MaterialIcon name="pages" size={16} /> Page references</span>
         </div>
       </section>
 
       <section className="vault-library-section" aria-labelledby="vault-library-heading">
         <div className="vault-library-heading">
           <div>
-            <p className="vault-section-kicker">Indexed sources</p>
-            <h2 id="vault-library-heading">Your knowledge library</h2>
-            <p>Choose a source below, then open the Tutor or make a quiz from it.</p>
+            <p className="vault-section-kicker">Your library</p>
+            <h2 id="vault-library-heading">Course materials</h2>
+            <p>Find a source, then choose how you want to study it.</p>
           </div>
           <button
             className="vault-button vault-button-secondary"
@@ -367,6 +372,50 @@ function Materials({ onStudyDocument }) {
           </button>
         </div>
 
+        {documents.length > 0 && (
+          <div className="vault-library-toolbar">
+            <label className="vault-library-search">
+              <span className="visually-hidden">Search course materials</span>
+              <MaterialIcon name="search" size={17} />
+              <input
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search by file name"
+                type="search"
+                value={searchQuery}
+              />
+            </label>
+
+            <div className="vault-type-filters" aria-label="Filter materials by file type">
+              {["all", "pdf", "image"].map((filter) => (
+                <button
+                  aria-pressed={typeFilter === filter}
+                  className={typeFilter === filter ? "vault-filter-active" : ""}
+                  key={filter}
+                  onClick={() => setTypeFilter(filter)}
+                  type="button"
+                >
+                  {filter === "all" ? "All" : filter === "pdf" ? "PDFs" : "Images"}
+                </button>
+              ))}
+            </div>
+
+            <label className="vault-library-sort">
+              <span>Sort</span>
+              <select onChange={(event) => setSortOrder(event.target.value)} value={sortOrder}>
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="name">File name</option>
+              </select>
+            </label>
+          </div>
+        )}
+
+        {!isLoading && documents.length > 0 && (
+          <p className="vault-library-result-count" aria-live="polite">
+            Showing {visibleDocuments.length} of {documents.length} materials
+          </p>
+        )}
+
         {isLoading ? (
           <LibrarySkeleton />
         ) : documents.length === 0 ? (
@@ -377,16 +426,32 @@ function Materials({ onStudyDocument }) {
               <span className="vault-empty-node vault-empty-node-two" />
               <span className="vault-empty-connection" />
             </div>
-            <p className="vault-section-kicker">The vault is ready</p>
-            <h3>Add your first knowledge source</h3>
-            <p>Upload a course PDF or clear text image to make its page-aware sections available for semantic retrieval.</p>
+            <p className="vault-section-kicker">Start your course library</p>
+            <h3>Add your first study material</h3>
+            <p>Upload lecture notes, a reading or a clear image that you want to study.</p>
             <button className="vault-button vault-button-primary" onClick={openFilePicker} type="button">
-              <MaterialIcon name="upload" size={18} /> Choose your first source
+              <MaterialIcon name="upload" size={18} /> Choose a file
+            </button>
+          </div>
+        ) : visibleDocuments.length === 0 ? (
+          <div className="vault-filter-empty">
+            <MaterialIcon name="search" size={24} />
+            <h3>No matching materials</h3>
+            <p>Try a different file name or show all file types.</p>
+            <button
+              className="vault-button vault-button-secondary"
+              onClick={() => {
+                setSearchQuery("");
+                setTypeFilter("all");
+              }}
+              type="button"
+            >
+              Clear filters
             </button>
           </div>
         ) : (
           <div className="knowledge-source-grid">
-            {documents.map((document) => (
+            {visibleDocuments.map((document) => (
               <KnowledgeSourceCard
                 document={document}
                 isDeleting={deletingDocumentId === document.document_id}

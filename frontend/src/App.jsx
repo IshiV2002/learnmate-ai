@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import AppShell from "./components/layout/AppShell.jsx";
 import { useAuth } from "./auth/AuthContext.jsx";
 import Auth from "./pages/Auth.jsx";
+import Account from "./pages/Account.jsx";
 import Home from "./pages/Home.jsx";
 import Materials from "./pages/Materials.jsx";
 import Plans from "./pages/Plans.jsx";
@@ -146,6 +147,9 @@ function App() {
       user={user}
     >
       {currentPage === "home" && <Home onNavigate={navigateToPage} user={user} />}
+      {currentPage === "account" && (
+        <Account onNavigate={navigateToPage} onViewPlans={openPlans} user={user} />
+      )}
       {currentPage === "materials" && (
         <Materials onStudyDocument={handleStudyDocument} />
       )}
