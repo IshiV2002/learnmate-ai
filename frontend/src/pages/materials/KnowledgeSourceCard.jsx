@@ -11,7 +11,7 @@ function MetadataItem({ icon, label, value }) {
   );
 }
 
-function KnowledgeSourceCard({ document, isDeleting, onDelete }) {
+function KnowledgeSourceCard({ document, isDeleting, onDelete, onQuiz, onTutor }) {
   const filename = document.original_filename || "Untitled material";
   const materialType = getMaterialType(filename);
 
@@ -26,7 +26,7 @@ function KnowledgeSourceCard({ document, isDeleting, onDelete }) {
         <div className="source-title-group">
           <span className="source-indexed-label">
             <span className="source-ready-dot" aria-hidden="true" />
-            Indexed knowledge source
+            Ready to study
           </span>
           <h3 title={filename}>{filename}</h3>
           <p>Added {formatUploadDate(document.created_at)}</p>
@@ -51,7 +51,30 @@ function KnowledgeSourceCard({ document, isDeleting, onDelete }) {
 
       <div className="source-grounding-note">
         <MaterialIcon name="search" size={16} />
-        Available for grounded retrieval with preserved page references
+        Tutor answers and quizzes can use this source with page references.
+      </div>
+
+      <div
+        aria-label={`Study actions for ${filename}`}
+        className="source-card-actions"
+        role="group"
+      >
+        <button
+          className="source-action-button source-action-primary"
+          onClick={() => onTutor(document)}
+          type="button"
+        >
+          <MaterialIcon name="tutor" size={17} />
+          Study with Tutor
+        </button>
+        <button
+          className="source-action-button"
+          onClick={() => onQuiz(document)}
+          type="button"
+        >
+          <MaterialIcon name="quiz" size={17} />
+          Make a Quiz
+        </button>
       </div>
     </article>
   );
