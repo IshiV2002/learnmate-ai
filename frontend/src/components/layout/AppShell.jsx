@@ -35,6 +35,7 @@ function AppShell({ children, currentPage, navigationDirection, navigationTransi
         <TopBar
           currentPage={currentPage}
           onLogout={onLogout}
+          onNavigate={handleNavigate}
           onOpenMenu={() => setMobileMenuOpen(true)}
           onToggleTheme={onToggleTheme}
           onViewPlans={onViewPlans}

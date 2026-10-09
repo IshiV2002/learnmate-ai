@@ -2,7 +2,7 @@ import Button from "../ui/Button.jsx";
 import Icon from "../ui/Icon.jsx";
 import { getNavigationItem } from "./navigation.js";
 
-function TopBar({ currentPage, onLogout, onOpenMenu, onToggleTheme, onViewPlans, theme, user }) {
+function TopBar({ currentPage, onLogout, onNavigate, onOpenMenu, onToggleTheme, onViewPlans, theme, user }) {
   const page = getNavigationItem(currentPage);
 
   return (
@@ -31,7 +31,12 @@ function TopBar({ currentPage, onLogout, onOpenMenu, onToggleTheme, onViewPlans,
         >
           {theme === "light" ? "Dark" : "Light"}
         </Button>
-        <div className="topbar-user">
+        <button
+          aria-label="Open my account"
+          className="topbar-user"
+          onClick={() => onNavigate("account")}
+          type="button"
+        >
           <span className="topbar-avatar" aria-hidden="true">
             {user.full_name.charAt(0).toUpperCase()}
           </span>
@@ -39,7 +44,7 @@ function TopBar({ currentPage, onLogout, onOpenMenu, onToggleTheme, onViewPlans,
             <strong>{user.full_name}</strong>
             <small>Student workspace</small>
           </span>
-        </div>
+        </button>
         <Button onClick={onLogout}>Sign out</Button>
       </div>
     </header>

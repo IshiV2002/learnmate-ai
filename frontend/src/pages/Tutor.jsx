@@ -21,14 +21,18 @@ import {
 } from "./tutor/tutorUtils.js";
 import "./Tutor.css";
 
-export default function Tutor({ initialHandoff = null, onClearHandoff = null }) {
+export default function Tutor({
+  initialDocumentId = "",
+  initialHandoff = null,
+  onClearHandoff = null,
+}) {
   const { user } = useAuth();
   const studentId = user?.user_id || "student_default";
   const activeSessionStorageKey = `learnmate_active_tutor_session_${studentId}`;
 
   // Data states
   const [documents, setDocuments] = useState([]);
-  const [selectedDocId, setSelectedDocId] = useState("");
+  const [selectedDocId, setSelectedDocId] = useState(initialDocumentId);
   const [topicFocus, setTopicFocus] = useState("");
   const [mode, setMode] = useState("socratic"); // 'socratic' | 'step_by_step' | 'concept_check'
 
@@ -77,10 +81,24 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
       try {
         const docs = await getDocuments();
         const docList = Array.isArray(docs) ? docs : [];
+        const preferredDocumentExists = docList.some(
+          (document) => document.document_id === initialDocumentId,
+        );
         setDocuments(docList);
-        if (docList.length > 0 && !selectedDocId) {
-          setSelectedDocId(docList[0].document_id);
+        if (preferredDocumentExists && !initialHandoff) {
+          setSuccessMessage(
+            "Your chosen material is ready. Pick a study style and start the session.",
+          );
         }
+        setSelectedDocId((currentDocumentId) => {
+          const currentDocumentExists = docList.some(
+            (document) => document.document_id === currentDocumentId,
+          );
+
+          if (preferredDocumentExists) return initialDocumentId;
+          if (currentDocumentExists) return currentDocumentId;
+          return docList[0]?.document_id || "";
+        });
       } catch (err) {
         console.error("Failed to load documents:", err);
       }

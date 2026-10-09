@@ -111,6 +111,39 @@ async def generate_quiz(
 
 
 @router.get(
+    "/attempts",
+    summary="List My Quiz Attempts",
+)
+async def list_my_quiz_attempts(
+    current_user: CurrentUser,
+) -> list[dict[str, Any]]:
+    """Return safe quiz-attempt summaries for the authenticated student."""
+    try:
+        attempts = get_document_database().list_student_quiz_attempts(
+            current_user.user_id
+        )
+    except DocumentDatabaseError as error:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not list quiz attempts.",
+        ) from error
+
+    return [
+        {
+            "attempt_id": attempt.attempt_id,
+            "document_id": attempt.document_id,
+            "quiz_id": attempt.quiz_id,
+            "quiz_title": attempt.quiz_title,
+            "total_questions": attempt.total_questions,
+            "score": attempt.score,
+            "time_spent_seconds": attempt.time_spent_seconds,
+            "created_at": attempt.created_at,
+        }
+        for attempt in attempts
+    ]
+
+
+@router.get(
     "/{quiz_id}",
     summary="Get Quiz Details",
 )

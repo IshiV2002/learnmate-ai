@@ -37,6 +37,18 @@ const iconPaths = {
   search: <path d="m20 20-4.3-4.3M18 10.5a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z" />,
   close: <path d="m6 6 12 12M18 6 6 18" />,
   check: <path d="m5 12 4 4L19 6" />,
+  tutor: (
+    <>
+      <path d="M5 5h14v10H9l-4 4V5Z" />
+      <path d="M9 9h6M9 12h4" />
+    </>
+  ),
+  quiz: (
+    <>
+      <path d="M8 4h11v16H8M5 7h5M5 12h5M5 17h5" />
+      <path d="m14 10 1.5 1.5L18 8.5" />
+    </>
+  ),
 };
 
 function MaterialIcon({ name, size = 20, className = "" }) {

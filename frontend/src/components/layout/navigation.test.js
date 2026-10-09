@@ -17,6 +17,7 @@ test("book transitions are limited to movement between study pages", () => {
   assert.equal(getNavigationTransition("materials", "tutor"), "book");
   assert.equal(getNavigationTransition("quiz", "recommendations"), "book");
   assert.equal(getNavigationTransition("home", "materials"), "soft");
+  assert.equal(getNavigationTransition("recommendations", "account"), "soft");
 });
 
 test("navigation direction follows the study workflow order", () => {
