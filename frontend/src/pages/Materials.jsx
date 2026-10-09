@@ -19,7 +19,7 @@ import {
   validateMaterial,
 } from "./materials/materialsUtils.js";
 
-function Materials({ onStudyDocument }) {
+function Materials({ onStudyDocument, onStudyWithTutor = null }) {
   const [documents, setDocuments] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -29,6 +29,7 @@ function Materials({ onStudyDocument }) {
   const [documentPendingDelete, setDocumentPendingDelete] = useState(null);
   const [uploadStatus, setUploadStatus] = useState("idle");
   const [uploadFileName, setUploadFileName] = useState("");
+  const [lastUploadedDoc, setLastUploadedDoc] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [recentlyUploadedDocument, setRecentlyUploadedDocument] = useState(null);
@@ -145,6 +146,10 @@ function Materials({ onStudyDocument }) {
       const result = await uploadDocument(selectedFile);
       clearSelectedFile();
       setUploadFileName(currentFileName);
+      setLastUploadedDoc({
+        document_id: result.document_id,
+        original_filename: currentFileName,
+      });
 
       if (result.document) {
         setDocuments((currentDocuments) => [
@@ -302,7 +307,11 @@ function Materials({ onStudyDocument }) {
           </div>
         </form>
 
-        <ProcessingJourney fileName={uploadFileName} status={uploadStatus} />
+        <ProcessingJourney
+          fileName={uploadFileName}
+          onStudy={lastUploadedDoc && onStudyDocument ? () => continueWithDocument(lastUploadedDoc, "tutor") : null}
+          status={uploadStatus}
+        />
 
         {uploadStatus === "complete" && recentlyUploadedDocument && (
           <section className="vault-next-step" aria-labelledby="vault-next-step-heading">

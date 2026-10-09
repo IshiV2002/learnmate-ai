@@ -87,9 +87,25 @@ function App() {
 
   function handleStudyDocument(document, destination) {
     setSelectedStudyDocument(document);
-    setTutorHandoff(null);
+    if (destination === "tutor") {
+      if (user?.user_id) {
+        localStorage.removeItem(`learnmate_active_tutor_session_${user.user_id}`);
+      }
+      setTutorHandoff({
+        document_id: document.document_id,
+        target_topics: [],
+        mode: "socratic",
+        topic_focus: document.original_filename?.replace(/\.pdf$/i, "") || "Lecture Material",
+      });
+    } else {
+      setTutorHandoff(null);
+    }
     navigateToPage(destination);
   }
+
+  const handleStudyMaterialWithTutor = (doc) => {
+    handleStudyDocument(doc, "tutor");
+  };
 
   function handleAuthentication(authentication, authenticationMode) {
     setNavigationDirection("forward");
@@ -151,7 +167,11 @@ function App() {
         <Account onNavigate={navigateToPage} onViewPlans={openPlans} user={user} />
       )}
       {currentPage === "materials" && (
-        <Materials onStudyDocument={handleStudyDocument} />
+        <Materials
+          onNavigate={navigateToPage}
+          onStudyDocument={handleStudyDocument}
+          onStudyWithTutor={handleStudyMaterialWithTutor}
+        />
       )}
       {currentPage === "quiz" && (
         <Quiz

@@ -1,6 +1,55 @@
+import re
+
 from app.services.embedding_service import EmbeddingService
 from app.services.text_processing_service import TextChunk
 from app.services.vector_store_service import VectorSearchResult, VectorStoreService
+
+
+def is_substantive_chunk(text: str, min_words: int = 12) -> bool:
+    """Return True if chunk has enough substantive content to be an explanatory reference.
+
+    Excludes title slides, headers, slide numbers, and low-information snippets
+    such as 'Introduction to Information Retrieval 4' or 'Lecture 01'.
+    """
+    if not text:
+        return False
+
+    cleaned = text.strip()
+    words = cleaned.split()
+
+    # 1. Chunks with fewer than min_words cannot provide a meaningful conceptual explanation.
+    if len(words) < min_words:
+        return False
+
+    # 2. Check for cover slide / title slide / section header patterns with low word count (< 20 words).
+    title_pattern = re.compile(
+        r"^(?:introduction to|lecture\s*\d+|chapter\s*\d+|part\s*\d+|overview|outline|agenda|table of contents|contents)\b",
+        re.IGNORECASE,
+    )
+    if len(words) < 20 and title_pattern.match(cleaned):
+        return False
+
+    return True
+
+
+def filter_substantive_chunks(
+    chunks: list[VectorSearchResult],
+    min_words: int = 12,
+    limit: int = 3,
+) -> list[VectorSearchResult]:
+    """Filter search results to retain only substantive, informative chunks.
+
+    Falls back to the best available candidates if all chunks are short.
+    """
+    if not chunks:
+        return []
+
+    substantive = [c for c in chunks if is_substantive_chunk(str(c.get("text", "")), min_words=min_words)]
+    if substantive:
+        return substantive[:limit]
+
+    # Graceful fallback: return the longest available chunks if all are brief
+    return sorted(chunks, key=lambda c: len(str(c.get("text", "")).split()), reverse=True)[:limit]
 
 
 class RetrievalAgentError(Exception):
