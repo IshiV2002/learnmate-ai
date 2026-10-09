@@ -49,11 +49,6 @@ function KnowledgeSourceCard({ document, isDeleting, onDelete, onQuiz, onTutor }
         <MetadataItem icon="storage" label="File size" value={formatFileSize(document.file_size_bytes)} />
       </dl>
 
-      <div className="source-grounding-note">
-        <MaterialIcon name="search" size={16} />
-        Tutor answers and quizzes can use this source with page references.
-      </div>
-
       <div
         aria-label={`Study actions for ${filename}`}
         className="source-card-actions"

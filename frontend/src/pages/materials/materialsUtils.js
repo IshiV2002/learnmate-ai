@@ -86,7 +86,9 @@ export function formatUploadDate(createdAt) {
 }
 
 export function getLibraryStats(documents) {
-  return documents.reduce(
+  const safeDocuments = Array.isArray(documents) ? documents : [];
+
+  return safeDocuments.reduce(
     (stats, document) => ({
       documents: stats.documents + 1,
       pages: stats.pages + (Number(document.page_count) || 0),
@@ -94,4 +96,40 @@ export function getLibraryStats(documents) {
     }),
     { documents: 0, pages: 0, chunks: 0 },
   );
+}
+
+export function filterAndSortMaterials(
+  documents,
+  searchQuery = "",
+  typeFilter = "all",
+  sortOrder = "newest",
+) {
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const safeDocuments = Array.isArray(documents) ? [...documents] : [];
+
+  const filteredDocuments = safeDocuments.filter((document) => {
+    const filename = document.original_filename || "";
+    const matchesSearch = filename.toLowerCase().includes(normalizedQuery);
+    const materialType = getMaterialType(filename).toLowerCase();
+    const matchesType = typeFilter === "all" || materialType === typeFilter;
+
+    return matchesSearch && matchesType;
+  });
+
+  return filteredDocuments.sort((firstDocument, secondDocument) => {
+    if (sortOrder === "name") {
+      return (firstDocument.original_filename || "").localeCompare(
+        secondDocument.original_filename || "",
+        undefined,
+        { sensitivity: "base" },
+      );
+    }
+
+    const firstDate = Date.parse(firstDocument.created_at || "") || 0;
+    const secondDate = Date.parse(secondDocument.created_at || "") || 0;
+
+    return sortOrder === "oldest"
+      ? firstDate - secondDate
+      : secondDate - firstDate;
+  });
 }

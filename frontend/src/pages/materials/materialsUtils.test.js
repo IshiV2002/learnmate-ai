@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   MAX_FILE_SIZE_BYTES,
+  filterAndSortMaterials,
   formatFileSize,
   getMaterialType,
   getLibraryStats,
@@ -55,5 +56,44 @@ test("formats file sizes and totals only real document metadata", () => {
       { page_count: 4, chunk_count: 9 },
     ]),
     { documents: 2, pages: 14, chunks: 33 },
+  );
+});
+
+test("filters materials by name and type and sorts the visible library", () => {
+  const documents = [
+    {
+      document_id: "doc-1",
+      original_filename: "Algorithms Lecture.pdf",
+      created_at: "2026-10-08T09:00:00Z",
+    },
+    {
+      document_id: "doc-2",
+      original_filename: "Network Diagram.png",
+      created_at: "2026-10-09T09:00:00Z",
+    },
+    {
+      document_id: "doc-3",
+      original_filename: "Database Notes.pdf",
+      created_at: "2026-10-07T09:00:00Z",
+    },
+  ];
+
+  assert.deepEqual(
+    filterAndSortMaterials(documents, "notes", "pdf", "newest").map(
+      (document) => document.document_id,
+    ),
+    ["doc-3"],
+  );
+  assert.deepEqual(
+    filterAndSortMaterials(documents, "", "all", "name").map(
+      (document) => document.document_id,
+    ),
+    ["doc-1", "doc-3", "doc-2"],
+  );
+  assert.deepEqual(
+    filterAndSortMaterials(documents, "", "all", "oldest").map(
+      (document) => document.document_id,
+    ),
+    ["doc-3", "doc-1", "doc-2"],
   );
 });
