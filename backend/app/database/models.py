@@ -290,6 +290,8 @@ class TutorHandoffPackage(BaseModel):
     pedagogical_instruction: str
     suggested_opening_prompt: str
     relevant_lecture_chunks: list[dict[str, Any]] = Field(default_factory=list)
+    mastered_topics: list[str] = Field(default_factory=list)
+    cognitive_bridge_analogy: str = Field(default="")
 
 
 class RecommendationResponse(BaseModel):
@@ -309,6 +311,9 @@ class RecommendationResponse(BaseModel):
     knowledge_gaps: list[KnowledgeGap]
     action_items: list[StudyActionItem]
     tutor_handoff: TutorHandoffPackage
+    mastered_topics: list[str] = Field(default_factory=list)
+    weak_topics: list[str] = Field(default_factory=list)
+    questions_digest: list[dict[str, Any]] = Field(default_factory=list)
 
 
 # =====================================================================

@@ -102,57 +102,108 @@ class LLMService:
         quiz_title: str,
         weak_topics: list[str],
         sample_misconceptions: list[str],
-    ) -> tuple[str, str]:
-        """Synthesize pedagogical guidance and an opening prompt for the Tutor Agent.
+        mastered_topics: list[str] | None = None,
+        mistake_details: list[dict[str, Any]] | None = None,
+    ) -> tuple[str, str, str]:
+        """Synthesize hyper-personalized pedagogical guidance, opening prompt, and cognitive bridge.
         
         Returns:
-            (pedagogical_instruction, suggested_opening_prompt)
+            (pedagogical_instruction, suggested_opening_prompt, cognitive_bridge_analogy)
         """
-        if not weak_topics:
+        mastered = [t for t in (mastered_topics or []) if t]
+        weak = [t for t in (weak_topics or []) if t]
+        mistakes = mistake_details or []
+
+        if not weak:
             instruction = (
-                "The student has achieved full mastery on this quiz. "
-                "Engage them with advanced synthesis questions and real-world edge cases."
+                f"The student achieved full mastery on '{quiz_title}'. "
+                f"Mastered topics: {', '.join(mastered) if mastered else 'all core concepts'}. "
+                "Engage them with advanced synthesis challenges, real-world edge cases, and architectural trade-offs."
             )
             opening = (
-                f"Congratulations on your outstanding performance on '{quiz_title}'! "
-                "Would you like to explore advanced application scenarios or move to the next chapter?"
+                f"Hi! Congratulations on your outstanding performance on '{quiz_title}'! "
+                "You demonstrated rock-solid understanding across every topic tested. "
+                "Would you like to explore an advanced engineering challenge or discuss real-world edge cases?"
             )
-            return instruction, opening
+            return instruction, opening, "Reinforce mastery with real-world synthesis questions."
 
-        topics_str = ", ".join(f"'{t}'" for t in weak_topics)
-        first_topic = weak_topics[0]
-
-        default_instruction = (
-            f"You are an empathetic, step-by-step Socratic tutor. The student struggled with {topics_str}. "
-            "Do not provide direct answers immediately. Instead, break down the core concept into simple intuitive steps, "
-            "ask guided questions to identify their mental model, and validate their understanding before moving forward."
-        )
-
-        if sample_misconceptions:
-            default_opening = (
-                f"Hello! I noticed you encountered some challenging questions on {first_topic} during the '{quiz_title}' quiz. "
-                "Let's explore this together step by step. To start, how would you describe the core purpose of this concept in your own words?"
+        # 1. Build Cognitive Bridge Analogy & Praise
+        first_weak = weak[0]
+        if mastered:
+            first_strong = mastered[0]
+            cognitive_bridge = (
+                f"Build an intuitive bridge from the student's mastery in '{first_strong}' to clarify '{first_weak}'. "
+                f"Use '{first_strong}' as a familiar anchor to demonstrate how '{first_weak}' operates."
+            )
+            greeting_praise = (
+                f"Hi! Outstanding work on **{', '.join(mastered[:2])}** in your recent '{quiz_title}' quiz—"
+                "you've proven you have a strong conceptual foundation in those areas!"
             )
         else:
-            default_opening = (
-                f"Hello! Let's review the key principles behind {first_topic}. "
-                "What aspect of this topic felt least clear to you during the quiz?"
+            cognitive_bridge = (
+                f"Break down '{first_weak}' into intuitive, real-world search examples step-by-step."
+            )
+            greeting_praise = f"Hi! Let's work together to level up your understanding of '{quiz_title}'."
+
+        # 2. Extract Specific Question Mistake Context
+        relevant_mistake = None
+        for m in mistakes:
+            if m.get("topic") in weak or m.get("topic") == first_weak:
+                relevant_mistake = m
+                break
+        if not relevant_mistake and mistakes:
+            relevant_mistake = mistakes[0]
+
+        if relevant_mistake:
+            m_topic = relevant_mistake.get("topic", first_weak)
+            chosen = relevant_mistake.get("selected_answer", "")
+            correct = relevant_mistake.get("correct_answer", "")
+            socratic_question = (
+                f"In your quiz questions on **{m_topic}**, you selected:\n"
+                f"> *\"{chosen}\"*\n\n"
+                f"Let's explore that reasoning together! If a term or property behaves this way, what effect would that have on search results? "
+                f"How would you explain the key difference between your selection and *\"{correct}\"*?"
+            )
+        elif sample_misconceptions:
+            socratic_question = (
+                f"During the quiz on **{first_weak}**, there was some uncertainty around *\"{sample_misconceptions[0]}\"*.\n\n"
+                f"Let's break this down together step-by-step. To start, how would you describe the core objective of **{first_weak}** in your own words?"
+            )
+        else:
+            socratic_question = (
+                f"Let's take a closer look at **{first_weak}**.\n\n"
+                "What aspect of this concept felt most challenging or ambiguous during the quiz?"
             )
 
+        default_opening = f"{greeting_praise}\n\n{socratic_question}"
+
+        default_instruction = (
+            f"You are an empathetic, step-by-step Socratic tutor. "
+            f"Verified Strengths: {', '.join(mastered) if mastered else 'None recorded'}. "
+            f"Target Weaknesses: {', '.join(weak)}. "
+            f"Cognitive Bridge Directive: {cognitive_bridge} "
+            "Pedagogical Rules: Do not give away answers directly. Acknowledge what the student already understands, "
+            "ask guided questions to diagnose their mental model, and validate their understanding before moving forward."
+        )
+
         if not self.is_available:
-            return default_instruction, default_opening
+            return default_instruction, default_opening, cognitive_bridge
 
         prompt = (
-            f"You are an expert pedagogical designer. A student needs remedial tutoring on '{quiz_title}' for topics: {topics_str}. "
-            f"Misconceptions noted: {json.dumps(sample_misconceptions)}. "
-            "Generate JSON with two keys: 'instruction' (guiding the AI Tutor on how to teach) and "
-            "'opening_prompt' (the first warm, friendly Socratic question the AI Tutor will say to the student)."
+            f"You are an expert pedagogical designer creating an AI Tutor handoff package for '{quiz_title}'.\n"
+            f"Student's Verified Strengths: {json.dumps(mastered)}\n"
+            f"Student's Weaknesses (Topics missed): {json.dumps(weak)}\n"
+            f"Logged Mistake Context: {json.dumps(relevant_mistake if relevant_mistake else sample_misconceptions)}\n\n"
+            "Generate JSON with three keys:\n"
+            "1. 'instruction': A detailed pedagogical directive for the AI Tutor on how to teach, respecting the student's strengths and using analogies.\n"
+            "2. 'opening_prompt': A personalized, warm opening message to the student praising what they got right, quoting their specific quiz answer, and asking a friendly Socratic question.\n"
+            "3. 'cognitive_bridge_analogy': A one-sentence explanation of how to bridge their strong topic to their weak topic.\n"
+            "Return valid JSON only."
         )
 
         response_text = self._call_gemini(prompt)
         if response_text:
             try:
-                # Try parsing json if LLM returned json format
                 clean_text = response_text.strip()
                 if clean_text.startswith("```json"):
                     clean_text = clean_text[7:]
@@ -160,11 +211,15 @@ class LLMService:
                     clean_text = clean_text[:-3]
                 parsed = json.loads(clean_text)
                 if "instruction" in parsed and "opening_prompt" in parsed:
-                    return str(parsed["instruction"]), str(parsed["opening_prompt"])
+                    return (
+                        str(parsed["instruction"]),
+                        str(parsed["opening_prompt"]),
+                        str(parsed.get("cognitive_bridge_analogy", cognitive_bridge)),
+                    )
             except Exception:
                 pass
 
-        return default_instruction, default_opening
+        return default_instruction, default_opening, cognitive_bridge
 
     def generate_tutor_response(
         self,
@@ -451,7 +506,9 @@ class LLMService:
                 "Every question must test a different fact, relationship, procedure, or concept. Do not repeat a stem, "
                 "ask the same fact in different words, use generic curriculum questions, or copy a full paragraph as the answer. "
                 "Use specific lecture terminology and make each question answerable from the evidence. "
-                "For MCQs, provide four concise, distinct, plausible choices of the same kind, with exactly one correct choice. "
+                "For MCQs, provide four concise, distinct, plausible choices of the same grammatical and semantic kind, with exactly one correct choice. "
+                "Keep choices parallel in form and similar in length. Use complete terms or phrases, not sentence fragments, "
+                "dangling clauses, pronoun-led fragments, unrelated headings, or OCR debris. "
                 "Make distractors reflect likely misunderstandings of the lecture rather than unrelated joke answers. "
                 "The correct_answer must exactly match one option. Spread questions across different supplied chunks when possible. "
                 "Each object in the array MUST contain:\n"
@@ -562,6 +619,8 @@ class LLMService:
                     any(not option for option in options)
                     or len(set(option_keys)) != 4
                     or answer_key not in option_keys
+                    or any(not self._is_reasonable_mcq_option(option) for option in options)
+                    or not self._mcq_options_have_comparable_length(options)
                 ):
                     continue
             elif question_type == "true_false":
@@ -590,6 +649,45 @@ class LLMService:
                 break
 
         return accepted
+
+    @staticmethod
+    def _is_reasonable_mcq_option(option: str) -> bool:
+        """Reject answer fragments that look like extraction or OCR debris."""
+        cleaned = re.sub(r"\s+", " ", str(option)).strip()
+        words = re.findall(r"[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*", cleaned)
+        if not words or len(words) > 18:
+            return False
+
+        # These openings commonly signal a clipped sentence rather than a
+        # standalone answer choice. Articles such as "the" remain acceptable.
+        incomplete_starts = {
+            "this", "that", "these", "those", "it", "they", "he", "she",
+            "we", "you", "i", "here", "there",
+        }
+        incomplete_ends = {
+            "and", "or", "but", "as", "to", "of", "for", "with", "by",
+            "in", "on", "at", "from", "that", "which", "who", "when",
+            "where", "their", "its", "they", "this", "these", "those",
+            "a", "an", "the",
+        }
+        if words[0].lower() in incomplete_starts or words[-1].lower() in incomplete_ends:
+            return False
+        if re.search(r"\b(?:lorem|ipsum|undefined|null|n/?a)\b", cleaned, re.IGNORECASE):
+            return False
+        return True
+
+    @staticmethod
+    def _mcq_options_have_comparable_length(options: list[str]) -> bool:
+        """Avoid making the correct answer obvious through wildly different lengths."""
+        word_counts = [
+            len(re.findall(r"[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*", option))
+            for option in options
+        ]
+        if not word_counts:
+            return False
+        shortest = min(word_counts)
+        longest = max(word_counts)
+        return longest - shortest <= max(5, shortest * 2)
 
     def _extract_cloze_facts(
         self,
@@ -686,6 +784,7 @@ class LLMService:
                             (start, end)
                             for _, start, end in sorted(spans, reverse=True)
                             if self._normalize_question_text(sentence[start:end]) not in seen_answers
+                            and self._is_reasonable_mcq_option(sentence[start:end])
                         ),
                         None,
                     )
@@ -822,7 +921,11 @@ class LLMService:
                         "page": int(chunk.get("page_number", 1)),
                         "chunk_index": int(chunk.get("chunk_index", 0)),
                     })
-                elif labeled_fact and len(labeled_fact.group("detail").split()) >= 5:
+                elif (
+                    labeled_fact
+                    and len(labeled_fact.group("detail").split()) >= 5
+                    and self._is_reasonable_mcq_option(labeled_fact.group("detail"))
+                ):
                     subject = labeled_fact.group("label").strip()
                     detail = labeled_fact.group("detail").strip()
                     facts.append({
@@ -841,6 +944,8 @@ class LLMService:
                         "this", "it", "they", "what", "which", "who", "when", "where"
                     }
                     and not definition.group("subject").strip().lower().startswith(("to ", "if "))
+                    and len(definition.group("subject").split()) <= 5
+                    and self._is_reasonable_mcq_option(definition.group("subject"))
                     and not definition.group("predicate").strip().lower().startswith(
                         ("of ", "to ", "by ", "that ")
                     )
@@ -858,7 +963,12 @@ class LLMService:
                             "page": int(chunk.get("page_number", 1)),
                             "chunk_index": int(chunk.get("chunk_index", 0)),
                         })
-                elif action and action.group("subject").lower() not in {"this", "it", "they"}:
+                elif (
+                    action
+                    and action.group("subject").lower() not in {"this", "it", "they"}
+                    and len(action.group("subject").split()) <= 5
+                    and self._is_reasonable_mcq_option(action.group("subject"))
+                ):
                     subject = action.group("subject").strip()
                     verb = action.group("verb").lower()
                     answer = action.group("object").strip()
@@ -902,7 +1012,10 @@ class LLMService:
                         "excludes": "exclude",
                         "removes": "remove",
                     }[verb]
-                    if len(answer.split()) >= 3:
+                    if (
+                        len(answer.split()) >= 3
+                        and self._is_reasonable_mcq_option(answer)
+                    ):
                         facts.append({
                             "text": sentence,
                             "subject": subject,
@@ -1008,26 +1121,28 @@ class LLMService:
                         for other in facts
                         if other is not fact and other["kind"] == "action"
                     ]
-                if len(distractors) < 3:
-                    distractors.extend(
-                        other["subject"]
-                        for other in facts
-                        if other is not fact and other["subject"] not in distractors
-                    )
 
+                answer_word_count = len(answer.split())
+                distractors = sorted(
+                    distractors,
+                    key=lambda item: abs(len(str(item).split()) - answer_word_count),
+                )
                 unique_distractors: list[str] = []
                 for distractor in distractors:
-                    if self._normalize_question_text(distractor) not in {
-                        self._normalize_question_text(answer),
-                        *(self._normalize_question_text(item) for item in unique_distractors),
+                    normalized_distractor = self._normalize_question_text(distractor)
+                    if self._is_reasonable_mcq_option(distractor) and normalized_distractor not in {
+                            self._normalize_question_text(answer),
+                            *(self._normalize_question_text(item) for item in unique_distractors),
                     }:
-                        unique_distractors.append(distractor)
+                        candidate_options = [answer, *unique_distractors, distractor]
+                        if self._mcq_options_have_comparable_length(candidate_options):
+                            unique_distractors.append(distractor)
                     if len(unique_distractors) == 3:
                         break
-                if len(unique_distractors) < 3:
+                if not unique_distractors:
                     raise ValueError(
-                        "The retrieved PDF evidence does not contain enough distinct answer choices "
-                        "to create reliable multiple-choice questions."
+                        "The retrieved material does not contain a clean, distinct distractor "
+                        "for a reliable multiple-choice question."
                     )
                 options = [answer, *unique_distractors]
                 shift = index % len(options)

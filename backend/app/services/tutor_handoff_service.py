@@ -34,10 +34,14 @@ class TutorHandoffService:
         quiz_title: str,
         gaps: list[KnowledgeGap],
         action_items: list[StudyActionItem],
+        mastered_topics: list[str] | None = None,
+        mistake_details: list[dict[str, Any]] | None = None,
     ) -> tuple[list[StudyActionItem], TutorHandoffPackage]:
         """Fetch lecture references via RetrievalAgent and assemble the Tutor Handoff package."""
         all_retrieved_chunks: list[dict[str, Any]] = []
         weak_topics = [gap.topic for gap in gaps]
+        mastered = mastered_topics or []
+        mistakes = mistake_details or []
 
         # 1. Fetch relevant lecture chunks for weak topics if Retrieval Agent is available
         if self.retrieval_agent and document_id:
@@ -78,11 +82,13 @@ class TutorHandoffService:
         for gap in gaps:
             misconceptions.extend(gap.sample_misconceptions[:2])
 
-        # 3. Synthesize Socratic instruction and opening prompt via LLM or fallback
-        instruction, opening_prompt = self.llm_service.generate_socratic_tutor_package(
+        # 3. Synthesize Socratic instruction, personalized opening prompt, and cognitive bridge via LLM or fallback
+        instruction, opening_prompt, cognitive_bridge = self.llm_service.generate_socratic_tutor_package(
             quiz_title=quiz_title,
             weak_topics=weak_topics,
             sample_misconceptions=misconceptions,
+            mastered_topics=mastered,
+            mistake_details=mistakes,
         )
 
         # 4. Determine overall gap severity
@@ -105,6 +111,8 @@ class TutorHandoffService:
             pedagogical_instruction=instruction,
             suggested_opening_prompt=opening_prompt,
             relevant_lecture_chunks=all_retrieved_chunks[:4],
+            mastered_topics=mastered,
+            cognitive_bridge_analogy=cognitive_bridge,
         )
 
         return action_items, tutor_package

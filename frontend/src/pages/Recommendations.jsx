@@ -240,6 +240,11 @@ export default function Recommendations({
   });
   const [recoveredGaps, setRecoveredGaps] = useState({});
   const [activeDrills, setActiveDrills] = useState({});
+  const [digestFilter, setDigestFilter] = useState("all"); // 'all' | 'missed' | 'correct'
+  const [digestTopicFilter, setDigestTopicFilter] = useState("all");
+  const [digestSearchQuery, setDigestSearchQuery] = useState("");
+  const [digestViewMode, setDigestViewMode] = useState("detailed"); // 'detailed' | 'compact'
+  const [expandedDigestCards, setExpandedDigestCards] = useState({});
 
   useEffect(() => {
     loadDocuments();
@@ -352,6 +357,141 @@ export default function Recommendations({
 
   // Psychological & Gamification Calculations
   const scorePct = recommendationResult?.score_percentage || 0;
+
+  // Assessment Question Digest (Breakdown of correct vs. incorrect)
+  const questionsDigest = useMemo(() => {
+    if (
+      recommendationResult?.questions_digest &&
+      recommendationResult.questions_digest.length > 0
+    ) {
+      return recommendationResult.questions_digest;
+    }
+    if (Array.isArray(activeQuestions) && activeQuestions.length > 0) {
+      return activeQuestions.map((q) => ({
+        question_id: q.question_id,
+        topic: q.topic,
+        difficulty: q.difficulty || "medium",
+        question_text: q.question_text,
+        selected_answer: q.selected_answer,
+        correct_answer: q.correct_answer,
+        is_correct: q.is_correct,
+        explanation:
+          q.explanation ||
+          (q.is_correct
+            ? "You answered this correctly."
+            : "Review this concept to master the material."),
+      }));
+    }
+    return [];
+  }, [recommendationResult, activeQuestions]);
+
+  // Derived filter stats and available topics
+  const missedCount = useMemo(
+    () => questionsDigest.filter((q) => !q.is_correct).length,
+    [questionsDigest]
+  );
+  const correctCount = useMemo(
+    () => questionsDigest.filter((q) => q.is_correct).length,
+    [questionsDigest]
+  );
+
+  const digestTopics = useMemo(() => {
+    const topicMap = new Map();
+    questionsDigest.forEach((q) => {
+      const top = q.topic || "General Concept";
+      topicMap.set(top, (topicMap.get(top) || 0) + 1);
+    });
+    return Array.from(topicMap.entries()).map(([topic, count]) => ({
+      topic,
+      count,
+    }));
+  }, [questionsDigest]);
+
+  const hasActiveDigestFilters =
+    digestFilter !== "all" ||
+    digestTopicFilter !== "all" ||
+    digestSearchQuery.trim() !== "";
+
+  const filteredDigest = useMemo(() => {
+    return questionsDigest.filter((q) => {
+      // 1. Status Filter
+      if (digestFilter === "missed" && q.is_correct) return false;
+      if (digestFilter === "correct" && !q.is_correct) return false;
+
+      // 2. Topic Filter
+      if (digestTopicFilter !== "all" && q.topic !== digestTopicFilter) {
+        return false;
+      }
+
+      // 3. Search Query Filter
+      if (digestSearchQuery.trim()) {
+        const query = digestSearchQuery.toLowerCase().trim();
+        const textMatch = (q.question_text || "").toLowerCase().includes(query);
+        const topicMatch = (q.topic || "").toLowerCase().includes(query);
+        const ansMatch = (q.selected_answer || "").toLowerCase().includes(query);
+        const correctAnsMatch = (q.correct_answer || "").toLowerCase().includes(query);
+        const explMatch = (q.explanation || "").toLowerCase().includes(query);
+        if (!textMatch && !topicMatch && !ansMatch && !correctAnsMatch && !explMatch) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [questionsDigest, digestFilter, digestTopicFilter, digestSearchQuery]);
+
+  function handleResetDigestFilters() {
+    setDigestFilter("all");
+    setDigestTopicFilter("all");
+    setDigestSearchQuery("");
+  }
+
+  function toggleDigestCardExpansion(qId) {
+    setExpandedDigestCards((prev) => ({
+      ...prev,
+      [qId]: !prev[qId],
+    }));
+  }
+
+  function handleAskTutorAboutQuestion(question) {
+    const questionHandoff = {
+      ...(recommendationResult?.tutor_handoff || {}),
+      target_topics: [question.topic || "Targeted Concept Review"],
+      suggested_opening_prompt: `Hi! In my recent quiz on "${question.topic || "Course Material"}", I missed this question: "${question.question_text}". I selected "${question.selected_answer}", but the correct answer is "${question.correct_answer}". Can you explain where my reasoning went off-track and how to master this concept?`,
+      pedagogical_instruction: `Guide the student through understanding why "${question.correct_answer}" is correct instead of their selection "${question.selected_answer}" on the topic of "${question.topic}". Acknowledge their attempt with positive reinforcement and ask a Socratic guiding question.`,
+    };
+
+    if (onLaunchTutor) {
+      onLaunchTutor(questionHandoff);
+    } else {
+      setShowTutorModal(true);
+    }
+  }
+
+  // Mastered & Weak Topic Categorization (Cognitive Balance Matrix)
+  const masteredTopics = useMemo(() => {
+    if (
+      recommendationResult?.mastered_topics &&
+      recommendationResult.mastered_topics.length > 0
+    ) {
+      return recommendationResult.mastered_topics;
+    }
+    return (recommendationResult?.topic_mastery || [])
+      .filter((tm) => tm.accuracy_percentage >= 70)
+      .map((tm) => tm.topic);
+  }, [recommendationResult]);
+
+  const weakTopics = useMemo(() => {
+    if (
+      recommendationResult?.weak_topics &&
+      recommendationResult.weak_topics.length > 0
+    ) {
+      return recommendationResult.weak_topics;
+    }
+    return (recommendationResult?.topic_mastery || [])
+      .filter((tm) => tm.accuracy_percentage < 70)
+      .map((tm) => tm.topic);
+  }, [recommendationResult]);
 
   const scholarMeta = useMemo(() => {
     if (scorePct >= 85) {
@@ -749,6 +889,424 @@ export default function Recommendations({
             </div>
           </section>
 
+          {/* 📝 ENHANCED ASSESSMENT QUESTION DIGEST (Filter UI & Analysis) */}
+          {questionsDigest.length > 0 && (
+            <div className="rec-digest-panel">
+              <div className="rec-digest-header">
+                <div className="rec-digest-title-group">
+                  <div className="rec-digest-title-badge">
+                    <span>📝</span> Performance Digest
+                  </div>
+                  <h3 className="rec-digest-title">Assessment Question Breakdown</h3>
+                  <p className="rec-digest-subtitle">
+                    Examine your question-level choices, verify correct reasoning, and drill down by topic.
+                  </p>
+                </div>
+                <div className="rec-digest-stats-strip">
+                  <div className="rec-digest-stat-pill score">
+                    <span className="rec-stat-pill-label">Score</span>
+                    <strong className="rec-stat-pill-val">
+                      {Math.round((correctCount / questionsDigest.length) * 100)}%
+                    </strong>
+                  </div>
+                  <div className="rec-digest-stat-pill correct">
+                    <span className="rec-stat-pill-icon">✓</span>
+                    <span>{correctCount} Correct</span>
+                  </div>
+                  <div className="rec-digest-stat-pill missed">
+                    <span className="rec-stat-pill-icon">✗</span>
+                    <span>{missedCount} Missed</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Enhanced Question Filter Toolbar */}
+              <div className="rec-digest-toolbar">
+                {/* Row 1: Status Tabs + Topic Selector + View Toggle */}
+                <div className="rec-digest-toolbar-row">
+                  {/* Status Filter Segmented Control */}
+                  <div className="rec-digest-status-pills" role="tablist" aria-label="Filter questions by status">
+                    <button
+                      type="button"
+                      className={`rec-digest-status-btn ${digestFilter === "all" ? "active" : ""}`}
+                      onClick={() => setDigestFilter("all")}
+                    >
+                      <span>All Questions</span>
+                      <span className="rec-status-count-chip">{questionsDigest.length}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`rec-digest-status-btn missed ${digestFilter === "missed" ? "active" : ""}`}
+                      onClick={() => setDigestFilter("missed")}
+                    >
+                      <span className="rec-status-icon">✗</span>
+                      <span>Missed</span>
+                      <span className="rec-status-count-chip missed">{missedCount}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`rec-digest-status-btn correct ${digestFilter === "correct" ? "active" : ""}`}
+                      onClick={() => setDigestFilter("correct")}
+                    >
+                      <span className="rec-status-icon">✓</span>
+                      <span>Correct</span>
+                      <span className="rec-status-count-chip correct">{correctCount}</span>
+                    </button>
+                  </div>
+
+                  {/* Secondary Controls: Topic Filter & View Mode Toggle */}
+                  <div className="rec-digest-secondary-controls">
+                    {/* Topic Filter Dropdown */}
+                    <div className="rec-digest-topic-select-wrapper">
+                      <span className="rec-select-icon">🏷️</span>
+                      <select
+                        className="rec-digest-topic-select"
+                        value={digestTopicFilter}
+                        onChange={(e) => setDigestTopicFilter(e.target.value)}
+                        aria-label="Filter questions by topic"
+                      >
+                        <option value="all">All Topics ({questionsDigest.length})</option>
+                        {digestTopics.map(({ topic, count }) => (
+                          <option key={topic} value={topic}>
+                            {topic} ({count})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* View Mode Toggle: Detailed vs Compact */}
+                    <div className="rec-digest-view-toggle" role="group" aria-label="View density toggle">
+                      <button
+                        type="button"
+                        className={`rec-view-mode-btn ${digestViewMode === "detailed" ? "active" : ""}`}
+                        onClick={() => setDigestViewMode("detailed")}
+                        title="Detailed cards view with full explanations"
+                        aria-label="Detailed view"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                          <line x1="3" y1="9" x2="21" y2="9" />
+                          <line x1="9" y1="21" x2="9" y2="9" />
+                        </svg>
+                        <span>Detailed</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`rec-view-mode-btn ${digestViewMode === "compact" ? "active" : ""}`}
+                        onClick={() => setDigestViewMode("compact")}
+                        title="Compact row view for quick scanning"
+                        aria-label="Compact view"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="8" y1="6" x2="21" y2="6" />
+                          <line x1="8" y1="12" x2="21" y2="12" />
+                          <line x1="8" y1="18" x2="21" y2="18" />
+                          <line x1="3" y1="6" x2="3.01" y2="6" />
+                          <line x1="3" y1="12" x2="3.01" y2="12" />
+                          <line x1="3" y1="18" x2="3.01" y2="18" />
+                        </svg>
+                        <span>Compact</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Row 2: Search Bar + Active Filters Indicators */}
+                <div className="rec-digest-search-row">
+                  <div className="rec-digest-search-box">
+                    <span className="rec-search-icon">🔍</span>
+                    <input
+                      type="text"
+                      className="rec-digest-search-input"
+                      placeholder="Search questions, options, topics, or explanations..."
+                      value={digestSearchQuery}
+                      onChange={(e) => setDigestSearchQuery(e.target.value)}
+                    />
+                    {digestSearchQuery && (
+                      <button
+                        type="button"
+                        className="rec-search-clear-btn"
+                        onClick={() => setDigestSearchQuery("")}
+                        title="Clear search query"
+                        aria-label="Clear search"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="rec-digest-filter-summary">
+                    <span className="rec-filter-count-label">
+                      Showing <strong>{filteredDigest.length}</strong> of{" "}
+                      <strong>{questionsDigest.length}</strong> questions
+                    </span>
+
+                    {hasActiveDigestFilters && (
+                      <button
+                        type="button"
+                        className="rec-filter-reset-btn"
+                        onClick={handleResetDigestFilters}
+                        title="Reset all filters and search query"
+                      >
+                        <span>↻</span> Reset Filters
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Empty Search/Filter State */}
+              {filteredDigest.length === 0 ? (
+                <div className="rec-digest-empty-state">
+                  <div className="rec-digest-empty-icon">
+                    {digestFilter === "missed" && missedCount === 0 ? "🎉" : "🔍"}
+                  </div>
+                  <h4 className="rec-digest-empty-title">
+                    {digestFilter === "missed" && missedCount === 0
+                      ? "Zero Missed Questions!"
+                      : "No matching questions found"}
+                  </h4>
+                  <p className="rec-digest-empty-desc">
+                    {digestFilter === "missed" && missedCount === 0
+                      ? "Flawless score! You got every question right on this assessment attempt."
+                      : "Try clearing your search terms or selecting a different status/topic filter."}
+                  </p>
+                  <button
+                    type="button"
+                    className="rec-filter-reset-action-btn"
+                    onClick={handleResetDigestFilters}
+                  >
+                    <span>↻</span> Show All {questionsDigest.length} Questions
+                  </button>
+                </div>
+              ) : (
+                /* Question Cards List (Detailed or Compact) */
+                <div className={`rec-digest-list ${digestViewMode}`}>
+                  {filteredDigest.map((q, idx) => {
+                    const isCorrect = Boolean(q.is_correct);
+                    const qId = q.question_id || `q_${idx}`;
+                    const isExpanded = digestViewMode === "detailed" || Boolean(expandedDigestCards[qId]);
+                    const originalIndex = questionsDigest.findIndex(
+                      (item) => (item.question_id || item.question_text) === (q.question_id || q.question_text)
+                    );
+                    const questionNumber = originalIndex !== -1 ? originalIndex + 1 : idx + 1;
+
+                    return (
+                      <div
+                        key={qId}
+                        className={`rec-digest-card ${isCorrect ? "correct" : "incorrect"} ${digestViewMode}`}
+                      >
+                        {/* Card Header Row */}
+                        <div className="rec-digest-card-top">
+                          <div className="rec-digest-left-meta">
+                            <span className="rec-digest-qnum-badge">Q{questionNumber}</span>
+                            <span
+                              className={`rec-digest-badge ${isCorrect ? "correct" : "incorrect"}`}
+                            >
+                              {isCorrect ? "✓ Correct" : "✗ Missed"}
+                            </span>
+                            {q.topic && (
+                              <button
+                                type="button"
+                                className="rec-digest-topic"
+                                onClick={() => setDigestTopicFilter(q.topic)}
+                                title={`Filter by ${q.topic}`}
+                              >
+                                {q.topic}
+                              </button>
+                            )}
+                            {q.difficulty && (
+                              <span className={`rec-digest-difficulty ${q.difficulty.toLowerCase()}`}>
+                                {q.difficulty}
+                              </span>
+                            )}
+                          </div>
+
+                          {digestViewMode === "compact" && (
+                            <button
+                              type="button"
+                              className="rec-digest-accordion-btn"
+                              onClick={() => toggleDigestCardExpansion(qId)}
+                              aria-label={isExpanded ? "Collapse card details" : "Expand card details"}
+                            >
+                              <span>{isExpanded ? "Collapse ▲" : "Inspect Answers ▼"}</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Question Text */}
+                        <div className="rec-digest-question">
+                          {q.question_text}
+                        </div>
+
+                        {/* Collapsible Content in Compact Mode, or Always Visible in Detailed Mode */}
+                        {isExpanded && (
+                          <div className="rec-digest-card-expanded-body">
+                            {/* Answers Comparison Grid */}
+                            <div className="rec-digest-answers-grid">
+                              <div
+                                className={`rec-digest-answer-box ${
+                                  !isCorrect ? "student-wrong" : "correct-target"
+                                }`}
+                              >
+                                <div className="rec-digest-ans-label">
+                                  <span>{isCorrect ? "✓" : "✗"}</span>
+                                  <span>{isCorrect ? "Your Answer (Correct):" : "Your Selection:"}</span>
+                                </div>
+                                <div className="rec-digest-ans-text">
+                                  {q.selected_answer || "No response provided"}
+                                </div>
+                              </div>
+
+                              {!isCorrect && (
+                                <div className="rec-digest-answer-box correct-target">
+                                  <div className="rec-digest-ans-label">
+                                    <span>🎯</span>
+                                    <span>Expected Answer:</span>
+                                  </div>
+                                  <div className="rec-digest-ans-text">
+                                    {q.correct_answer}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Pedagogical Explanation Box */}
+                            {q.explanation && (
+                              <div className="rec-digest-explanation">
+                                <div className="rec-digest-explanation-title">
+                                  <span>💡</span> Pedagogical Insight
+                                </div>
+                                <p className="rec-digest-explanation-text">
+                                  {q.explanation}
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Targeted Tutor Action for Missed Questions */}
+                            {!isCorrect && (
+                              <div className="rec-digest-card-actions">
+                                <button
+                                  type="button"
+                                  className="rec-digest-tutor-ask-btn"
+                                  onClick={() => handleAskTutorAboutQuestion(q)}
+                                  title="Pass this specific question & misconception to AI Tutor"
+                                >
+                                  <span>💬</span>
+                                  <span>Ask AI Tutor to Explain Question {questionNumber}</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ⚖️ COGNITIVE BALANCE: VERIFIED STRENGTHS VS. PRIORITY GROWTH AREAS */}
+          <section className="rec-balance-section">
+            {/* Left Column: Strengths */}
+            <div className="rec-balance-card strengths">
+              <div className="rec-balance-header">
+                <div>
+                  <h3 className="rec-balance-title">
+                    <span>🌟</span> Verified Strengths
+                  </h3>
+                  <p className="rec-balance-desc">
+                    Concepts with solid retention (≥ 70% accuracy). Great foundation!
+                  </p>
+                </div>
+                <span className="rec-balance-badge strengths">
+                  {masteredTopics.length} Confirmed
+                </span>
+              </div>
+
+              {masteredTopics.length === 0 ? (
+                <div className="rec-balance-empty">
+                  Take more practice assessments or complete quick drills to establish verified strengths.
+                </div>
+              ) : (
+                <div className="rec-balance-list">
+                  {masteredTopics.map((top) => {
+                    const masteryObj = (recommendationResult.topic_mastery || []).find(
+                      (tm) => tm.topic === top
+                    );
+                    const pct = masteryObj ? masteryObj.accuracy_percentage : 100;
+                    return (
+                      <div key={top} className="rec-balance-item">
+                        <div>
+                          <div className="rec-balance-topic">
+                            <span>✓</span> {top}
+                          </div>
+                          <div className="rec-balance-sub">
+                            High conceptual retention demonstrated
+                          </div>
+                        </div>
+                        <span className="rec-balance-score-chip strengths">
+                          {pct}%
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Right Column: Weaknesses / Priority Growth Areas */}
+            <div className="rec-balance-card weaknesses">
+              <div className="rec-balance-header">
+                <div>
+                  <h3 className="rec-balance-title">
+                    <span>🎯</span> Priority Growth Areas
+                  </h3>
+                  <p className="rec-balance-desc">
+                    Targeted concepts to correct (&lt; 70% accuracy) for fastest grade leap.
+                  </p>
+                </div>
+                <span className="rec-balance-badge weaknesses">
+                  {weakTopics.length} Priority
+                </span>
+              </div>
+
+              {weakTopics.length === 0 ? (
+                <div className="rec-balance-empty">
+                  🎉 Fantastic work! All tested concepts are currently above the 70% mastery threshold.
+                </div>
+              ) : (
+                <div className="rec-balance-list">
+                  {weakTopics.map((top) => {
+                    const masteryObj = (recommendationResult.topic_mastery || []).find(
+                      (tm) => tm.topic === top
+                    );
+                    const pct = masteryObj ? masteryObj.accuracy_percentage : 0;
+                    const matchingGap = (recommendationResult.knowledge_gaps || []).find(
+                      (kg) => kg.topic === top
+                    );
+                    return (
+                      <div key={top} className="rec-balance-item">
+                        <div>
+                          <div className="rec-balance-topic">
+                            <span>⚡</span> {top}
+                          </div>
+                          <div className="rec-balance-sub">
+                            {matchingGap?.severity || "Needs"} attention · {masteryObj ? `${masteryObj.correct_count}/${masteryObj.total_questions} correct` : "Gap identified"}
+                          </div>
+                        </div>
+                        <span className="rec-balance-score-chip weaknesses">
+                          {pct}%
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
+
           {/* ⚡ THE QUICK WIN PRIORITY CARD (Dopamine Trigger: Low Hanging Fruit) */}
           {quickWin && !recoveredGaps[quickWin.gap_id] && (
             <div className="rec-quick-win-card">
@@ -1049,6 +1607,37 @@ export default function Recommendations({
                 <p className="rec-panel-desc">
                   Tailored Socratic review package formulated for the Tutor Agent.
                 </p>
+
+                {/* Recognized Strengths Pills */}
+                {recommendationResult.tutor_handoff?.mastered_topics?.length > 0 && (
+                  <div className="rec-tutor-strengths-box">
+                    <span className="rec-tutor-strengths-title">
+                      Recognized Strengths:
+                    </span>
+                    <div className="rec-tutor-strengths-chips">
+                      {recommendationResult.tutor_handoff.mastered_topics.map((top) => (
+                        <span key={top} className="rec-tutor-strength-chip">
+                          ✓ {top}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Cognitive Bridge Analogy */}
+                {recommendationResult.tutor_handoff?.cognitive_bridge_analogy && (
+                  <div className="rec-tutor-bridge-box">
+                    <div className="rec-tutor-bridge-header">
+                      <span>🌉</span>
+                      <span className="rec-tutor-bridge-title">
+                        Cognitive Bridge (Strength ➔ Gap Analogy)
+                      </span>
+                    </div>
+                    <p className="rec-tutor-bridge-text">
+                      {recommendationResult.tutor_handoff.cognitive_bridge_analogy}
+                    </p>
+                  </div>
+                )}
 
                 <div className="rec-tutor-bubble-box">
                   <div className="rec-tutor-avatar">LM</div>
@@ -1481,6 +2070,28 @@ export default function Recommendations({
                   ))}
                 </div>
               </div>
+
+              {recommendationResult.tutor_handoff.mastered_topics?.length > 0 && (
+                <div className="rec-contract-field">
+                  <label>Recognized Student Strengths (Anchors)</label>
+                  <div className="rec-tag-cluster">
+                    {recommendationResult.tutor_handoff.mastered_topics.map((t) => (
+                      <span key={t} className="rec-tag" style={{ background: "rgba(16, 185, 129, 0.15)", color: "#10b981", borderColor: "rgba(16, 185, 129, 0.3)" }}>
+                        ✓ {t}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {recommendationResult.tutor_handoff.cognitive_bridge_analogy && (
+                <div className="rec-contract-field">
+                  <label>Cognitive Bridge Analogy</label>
+                  <div className="rec-quote-box" style={{ borderColor: "rgba(99, 102, 241, 0.3)", background: "rgba(99, 102, 241, 0.05)" }}>
+                    🌉 {recommendationResult.tutor_handoff.cognitive_bridge_analogy}
+                  </div>
+                </div>
+              )}
 
               <div className="rec-contract-field">
                 <label>Pedagogical Directive for Tutor Agent</label>
