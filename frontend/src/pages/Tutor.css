@@ -647,6 +647,11 @@
   grid-template-columns: minmax(0, 1.8fr) minmax(320px, 1fr);
   gap: 24px;
   align-items: start;
+  transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.tutor-workspace-grid-maximized {
+  grid-template-columns: 1fr;
 }
 
 @media (max-width: 1024px) {
@@ -659,13 +664,41 @@
 .tutor-chat-card {
   display: flex;
   flex-direction: column;
-  min-height: 640px;
-  max-height: 820px;
+  min-height: 660px;
+  max-height: 860px;
   border: 1px solid var(--color-border);
   border-radius: 24px;
   background: var(--color-surface);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.tutor-chat-card-maximized {
+  min-height: 800px;
+  max-height: min(960px, calc(100vh - 110px));
+  box-shadow: var(--shadow-md);
+  border-color: var(--color-border-strong);
+}
+
+.tutor-chat-card-maximized .tutor-messages-container {
+  padding: clamp(26px, 3.8vw, 42px);
+  gap: 26px;
+}
+
+.tutor-chat-card-maximized .tutor-bubble-wrapper {
+  max-width: 94%;
+}
+
+.tutor-chat-card-maximized .tutor-bubble-content {
+  padding: 18px 24px;
+  font-size: 0.96rem;
+  line-height: 1.72;
+}
+
+.tutor-workspace-grid-maximized .tutor-evidence-drawer {
+  margin-top: 20px;
+  max-height: 480px;
 }
 
 .tutor-chat-header {
@@ -731,13 +764,63 @@
   font-weight: 680;
 }
 
+.tutor-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.74rem;
+  font-weight: 680;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.tutor-expand-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent-strong);
+  background: var(--color-surface-hover);
+  transform: translateY(-1px);
+}
+
+.tutor-expand-btn-active {
+  border-color: var(--color-accent);
+  color: var(--color-accent-strong);
+  background: var(--color-accent-soft);
+  box-shadow: 0 0 0 2px rgb(117 170 153 / 16%);
+}
+
+.tutor-citations-nav-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-soft);
+  color: var(--color-accent-strong);
+  font-size: 0.74rem;
+  font-weight: 680;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.tutor-citations-nav-pill:hover {
+  border-color: var(--color-accent);
+  background: var(--color-surface-hover);
+  transform: translateY(-1px);
+}
+
 /* Chat Messages Feed */
 .tutor-messages-container {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 22px;
   flex: 1;
-  padding: 24px;
+  padding: clamp(20px, 2.6vw, 30px);
   overflow-y: auto;
   scroll-behavior: smooth;
 }
@@ -867,13 +950,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 2px;
-  font-size: 0.74rem;
+  margin-bottom: 3px;
+  font-size: 0.76rem;
   color: var(--color-text-subtle);
+  font-weight: 600;
 }
 
 .tutor-bubble-author {
-  font-weight: 700;
+  font-weight: 750;
   color: var(--color-text-muted);
 }
 
@@ -1114,9 +1198,9 @@
 }
 
 .tutor-followup-label {
-  font-size: 0.74rem;
+  font-size: 0.76rem;
   font-weight: 750;
-  color: var(--color-text-subtle);
+  color: var(--color-text-muted);
   display: flex;
   align-items: center;
   gap: 5px;
@@ -1182,21 +1266,23 @@
 }
 
 .tutor-input-helper {
-  font-size: 0.72rem;
-  color: var(--color-text-subtle);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  font-weight: 550;
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
 .tutor-input-helper kbd {
-  padding: 2px 5px;
+  padding: 2px 6px;
   border: 1px solid var(--color-border-strong);
   border-radius: 4px;
   background: var(--color-surface-soft);
   font-family: var(--font-mono);
-  font-size: 0.68rem;
-  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-text);
 }
 
 .tutor-send-button {
@@ -1281,11 +1367,11 @@
 .tutor-evidence-desc {
   margin: 0;
   padding: 12px 22px;
-  background: rgb(17 23 34 / 50%);
+  background: var(--color-surface-soft);
   border-bottom: 1px solid var(--color-border);
-  color: var(--color-text-subtle);
-  font-size: 0.78rem;
-  line-height: 1.5;
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
 }
 
 .tutor-citations-feed {
@@ -1363,27 +1449,29 @@
 }
 
 .tutor-source-label {
-  font-size: 0.72rem;
-  color: var(--color-text-subtle);
+  font-size: 0.74rem;
+  color: var(--color-text-muted);
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 140px;
+  max-width: 150px;
 }
 
 .tutor-chunk-quote {
   margin: 0;
-  font-size: 0.82rem;
-  line-height: 1.6;
-  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  line-height: 1.65;
+  color: var(--color-text);
   font-style: italic;
-  border-left: 2px solid var(--color-accent);
-  padding-left: 10px;
+  border-left: 3px solid var(--color-accent);
+  padding-left: 12px;
 }
 
 .tutor-similarity-score {
-  font-size: 0.7rem;
-  color: var(--color-text-subtle);
+  font-size: 0.74rem;
+  color: var(--color-text-muted);
+  font-weight: 600;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1392,6 +1480,7 @@
 .tutor-similarity-score code {
   font-family: var(--font-mono);
   color: var(--color-accent);
+  font-weight: 700;
 }
 
 /* -------------------------------------------------------------------------

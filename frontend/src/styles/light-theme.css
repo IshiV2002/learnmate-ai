@@ -205,7 +205,7 @@
 :root[data-theme="light"] .vault-journey-heading small,
 :root[data-theme="light"] .vault-journey-note,
 :root[data-theme="light"] .vault-journey-track li {
-  color: #5f7067;
+  color: var(--color-text-muted);
 }
 
 :root[data-theme="light"] .vault-journey-track li:not(:last-child)::after {
