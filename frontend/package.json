@@ -10,6 +10,7 @@
     "test": "node --test src/pages/account/accountUtils.test.js src/pages/materials/materialsUtils.test.js src/auth/authUtils.test.js src/components/layout/navigation.test.js src/pages/quiz/quizUtils.test.js src/pages/tutor/tutorUtils.test.js src/theme/themeUtils.test.js"
   },
   "dependencies": {
+    "mermaid": "^12.1.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
