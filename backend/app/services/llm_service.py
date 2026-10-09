@@ -272,6 +272,7 @@ class LLMService:
                 "   - Ground your explanation in the lecture excerpts. Mention the page number when referencing course concepts (e.g. '[Page 5]').\n"
                 "   - Break the concept into intuitive components or logical steps.\n"
                 "   - Provide an intuitive real-world analogy or practical application (e.g. web search, email search).\n"
+                "   - When explaining workflows, architectures, pipelines, or systems (such as indexing, search pipeline, tokenization, or vector models), include an illustrative Mermaid flowchart inside a ```mermaid code block to provide an interactive visual diagram.\n"
                 "3. Grounding & Citation Quality Rules:\n"
                 "   - Cite ONLY pages that provide substantive definitions, explanations, or facts that directly support your explanation (e.g. '[Page 5]').\n"
                 "   - NEVER cite title slides, cover pages, or slides merely because a keyword appears in passing (such as 'Introduction to Information Retrieval').\n"
@@ -502,12 +503,15 @@ class LLMService:
         """Synthesize an articulate, authoritative academic explanation grounded in the retrieved excerpt."""
         clean_text = self._clean_lecture_text(chunk_text)
         topic_lower = primary_topic.lower()
+        diag = self._get_concept_diagram(primary_topic)
+        diag_section = f"### System Architecture Flow:\n{diag}\n\n" if diag else ""
 
         # 1. Specialized handling for Information Retrieval core concept
         if "information retrieval" in topic_lower or topic_lower == "ir":
             if mode == "step_by_step":
                 reply = (
                     f"Here is a structured, step-by-step breakdown of **Information Retrieval (IR)** based on {source_name} (Page {page_num}):\n\n"
+                    f"{diag_section}"
                     f"### Step-by-Step Breakdown:\n"
                     f"1. **Formulating the Information Need**: A user starts with an underlying information need (a specific topic or problem to solve) and translates it into search terms (a query).\n"
                     f"2. **Searching Unstructured Collections**: Unlike structured databases with fixed tables, IR searches across natural text documents, web pages, and books.\n"
@@ -528,6 +532,7 @@ class LLMService:
             if mode == "concept_check":
                 reply = (
                     f"According to {source_name} (Page {page_num}), **Information Retrieval (IR)** is finding material (usually unstructured text documents) that satisfies an information need from within large collections.\n\n"
+                    f"{diag_section}"
                     f"### Concept Check Challenge:\n"
                     f"What is the key distinction between a user's underlying *information need* and the *query* they convey to the retrieval system?"
                 )
@@ -542,6 +547,7 @@ class LLMService:
             # Default: Socratic Mode
             reply = (
                 f"**Information Retrieval (IR)** is finding material (typically unstructured text documents) that satisfies an information need from within large collections, as defined in **{source_name} (Page {page_num})**.\n\n"
+                f"{diag_section}"
                 f"### Key Concepts Breakdown:\n"
                 f"1. **Core Objective**: IR satisfies a user's *information need* by retrieving the most relevant documents from large, often computer-stored collections.\n"
                 f"2. **Unstructured Data**: Rather than querying structured database tables with rigid schemas, IR operates on free-form text, web pages, and documents.\n"
@@ -577,6 +583,7 @@ class LLMService:
         if mode == "step_by_step":
             reply = (
                 f"Here is a structured, step-by-step breakdown of **{primary_topic}** based on {source_name} (Page {page_num}):\n\n"
+                f"{diag_section}"
                 f"### Step-by-Step Breakdown:\n"
                 f"1. **Core Definition**: {lead_definition}\n"
                 f"2. **Mechanism & Processing**: The system evaluates input data, normalizes measures, or transforms representations according to course principles.\n"
@@ -594,6 +601,7 @@ class LLMService:
             reply = (
                 f"According to {source_name} (Page {page_num}), the key principle for **{primary_topic}** is:\n\n"
                 f"{lead_definition}\n\n"
+                f"{diag_section}"
                 f"### Concept Check Challenge:\n"
                 f"When applying **{primary_topic}** in practice, what is the primary purpose or advantage over a naive baseline approach?"
             )
@@ -609,6 +617,7 @@ class LLMService:
         reply = (
             f"**{primary_topic}** is a core concept covered in **{source_name} (Page {page_num})**:\n\n"
             f"{lead_definition}\n\n"
+            f"{diag_section}"
             f"### Key Concepts Breakdown:\n"
             f"1. **Core Principle**: In {source_name}, **{primary_topic}** establishes how information elements are represented, measured, or retrieved.\n"
             f"2. **The Mechanism**: It provides a systematic method to process queries and documents, preventing distortion and ensuring fair comparison.\n"
@@ -622,6 +631,53 @@ class LLMService:
         ]
         check_q = f"What is the key problem that {primary_topic} is designed to solve?"
         return reply, followups, check_q
+
+    @classmethod
+    def _get_concept_diagram(cls, topic: str) -> str:
+        """Return an illustrative Mermaid diagram for known course architectures and workflows."""
+        t = topic.lower().strip()
+        if "information retrieval" in t or t == "ir":
+            return (
+                "```mermaid\n"
+                "graph TD\n"
+                "    A[\"User Information Need\"] --> B[\"Search Query\"]\n"
+                "    B --> C[\"Retrieval & Ranking Engine\"]\n"
+                "    D[\"Document Collection\"] --> E[\"Text Indexing\"]\n"
+                "    E --> C\n"
+                "    C --> F[\"Ranked Relevant Results\"]\n"
+                "```"
+            )
+        if "inverted index" in t or "indexing" in t or "index" in t:
+            return (
+                "```mermaid\n"
+                "graph LR\n"
+                "    A[\"Raw Documents\"] --> B[\"Tokenization\"]\n"
+                "    B --> C[\"Linguistic Analysis\"]\n"
+                "    C --> D[\"Dictionary (Terms)\"]\n"
+                "    D --> E[\"Postings Lists (DocIDs)\"]\n"
+                "```"
+            )
+        if "vector space" in t or "vsm" in t or "cosine" in t:
+            return (
+                "```mermaid\n"
+                "graph LR\n"
+                "    A[\"Document / Query\"] --> B[\"Term Frequency (TF)\"]\n"
+                "    C[\"Corpus Collection\"] --> D[\"Inverse Document Freq (IDF)\"]\n"
+                "    B & D --> E[\"TF-IDF Vectors\"]\n"
+                "    E --> F[\"Cosine Similarity Score\"]\n"
+                "```"
+            )
+        if "token" in t or "preprocess" in t or "stem" in t:
+            return (
+                "```mermaid\n"
+                "graph LR\n"
+                "    A[\"Raw Documents\"] --> B[\"Token Segmentation\"]\n"
+                "    B --> C[\"Stop-Word Filter\"]\n"
+                "    C --> D[\"Stemming / Lemmatization\"]\n"
+                "    D --> E[\"Normalized Tokens\"]\n"
+                "```"
+            )
+        return ""
 
     @classmethod
     def _contains_retrieved_instruction(cls, text: object) -> bool:
