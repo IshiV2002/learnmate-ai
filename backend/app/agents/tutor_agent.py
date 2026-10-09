@@ -8,6 +8,7 @@ import uuid
 if TYPE_CHECKING:
     from app.agents.retrieval_agent import RetrievalAgent
 
+from app.agents.retrieval_agent import filter_substantive_chunks
 from app.database.database import DocumentDatabase, DocumentDatabaseError
 from app.database.models import (
     TutorChatRequest,
@@ -157,6 +158,15 @@ class TutorAgent:
         if session is None:
             raise TutorAgentError(f"Tutor session '{request.session_id}' not found.")
 
+        # Dynamically infer specific academic concept from the student's question
+        detected_concept = LLMService._extract_concept_from_query(request.message)
+        active_topic = detected_concept or session.topic_focus
+        persisted_topic = (
+            detected_concept
+            if (detected_concept and session.topic_focus in ("Course Foundations", "Course Concepts", "this topic", ""))
+            else session.topic_focus
+        )
+
         # 2. Persist Student Message
         student_msg_id = f"msg_{uuid.uuid4().hex[:12]}"
         student_msg_record = TutorMessageRecord(
@@ -187,12 +197,34 @@ class TutorAgent:
         retrieved_citations: list[dict[str, Any]] = []
         if self.retrieval_agent and session.document_id:
             try:
+                # Query a candidate pool so title slides or headers can be filtered out
                 search_results = self.retrieval_agent.search(
                     document_id=session.document_id,
                     query=request.message,
-                    top_k=3,
+                    top_k=6,
                 )
-                for res in search_results:
+                # Filter for substantive, meaningful chunks (excludes title slides like Page 4)
+                substantive_results = filter_substantive_chunks(search_results, min_words=12, limit=3)
+
+                # Keep only chunks that are tightly relevant to the query.
+                # If top chunk has a strong distance, exclude tangential chunks that are far behind.
+                if substantive_results:
+                    best_dist = substantive_results[0].get("distance", 0.0)
+                    is_specific_query = bool(detected_concept)
+                    max_delta = 0.06 if is_specific_query else 0.10
+
+                    tight_results = [
+                        res for res in substantive_results
+                        if res.get("distance", 0.0) <= best_dist + max_delta
+                    ]
+                    if is_specific_query and len(tight_results) > 1:
+                        tight_results = tight_results[:2]
+
+                    final_results = tight_results if tight_results else substantive_results[:1]
+                else:
+                    final_results = []
+
+                for res in final_results:
                     retrieved_citations.append(
                         {
                             "page_number": res.get("page_number", 1),
@@ -232,7 +264,7 @@ class TutorAgent:
             check_q = None
         else:
             reply_text, followups, check_q = self.llm_service.generate_tutor_response(
-                topic_focus=session.topic_focus,
+                topic_focus=active_topic,
                 mode=active_mode,
                 pedagogical_directive=pedagogical_directive,
                 lecture_chunks=retrieved_citations,
@@ -257,6 +289,7 @@ class TutorAgent:
                 session_id=request.session_id,
                 updated_at=now_timestamp,
                 mode=active_mode,
+                topic_focus=persisted_topic,
             )
         except DocumentDatabaseError as error:
             raise TutorAgentError("Could not persist tutor response turn.") from error

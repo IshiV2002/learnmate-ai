@@ -230,3 +230,57 @@ class TutorAgentTests(unittest.TestCase):
         self.assertEqual(response.citations, [])
         self.assertIn("could not find enough supporting text", response.reply)
         self.assertIn("will not invent", response.reply)
+
+    def test_tutor_filters_non_substantive_title_citations_and_explains_concept(self) -> None:
+        class NoiseFilteringMockRetrieval:
+            def search(self, document_id: str, query: str, top_k: int = 3) -> list[dict]:
+                return [
+                    {
+                        "page_number": 4,
+                        "chunk_index": 0,
+                        "source": "Lecture 01.pdf",
+                        "text": "Introduction to Information Retrieval 4",
+                        "distance": 0.12,
+                    },
+                    {
+                        "page_number": 5,
+                        "chunk_index": 0,
+                        "source": "Lecture 01.pdf",
+                        "text": (
+                            "Information Retrieval • Manning et al, 2008: Information Retrieval (IR) is finding material "
+                            "(usually documents) of an unstructured nature (usually text) that satisfies an information need "
+                            "from within large collections (usually stored on computers)."
+                        ),
+                        "distance": 0.18,
+                    },
+                ]
+
+        agent = TutorAgent(
+            database=self.database,
+            retrieval_agent=NoiseFilteringMockRetrieval(),  # type: ignore[arg-type]
+        )
+        session = agent.start_session(
+            TutorSessionInitRequest(
+                student_id="student_99",
+                document_id="doc_vsm_01",
+                mode="socratic",
+            )
+        )
+
+        response = agent.respond(
+            TutorChatRequest(
+                session_id=session.session_id,
+                message="what is information retrieval",
+            )
+        )
+
+        # 1. Page 4 is a title slide with no substantive explanation, so it MUST be excluded from citations
+        cited_pages = [c["page_number"] for c in response.citations]
+        self.assertNotIn(4, cited_pages)
+        self.assertIn(5, cited_pages)
+
+        # 2. Response must explain the actual concept (Information Retrieval), not generic 'Course Foundations'
+        self.assertIn("Information Retrieval", response.reply)
+        self.assertNotIn("Course Foundations", response.reply)
+        self.assertIn("Key Concepts", response.reply)
+

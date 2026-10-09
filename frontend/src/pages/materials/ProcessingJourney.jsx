@@ -63,6 +63,19 @@ function ProcessingJourney({ fileName, status }) {
           The backend completes validation, extraction, page-aware chunking, and indexing in one request, so exact stage timing is not available.
         </p>
       )}
+
+      {isComplete && onStudy && (
+        <div style={{ marginTop: "14px", display: "flex", justifyContent: "flex-end" }}>
+          <button
+            className="vault-button vault-button-primary"
+            onClick={onStudy}
+            type="button"
+          >
+            <MaterialIcon name="brain" size={16} />
+            <span>Study this Material with AI Tutor →</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

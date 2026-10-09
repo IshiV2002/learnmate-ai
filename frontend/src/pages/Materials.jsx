@@ -14,7 +14,7 @@ import ProcessingJourney from "./materials/ProcessingJourney.jsx";
 import UploadDropzone from "./materials/UploadDropzone.jsx";
 import { getLibraryStats, validateMaterial } from "./materials/materialsUtils.js";
 
-function Materials() {
+function Materials({ onNavigate = null, onStudyWithTutor = null }) {
   const [documents, setDocuments] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -24,6 +24,7 @@ function Materials() {
   const [documentPendingDelete, setDocumentPendingDelete] = useState(null);
   const [uploadStatus, setUploadStatus] = useState("idle");
   const [uploadFileName, setUploadFileName] = useState("");
+  const [lastUploadedDoc, setLastUploadedDoc] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const fileInputRef = useRef(null);
@@ -131,6 +132,10 @@ function Materials() {
       const result = await uploadDocument(selectedFile);
       clearSelectedFile();
       setUploadFileName(currentFileName);
+      setLastUploadedDoc({
+        document_id: result.document_id,
+        original_filename: currentFileName,
+      });
 
       const refreshed = await loadDocuments(false);
 
@@ -280,7 +285,11 @@ function Materials() {
           </div>
         </form>
 
-        <ProcessingJourney fileName={uploadFileName} status={uploadStatus} />
+        <ProcessingJourney
+          fileName={uploadFileName}
+          onStudy={lastUploadedDoc && onStudyWithTutor ? () => onStudyWithTutor(lastUploadedDoc) : null}
+          status={uploadStatus}
+        />
       </section>
 
       <section className="vault-transparency" aria-labelledby="vault-transparency-heading">
@@ -340,6 +349,7 @@ function Materials() {
                 isDeleting={deletingDocumentId === document.document_id}
                 key={document.document_id}
                 onDelete={setDocumentPendingDelete}
+                onStudy={onStudyWithTutor ? () => onStudyWithTutor(document) : null}
               />
             ))}
           </div>

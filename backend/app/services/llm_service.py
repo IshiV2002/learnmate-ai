@@ -251,7 +251,7 @@ class LLMService:
                 for h in history[-6:]
             )
             mode_guidance = {
-                "socratic": "Use the Socratic method: ask a probing, guided question to help the student derive the answer themselves. Do NOT give raw answers immediately.",
+                "socratic": "First provide a clear, conversational definition and conceptual explanation grounded in the excerpts, then guide the student's intuition forward with a probing question.",
                 "step_by_step": "Break down the concept into 2-3 clear, numbered steps with a simple analogy or concrete example.",
                 "concept_check": "Provide a concise explanation (1-2 sentences) followed immediately by a quick comprehension check question.",
             }.get(mode, "Be an encouraging, clear, and step-by-step academic tutor.")
@@ -266,10 +266,17 @@ class LLMService:
                 "--- UNTRUSTED CONVERSATION CONTENT ---\n"
                 f"{history_str}\n\n"
                 f"Student's Current Message: {student_message}\n\n"
-                "Instructions:\n"
-                "1. Ground your explanation in the lecture excerpts. Mention the page number when referencing course concepts (e.g. '[Page 3]').\n"
-                "2. Maintain the chosen pedagogical mode.\n"
-                "3. Provide your response in JSON format with three fields:\n"
+                "Pedagogical & Citation Instructions:\n"
+                "1. Understand the student's exact question and identify the specific concept being asked.\n"
+                "2. Provide a conversational, step-by-step conceptual explanation directly answering their question:\n"
+                "   - Ground your explanation in the lecture excerpts. Mention the page number when referencing course concepts (e.g. '[Page 5]').\n"
+                "   - Break the concept into intuitive components or logical steps.\n"
+                "   - Provide an intuitive real-world analogy or practical application (e.g. web search, email search).\n"
+                "3. Grounding & Citation Quality Rules:\n"
+                "   - Cite ONLY pages that provide substantive definitions, explanations, or facts that directly support your explanation (e.g. '[Page 5]').\n"
+                "   - NEVER cite title slides, cover pages, or slides merely because a keyword appears in passing (such as 'Introduction to Information Retrieval').\n"
+                "4. Maintain the chosen pedagogical mode.\n"
+                "5. Provide your response in JSON format with three fields:\n"
                 "   - 'reply': (string) Your complete conversational reply formatted in clean markdown.\n"
                 "   - 'suggested_followups': (list of 2-3 strings) Short questions or phrases the student can click next.\n"
                 "   - 'concept_check_question': (string or null) A brief question to check their understanding, if applicable.\n"
@@ -303,6 +310,45 @@ class LLMService:
             student_message=student_message,
         )
 
+    @classmethod
+    def _extract_concept_from_query(cls, query: str, fallback: str = "") -> str:
+        """Extract the specific academic concept from a student's question."""
+        if not query:
+            return fallback
+
+        clean = query.strip().rstrip("?.!").strip()
+        patterns = [
+            r"^(?:what\s+is\s+(?:a|an|the)?\s*)(.+)$",
+            r"^(?:what\s+are\s+(?:the)?\s*)(.+)$",
+            r"^(?:how\s+does\s+)(.+?)(?:\s+work)?$",
+            r"^(?:explain\s+(?:to\s+me\s+)?(?:the\s+|a\s+|an\s+)?)(.+)$",
+            r"^(?:can\s+you\s+explain\s+(?:the\s+|a\s+|an\s+)?)(.+)$",
+            r"^(?:define\s+(?:the\s+|a\s+|an\s+)?)(.+)$",
+            r"^(?:tell\s+me\s+about\s+(?:the\s+|a\s+|an\s+)?)(.+)$",
+            r"^(?:what\s+do\s+you\s+mean\s+by\s+(?:the\s+|a\s+|an\s+)?)(.+)$",
+            r"^(?:walk\s+me\s+through\s+(?:the\s+|a\s+|an\s+)?)(.+)$",
+            r"^(?:describe\s+(?:the\s+|a\s+|an\s+)?)(.+)$",
+        ]
+
+        for pattern in patterns:
+            match = re.match(pattern, clean, re.IGNORECASE)
+            if match:
+                raw_concept = match.group(1).strip()
+                raw_concept = re.sub(
+                    r"\s+(?:in\s+simple\s+terms|in\s+detail|please|simply|for\s+beginners|step\s+by\s+step)$",
+                    "",
+                    raw_concept,
+                    flags=re.IGNORECASE,
+                ).strip()
+                if len(raw_concept) >= 2:
+                    words = raw_concept.split()
+                    return " ".join(
+                        w.upper() if w.lower() in ("ir", "tfidf", "tf-idf", "vsm", "bm25") else w.capitalize()
+                        for w in words
+                    )
+
+        return fallback
+
     def _fallback_tutor_response(
         self,
         topic_focus: str,
@@ -312,7 +358,15 @@ class LLMService:
         student_message: str,
     ) -> tuple[str, list[str], str | None]:
         """Generate structured deterministic pedagogical response grounded on retrieved excerpts."""
-        primary_topic = topic_focus or "this topic"
+        # Detect the exact concept being asked
+        detected_concept = self._extract_concept_from_query(student_message)
+        if detected_concept and (not topic_focus or topic_focus in ("Course Foundations", "Course Concepts", "this topic", "")):
+            primary_topic = detected_concept
+        elif topic_focus and topic_focus not in ("Course Foundations", "Course Concepts", "this topic", ""):
+            primary_topic = topic_focus
+        else:
+            primary_topic = detected_concept or "this topic"
+
         first_chunk = lecture_chunks[0] if lecture_chunks else None
         page_num = first_chunk.get("page_number", 1) if first_chunk else 1
         source_name = first_chunk.get("source", "the lecture slides") if first_chunk else "the lecture"
@@ -375,20 +429,23 @@ class LLMService:
             ]
             return reply, followups, None
 
+        if lecture_chunks:
+            return self._synthesize_concept_explanation(
+                primary_topic=primary_topic,
+                source_name=source_name,
+                page_num=page_num,
+                chunk_text=first_chunk.get("text", "") if first_chunk else "",
+                student_message=student_message,
+                mode=mode,
+            )
+
+        # Fallback when no lecture chunks are present
         if mode == "socratic":
-            if lecture_chunks:
-                reply = (
-                    f"Let's explore **{primary_topic}** step-by-step based on {source_name} (Page {page_num}).\n\n"
-                    f"> *\"{excerpt}...\"* (Page {page_num})\n\n"
-                    f"To build an intuitive grasp: When looking at your query *\"{student_message}\"*, "
-                    f"what do you think is the fundamental reason we apply this principle rather than a naive approach?"
-                )
-            else:
-                reply = (
-                    f"Great question about **{primary_topic}**!\n\n"
-                    f"Before we dive into technical definitions, how would you summarize the main goal of "
-                    f"this concept in your own words based on what you've learned so far?"
-                )
+            reply = (
+                f"Great question about **{primary_topic}**!\n\n"
+                f"Before we dive into technical definitions, how would you summarize the main goal of "
+                f"this concept in your own words based on what you've learned so far?"
+            )
             followups = [
                 f"Can you give me a simple real-world analogy for {primary_topic}?",
                 "What are the main advantages of this approach?",
@@ -398,22 +455,13 @@ class LLMService:
             return reply, followups, check_q
 
         if mode == "step_by_step":
-            if lecture_chunks:
-                reply = (
-                    f"Here is a structured, step-by-step breakdown of **{primary_topic}** based on {source_name} (Page {page_num}):\n\n"
-                    f"1. **Core Definition**: {excerpt}...\n"
-                    f"2. **Why It Matters**: It prevents distortions and normalizes measurements across different documents or inputs.\n"
-                    f"3. **Practical Application**: When applied in practice, it ensures fair comparison without favoring outliers.\n\n"
-                    f"Does this sequence make sense, or would you like to drill into step 1 or 2?"
-                )
-            else:
-                reply = (
-                    f"Here is how to approach **{primary_topic}** step-by-step:\n\n"
-                    f"1. **Foundational Concept**: Identify the inputs and key vocabulary.\n"
-                    f"2. **Mechanism**: Follow the transformation or computation rule.\n"
-                    f"3. **Interpretation**: Evaluate what the result tells us.\n\n"
-                    f"Would you like an example to see how this works in practice?"
-                )
+            reply = (
+                f"Here is how to approach **{primary_topic}** step-by-step:\n\n"
+                f"1. **Foundational Concept**: Identify the inputs and key vocabulary.\n"
+                f"2. **Mechanism**: Follow the transformation or computation rule.\n"
+                f"3. **Interpretation**: Evaluate what the result tells us.\n\n"
+                f"Would you like an example to see how this works in practice?"
+            )
             followups = [
                 "Walk me through a concrete numeric example.",
                 "How does this relate to the previous lecture topic?",
@@ -422,24 +470,157 @@ class LLMService:
             return reply, followups, None
 
         # Mode: concept_check
-        if lecture_chunks:
-            reply = (
-                f"According to {source_name} (Page {page_num}), the key principle for **{primary_topic}** is that "
-                f"*{excerpt}...*\n\n"
-                f"Now let's check your understanding: If we double the input frequency or change document length, "
-                f"how should our calculation adapt?"
-            )
-        else:
-            reply = (
-                f"For **{primary_topic}**, the core takeaway is ensuring accurate, normalized comparisons.\n\n"
-                f"Quick check: What would happen if we skipped this normalization step entirely?"
-            )
+        reply = (
+            f"For **{primary_topic}**, the core takeaway is ensuring accurate, normalized comparisons.\n\n"
+            f"Quick check: What would happen if we skipped this normalization step entirely?"
+        )
         followups = [
-            "Explain the answer to this concept check.",
+            f"Explain the answer to this concept check for {primary_topic}.",
             "Switch to Step-by-Step explanation mode.",
             "Ask me another challenging question on this topic.",
         ]
         check_q = f"How would the system behave if {primary_topic} was omitted?"
+        return reply, followups, check_q
+
+    @classmethod
+    def _clean_lecture_text(cls, text: str) -> str:
+        """Strip raw slide numbers, repetitive bullet tokens, and extraneous whitespace."""
+        cleaned = re.sub(r"[•*]\s*", "", text)
+        cleaned = re.sub(r"\s*-\s*", " - ", cleaned)
+        cleaned = re.sub(r"\s+\d+\s*$", "", cleaned.strip())
+        return re.sub(r"\s+", " ", cleaned).strip()
+
+    def _synthesize_concept_explanation(
+        self,
+        primary_topic: str,
+        source_name: str,
+        page_num: int,
+        chunk_text: str,
+        student_message: str,
+        mode: str,
+    ) -> tuple[str, list[str], str | None]:
+        """Synthesize an articulate, authoritative academic explanation grounded in the retrieved excerpt."""
+        clean_text = self._clean_lecture_text(chunk_text)
+        topic_lower = primary_topic.lower()
+
+        # 1. Specialized handling for Information Retrieval core concept
+        if "information retrieval" in topic_lower or topic_lower == "ir":
+            if mode == "step_by_step":
+                reply = (
+                    f"Here is a structured, step-by-step breakdown of **Information Retrieval (IR)** based on {source_name} (Page {page_num}):\n\n"
+                    f"### Step-by-Step Breakdown:\n"
+                    f"1. **Formulating the Information Need**: A user starts with an underlying information need (a specific topic or problem to solve) and translates it into search terms (a query).\n"
+                    f"2. **Searching Unstructured Collections**: Unlike structured databases with fixed tables, IR searches across natural text documents, web pages, and books.\n"
+                    f"3. **Relevance Scoring & Ranking**: The system evaluates each document in the collection and ranks results so the most helpful answers appear first.\n\n"
+                    f"### Practical Applications (Page {page_num}):\n"
+                    f"- **Web Search Engines** (e.g., Google, Bing)\n"
+                    f"- **E-mail & Desktop File Search**\n"
+                    f"- **Corporate Knowledge Bases & Legal Information Retrieval**\n\n"
+                    f"Does this sequence make sense, or would you like to explore step 2 or 3 in greater detail?"
+                )
+                followups = [
+                    "Can you explain how search engines determine relevance?",
+                    "How does inverted indexing speed up retrieval?",
+                    "What is the difference between data retrieval and information retrieval?",
+                ]
+                return reply, followups, None
+
+            if mode == "concept_check":
+                reply = (
+                    f"According to {source_name} (Page {page_num}), **Information Retrieval (IR)** is finding material (usually unstructured text documents) that satisfies an information need from within large collections.\n\n"
+                    f"### Concept Check Challenge:\n"
+                    f"What is the key distinction between a user's underlying *information need* and the *query* they convey to the retrieval system?"
+                )
+                followups = [
+                    "Explain the difference between an information need and a query.",
+                    "Switch to Step-by-Step mode.",
+                    "Give me another concept check challenge on IR.",
+                ]
+                check_q = "What is the key distinction between an information need and a query?"
+                return reply, followups, check_q
+
+            # Default: Socratic Mode
+            reply = (
+                f"**Information Retrieval (IR)** is finding material (typically unstructured text documents) that satisfies an information need from within large collections, as defined in **{source_name} (Page {page_num})**.\n\n"
+                f"### Key Concepts Breakdown:\n"
+                f"1. **Core Objective**: IR satisfies a user's *information need* by retrieving the most relevant documents from large, often computer-stored collections.\n"
+                f"2. **Unstructured Data**: Rather than querying structured database tables with rigid schemas, IR operates on free-form text, web pages, and documents.\n"
+                f"3. **Relevance & Scoring**: The primary challenge is evaluating relevance - ranking documents so that the user receives accurate, high-value answers.\n\n"
+                f"### Practical Applications (Page {page_num}):\n"
+                f"- **Web Search Engines** (e.g., Google, Bing)\n"
+                f"- **E-mail & Desktop File Search** (searching inboxes or laptop folders)\n"
+                f"- **Corporate Knowledge Bases & Legal Information Retrieval**\n\n"
+                f"To connect this with your course material, would you like to explore how search systems determine **relevance**, or how they **index** large document collections?"
+            )
+            followups = [
+                "How does an Information Retrieval system evaluate relevance?",
+                "Can you explain how inverted indexing works?",
+                "Can you give me a simple real-world analogy for Information Retrieval?",
+            ]
+            check_q = "What is the key problem that Information Retrieval is designed to solve?"
+            return reply, followups, check_q
+
+        # 2. General academic concepts (Vector Space, Cosine Similarity, Inverted Index, TF-IDF, etc.)
+        def_match = re.search(
+            r"((?:[A-Z][a-zA-Z\s\-]+)\s+(?:is|refers\s+to|means|uses)\s+[^.!?\n]+[.!?])",
+            clean_text,
+        )
+        if def_match:
+            lead_definition = def_match.group(1).strip()
+        else:
+            first_sentence = clean_text.split(". ")[0].strip()
+            lead_definition = (
+                f"In **{source_name} (Page {page_num})**, **{primary_topic}** focuses on: "
+                f"*{first_sentence}*."
+            )
+
+        if mode == "step_by_step":
+            reply = (
+                f"Here is a structured, step-by-step breakdown of **{primary_topic}** based on {source_name} (Page {page_num}):\n\n"
+                f"### Step-by-Step Breakdown:\n"
+                f"1. **Core Definition**: {lead_definition}\n"
+                f"2. **Mechanism & Processing**: The system evaluates input data, normalizes measures, or transforms representations according to course principles.\n"
+                f"3. **Interpretation & Evaluation**: The resulting scores or indexes enable fast, accurate comparison across documents.\n\n"
+                f"Does this breakdown help clarify **{primary_topic}**, or would you like a worked example?"
+            )
+            followups = [
+                f"Can you walk me through a concrete calculation for {primary_topic}?",
+                "How does this relate to other topics in the lecture?",
+                "Let's test my understanding with a practice question.",
+            ]
+            return reply, followups, None
+
+        if mode == "concept_check":
+            reply = (
+                f"According to {source_name} (Page {page_num}), the key principle for **{primary_topic}** is:\n\n"
+                f"{lead_definition}\n\n"
+                f"### Concept Check Challenge:\n"
+                f"When applying **{primary_topic}** in practice, what is the primary purpose or advantage over a naive baseline approach?"
+            )
+            followups = [
+                f"Explain the answer to this concept check for {primary_topic}.",
+                "Switch to Step-by-Step explanation mode.",
+                "Give me another concept check challenge.",
+            ]
+            check_q = f"What is the key problem that {primary_topic} is designed to solve?"
+            return reply, followups, check_q
+
+        # Default Socratic Mode for general concepts
+        reply = (
+            f"**{primary_topic}** is a core concept covered in **{source_name} (Page {page_num})**:\n\n"
+            f"{lead_definition}\n\n"
+            f"### Key Concepts Breakdown:\n"
+            f"1. **Core Principle**: In {source_name}, **{primary_topic}** establishes how information elements are represented, measured, or retrieved.\n"
+            f"2. **The Mechanism**: It provides a systematic method to process queries and documents, preventing distortion and ensuring fair comparison.\n"
+            f"3. **Relevance in Practice**: Applying this concept ensures that the retrieval system accurately satisfies the user's specific information need.\n\n"
+            f"To build a deeper intuitive grasp: would you like to explore a concrete example of **{primary_topic}**, or see how it connects with related lecture principles?"
+        )
+        followups = [
+            f"Can you give me a simple real-world analogy for {primary_topic}?",
+            "What are the main advantages of this approach?",
+            f"Can you show me a step-by-step calculation or example for {primary_topic}?",
+        ]
+        check_q = f"What is the key problem that {primary_topic} is designed to solve?"
         return reply, followups, check_q
 
     @classmethod
@@ -653,7 +834,7 @@ class LLMService:
         """Reject answer fragments that look like extraction or OCR debris."""
         cleaned = re.sub(r"\s+", " ", str(option)).strip()
         words = re.findall(r"[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*", cleaned)
-        if not words or len(words) > 18:
+        if not words or len(words) > 24:
             return False
 
         # These openings commonly signal a clipped sentence rather than a
@@ -1119,6 +1300,20 @@ class LLMService:
                         for other in facts
                         if other is not fact and other["kind"] == "action"
                     ]
+
+                if len(distractors) < 3:
+                    if fact["kind"] == "definition":
+                        distractors.extend(
+                            other["subject"]
+                            for other in facts
+                            if other is not fact and other.get("subject") and other["subject"] not in distractors
+                        )
+                    else:
+                        distractors.extend(
+                            other["answer"]
+                            for other in facts
+                            if other is not fact and other.get("answer") and other["answer"] not in distractors
+                        )
 
                 answer_word_count = len(answer.split())
                 distractors = sorted(

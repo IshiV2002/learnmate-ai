@@ -987,30 +987,27 @@ class DocumentDatabase:
         return [self._row_to_tutor_session(row) for row in rows]
 
     def update_tutor_session_activity(
-        self, session_id: str, updated_at: str, mode: str | None = None
+        self,
+        session_id: str,
+        updated_at: str,
+        mode: str | None = None,
+        topic_focus: str | None = None,
     ) -> None:
-        """Update last active timestamp and optionally mode for a tutor session."""
+        """Update last active timestamp and optionally mode/topic_focus for a tutor session."""
         try:
             with closing(self._connect()) as connection:
                 with connection:
+                    updates = ["updated_at = ?"]
+                    params: list[Any] = [updated_at]
                     if mode:
-                        connection.execute(
-                            """
-                            UPDATE tutor_sessions
-                            SET updated_at = ?, mode = ?
-                            WHERE session_id = ?
-                            """,
-                            (updated_at, mode, session_id),
-                        )
-                    else:
-                        connection.execute(
-                            """
-                            UPDATE tutor_sessions
-                            SET updated_at = ?
-                            WHERE session_id = ?
-                            """,
-                            (updated_at, session_id),
-                        )
+                        updates.append("mode = ?")
+                        params.append(mode)
+                    if topic_focus:
+                        updates.append("topic_focus = ?")
+                        params.append(topic_focus)
+                    params.append(session_id)
+                    query = f"UPDATE tutor_sessions SET {', '.join(updates)} WHERE session_id = ?"
+                    connection.execute(query, tuple(params))
         except (OSError, sqlite3.Error) as error:
             raise DocumentDatabaseError(
                 "The tutor session activity could not be updated."

@@ -652,6 +652,34 @@
 .source-ready-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-success); box-shadow: 0 0 9px rgb(104 217 160 / 55%); }
 .source-title-group h3 { overflow: hidden; margin-bottom: 6px; color: var(--color-text); font-size: 0.98rem; text-overflow: ellipsis; white-space: nowrap; }
 .source-title-group p { margin-bottom: 0; color: var(--color-text-subtle); font-size: 0.69rem; }
+.source-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.source-study-button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 11px;
+  border: 1px solid rgb(125 211 199 / 28%);
+  border-radius: 10px;
+  color: var(--color-accent);
+  background: rgb(125 211 199 / 10%);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.source-study-button:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  background: rgb(125 211 199 / 22%);
+  transform: translateY(-1px);
+}
+
 .source-delete-button { display: inline-flex; min-height: 34px; align-items: center; gap: 6px; padding: 0 9px; border: 1px solid transparent; border-radius: 10px; color: var(--color-text-subtle); background: transparent; font-size: 0.7rem; font-weight: 680; transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast); }
 .source-delete-button:hover:not(:disabled) { border-color: rgb(255 143 154 / 20%); color: #ffc0c6; background: rgb(255 143 154 / 7%); }
 .source-delete-button:disabled { opacity: 0.5; }
