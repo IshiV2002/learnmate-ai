@@ -8,13 +8,18 @@ const stages = [
   "Ready",
 ];
 
-function QuizGenerationJourney({ topic, documentName, status }) {
+function QuizGenerationJourney({ topic, documentName, status, errorMessage = "" }) {
   if (status === "idle") {
     return null;
   }
 
   const isComplete = status === "complete";
   const isError = status === "error";
+  const hasInsufficientContent =
+    isError &&
+    /not enough course content|supports only \d+ distinct questions/i.test(
+      errorMessage,
+    );
 
   return (
     <div
@@ -37,9 +42,16 @@ function QuizGenerationJourney({ topic, documentName, status }) {
             {isComplete
               ? "Assessment Synthesized & Ready"
               : isError
-                ? "Generation encountered an issue"
+                ? hasInsufficientContent
+                  ? "Not enough course content"
+                  : "Generation encountered an issue"
                 : "Retrieving context & synthesizing questions…"}
           </strong>
+          {isError && (
+            <p className="quiz-journey-error-detail">
+              {errorMessage || "The quiz could not be generated. Please try again."}
+            </p>
+          )}
           <small>
             {topic ? `Topic: ${topic} · ` : ""}Source: {documentName || "Target Lecture"}
           </small>

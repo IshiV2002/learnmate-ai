@@ -695,6 +695,7 @@
 .quiz-journey-heading small { display: block; }
 .quiz-journey-heading strong { margin-bottom: 3px; font-size: 0.85rem; }
 .quiz-journey-heading small { color: var(--color-text-subtle); font-size: 0.72rem; }
+.quiz-journey-error-detail { max-width: 760px; margin: 5px 0 6px; color: var(--color-danger); font-size: 0.76rem; line-height: 1.5; }
 .quiz-processing-spinner { width: 18px; height: 18px; border: 2px solid rgb(125 211 199 / 20%); border-top-color: var(--color-accent); border-radius: 50%; animation: quiz-spin 750ms linear infinite; }
 
 .quiz-journey-track {
