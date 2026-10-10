@@ -49,6 +49,14 @@ const iconPaths = {
       <path d="m14 10 1.5 1.5L18 8.5" />
     </>
   ),
+  view: (
+    <>
+      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+      <circle cx="12" cy="12" r="2.5" />
+    </>
+  ),
+  external: <path d="M14 4h6v6M20 4l-9 9M19 14v6H4V5h6" />,
+  download: <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 20h14" />,
 };
 
 function MaterialIcon({ name, size = 20, className = "" }) {

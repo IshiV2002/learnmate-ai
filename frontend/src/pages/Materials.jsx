@@ -7,6 +7,7 @@ import {
 } from "../services/api.js";
 import "./Materials.css";
 import DeleteDocumentModal from "./materials/DeleteDocumentModal.jsx";
+import DocumentViewerModal from "./materials/DocumentViewerModal.jsx";
 import KnowledgeSourceCard from "./materials/KnowledgeSourceCard.jsx";
 import LibrarySkeleton from "./materials/LibrarySkeleton.jsx";
 import MaterialIcon from "./materials/MaterialIcon.jsx";
@@ -26,12 +27,13 @@ function Materials({ onStudyDocument, onStudyWithTutor = null }) {
   const [isDragging, setIsDragging] = useState(false);
   const [deletingDocumentId, setDeletingDocumentId] = useState(null);
   const [documentPendingDelete, setDocumentPendingDelete] = useState(null);
+  const [documentPendingView, setDocumentPendingView] = useState(null);
+  const [recentlyUploadedDocument, setRecentlyUploadedDocument] = useState(null);
   const [uploadStatus, setUploadStatus] = useState("idle");
   const [uploadFileName, setUploadFileName] = useState("");
   const [lastUploadedDoc, setLastUploadedDoc] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
-  const [recentlyUploadedDocument, setRecentlyUploadedDocument] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [sortOrder, setSortOrder] = useState("newest");
@@ -140,6 +142,7 @@ function Materials({ onStudyDocument, onStudyWithTutor = null }) {
     setUploadFileName(currentFileName);
     setErrorMessage("");
     setSuccessMessage("");
+    setRecentlyUploadedDocument(null);
 
     try {
       const result = await uploadDocument(selectedFile);
@@ -325,6 +328,14 @@ function Materials({ onStudyDocument, onStudyWithTutor = null }) {
             </div>
             <div className="vault-next-step-actions">
               <button
+                className="vault-button vault-button-secondary"
+                onClick={() => setDocumentPendingView(recentlyUploadedDocument)}
+                type="button"
+              >
+                <MaterialIcon name="view" size={18} />
+                View document
+              </button>
+              <button
                 className="vault-button vault-button-primary"
                 onClick={() => continueWithDocument(recentlyUploadedDocument, "tutor")}
                 type="button"
@@ -466,6 +477,7 @@ function Materials({ onStudyDocument, onStudyWithTutor = null }) {
                 onDelete={setDocumentPendingDelete}
                 onQuiz={(selectedDocument) => continueWithDocument(selectedDocument, "quiz")}
                 onTutor={(selectedDocument) => continueWithDocument(selectedDocument, "tutor")}
+                onView={setDocumentPendingView}
               />
             ))}
           </div>
@@ -478,6 +490,13 @@ function Materials({ onStudyDocument, onStudyWithTutor = null }) {
         onCancel={() => setDocumentPendingDelete(null)}
         onConfirm={confirmDelete}
       />
+
+      {documentPendingView && (
+        <DocumentViewerModal
+          document={documentPendingView}
+          onClose={() => setDocumentPendingView(null)}
+        />
+      )}
     </div>
   );
 }
