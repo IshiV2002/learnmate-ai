@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 
 import GoogleSignInButton from "../components/auth/GoogleSignInButton.jsx";
+import Icon from "../components/ui/Icon.jsx";
 import { login, loginWithGoogle, signup } from "../services/api.js";
 import { validateEmail, validateSignupForm } from "../auth/authUtils.js";
 
@@ -12,7 +13,7 @@ const initialValues = {
   confirmPassword: "",
 };
 
-function Auth({ onAuthenticated, onViewPlans }) {
+function Auth({ onAuthenticated, onToggleTheme, onViewPlans, theme }) {
   const [mode, setMode] = useState("login");
   const [values, setValues] = useState(initialValues);
   const [showPassword, setShowPassword] = useState(false);
@@ -86,43 +87,81 @@ function Auth({ onAuthenticated, onViewPlans }) {
 
   return (
     <main className="auth-page">
-      <div className="auth-orbit auth-orbit-one" aria-hidden="true" />
-      <div className="auth-orbit auth-orbit-two" aria-hidden="true" />
+      <div className="auth-library-arches" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
 
       <section className="auth-story" aria-labelledby="auth-heading">
-        <div className="auth-brand">
-          <span className="app-brand-mark" aria-hidden="true">LM</span>
-          <div>
-            <strong>LearnMate</strong>
-            <span>Personal study workspace</span>
+        <div className="auth-brand-row">
+          <div className="auth-brand">
+            <span className="app-brand-mark" aria-hidden="true">LM</span>
+            <div>
+              <strong>LearnMate</strong>
+              <span>Personal study workspace</span>
+            </div>
           </div>
+          <button
+            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            className="auth-theme-toggle"
+            onClick={onToggleTheme}
+            type="button"
+          >
+            <Icon name={theme === "dark" ? "sun" : "moon"} size={17} />
+            <span>{theme === "dark" ? "Light" : "Dark"}</span>
+          </button>
         </div>
-        <p className="auth-eyebrow">Four study tools. One learning journey.</p>
-        <h1 id="auth-heading">Your course material becomes a connected learning space.</h1>
+        <p className="auth-eyebrow">A calmer way to study</p>
+        <h1 id="auth-heading">Bring your notes. Build a better study routine.</h1>
         <p className="auth-introduction">
-          Upload trusted material, learn with grounded tutoring, test your
-          understanding, and receive transparent study guidance.
+          Keep your course material, guided explanations, practice and next
+          steps together in one focused workspace.
         </p>
+
+        <div className="auth-photo-stage">
+          <div className="auth-stage-orbit" aria-hidden="true" />
+          <div className="auth-stage-copy">
+            <span>Study at your own pace</span>
+            <strong>Your notes, your questions, your next step.</strong>
+            <small>One workspace from first read to final review.</small>
+          </div>
+          <figure className="auth-photo-frame">
+            <img
+              alt="Three university students studying together with a laptop and notebooks"
+              decoding="async"
+              fetchPriority="high"
+              src="/images/students-collaborating.jpg"
+            />
+            <figcaption className="auth-photo-credit">
+              <a
+                href="https://www.pexels.com/photo/group-of-people-studying-together-6609388/"
+                rel="noreferrer"
+                target="_blank"
+              >Photo: Antoni Shkraba / Pexels</a>
+            </figcaption>
+          </figure>
+          <div className="auth-floating-note auth-note-sources">
+            <span>01</span>
+            <div>
+              <strong>Start with your sources</strong>
+              <small>Upload notes and keep page references close.</small>
+            </div>
+          </div>
+          <div className="auth-floating-note auth-note-practice">
+            <span>02 → 04</span>
+            <strong>Understand · Practise · Review</strong>
+          </div>
+          <span className="auth-stage-bookmark" aria-hidden="true">LM</span>
+        </div>
+
         <div className="auth-story-actions">
           <button onClick={onViewPlans} type="button">Explore plans</button>
           <span>No payment or subscription is required in this prototype.</span>
         </div>
-        <div className="auth-agent-map" aria-label="LearnMate study tools">
-          {[
-            ["01", "Retrieval", "Finds relevant sections with page references"],
-            ["02", "Tutor", "Builds explanations from your indexed material"],
-            ["03", "Quiz", "Creates grounded knowledge checks"],
-            ["04", "Recommend", "Turns results into next study actions"],
-          ].map(([number, name, description]) => (
-            <article key={name}>
-              <span>{number}</span>
-              <div><strong>{name}</strong><small>{description}</small></div>
-            </article>
-          ))}
-        </div>
         <p className="auth-transparency">
-          AI responses can be imperfect. LearnMate preserves source references so
-          you can verify important information against your material.
+          LearnMate keeps source references visible so you can check important
+          information against the original material.
         </p>
       </section>
 

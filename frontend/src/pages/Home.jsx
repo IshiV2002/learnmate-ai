@@ -8,6 +8,7 @@ const studyActions = [
     title: "Add study materials",
     description: "Upload your PDF notes or an image, then keep every source in one tidy library.",
     action: "Open materials",
+    artwork: "/images/headers/materials-books.png",
     icon: "materials",
     tone: "sage",
   },
@@ -17,6 +18,7 @@ const studyActions = [
     title: "Talk through a topic",
     description: "Use guided questions and source citations to work through anything that feels unclear.",
     action: "Open tutor",
+    artwork: "/images/headers/tutor-portrait.png",
     icon: "tutor",
     tone: "blue",
   },
@@ -26,6 +28,7 @@ const studyActions = [
     title: "Check what you remember",
     description: "Create a quiz from your own material and turn reading into active recall.",
     action: "Create a quiz",
+    artwork: "/images/headers/quiz-graduation-books.png",
     icon: "quiz",
     tone: "peach",
   },
@@ -35,6 +38,7 @@ const studyActions = [
     title: "Plan your next step",
     description: "See which topics need more attention after a quiz and choose what to revise next.",
     action: "View recommendations",
+    artwork: "/images/headers/study-summary.png",
     icon: "recommendations",
     tone: "lavender",
   },
@@ -124,7 +128,10 @@ function Home({ onNavigate, user }) {
               className={`home-action-card home-action-${item.tone}`}
               key={item.id}
               onClick={() => onNavigate(item.id)}
-              style={{ "--card-index": index }}
+              style={{
+                "--card-artwork": `url("${item.artwork}")`,
+                "--card-index": index,
+              }}
               type="button"
             >
               <span className="home-card-icon"><Icon name={item.icon} size={23} /></span>

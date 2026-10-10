@@ -143,7 +143,9 @@ function App() {
     return (
       <Auth
         onAuthenticated={handleAuthentication}
+        onToggleTheme={toggleTheme}
         onViewPlans={openPlans}
+        theme={theme}
       />
     );
   }

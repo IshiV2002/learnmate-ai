@@ -49,10 +49,37 @@
   pointer-events: none;
 }
 
+.tutor-hero::after {
+  position: absolute;
+  inset: 0 0 0 52%;
+  background:
+    linear-gradient(90deg, rgb(10 15 24 / 100%) 0%, transparent 52%),
+    url("/images/headers/tutor-portrait.png") right center / cover no-repeat;
+  content: "";
+  filter: saturate(0.72) contrast(0.94);
+  mix-blend-mode: screen;
+  opacity: 0.16;
+  pointer-events: none;
+}
+
 .tutor-hero-copy,
 .tutor-telemetry-map {
   position: relative;
   z-index: 1;
+}
+
+@media (max-width: 1120px) {
+  .tutor-hero::after {
+    inset: 28% -8% 0 42%;
+    opacity: 0.13;
+  }
+}
+
+@media (max-width: 620px) {
+  .tutor-hero::after {
+    inset: 45% -20% 0 34%;
+    opacity: 0.1;
+  }
 }
 
 .tutor-eyebrow,

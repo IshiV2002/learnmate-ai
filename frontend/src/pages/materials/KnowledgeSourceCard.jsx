@@ -32,17 +32,6 @@ function KnowledgeSourceCard({ document, isDeleting, onDelete, onQuiz, onTutor }
           <p>Added {formatUploadDate(document.created_at)}</p>
         </div>
         <div className="source-card-actions">
-          {onStudy && (
-            <button
-              aria-label={`Study ${filename} with Tutor`}
-              className="source-study-button"
-              onClick={() => onStudy(document)}
-              type="button"
-            >
-              <MaterialIcon name="brain" size={16} />
-              <span>Study</span>
-            </button>
-          )}
           <button
             aria-label={`Delete ${filename}`}
             className="source-delete-button"
