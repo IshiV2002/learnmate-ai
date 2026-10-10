@@ -21,9 +21,12 @@
 :root[data-theme="light"] .network-node { opacity: 0.1; }
 
 :root[data-theme="light"] .app-sidebar {
+  border-right-color: rgb(65 89 75 / 20%);
   background:
-    linear-gradient(180deg, rgb(235 242 233 / 96%), rgb(242 237 247 / 94%) 58%, rgb(247 239 228 / 94%));
-  box-shadow: 10px 0 34px rgb(65 83 70 / 7%);
+    radial-gradient(circle at 4% 8%, rgb(124 174 153 / 24%), transparent 15rem),
+    radial-gradient(circle at 104% 50%, rgb(154 135 187 / 20%), transparent 18rem),
+    linear-gradient(180deg, rgb(210 224 213 / 98%), rgb(220 217 231 / 97%) 58%, rgb(232 220 210 / 97%));
+  box-shadow: 12px 0 36px rgb(48 69 57 / 13%);
 }
 
 :root[data-theme="light"] .app-topbar {
@@ -38,7 +41,10 @@
 }
 
 :root[data-theme="light"] .mobile-navigation-panel {
-  background: #fbfcf8;
+  border-right: 1px solid rgb(65 89 75 / 20%);
+  background:
+    radial-gradient(circle at 0 8%, rgb(124 174 153 / 22%), transparent 15rem),
+    linear-gradient(180deg, #d5e2d7, #dfdbe8 58%, #eadfd5);
   box-shadow: 24px 0 70px rgb(63 79 68 / 18%);
 }
 
@@ -57,7 +63,7 @@
 :root[data-theme="light"] .tutor-hero-trust span,
 :root[data-theme="light"] .vault-security-label,
 :root[data-theme="light"] .quiz-security-label {
-  background: rgb(250 250 244 / 72%);
+  background: rgb(250 250 244 / 76%);
 }
 
 :root[data-theme="light"] .app-brand-mark {
@@ -69,12 +75,21 @@
 }
 
 :root[data-theme="light"] .app-nav-item-active {
-  border-color: rgb(91 139 119 / 28%);
-  background: linear-gradient(90deg, rgb(197 224 207 / 88%), rgb(229 221 241 / 72%));
+  border-color: rgb(75 123 102 / 36%);
+  background: linear-gradient(90deg, rgb(235 246 239 / 95%), rgb(234 227 244 / 88%));
+  box-shadow: inset 3px 0 #73aa95, 0 8px 22px rgb(54 78 64 / 9%);
 }
 
 :root[data-theme="light"] .app-nav-item:hover {
-  background: rgb(226 235 225 / 72%);
+  background: rgb(242 246 239 / 72%);
+}
+
+:root[data-theme="light"] :where(.app-brand-copy small, .sidebar-context, .nav-copy small, .sidebar-footer p) {
+  color: #53685d;
+}
+
+:root[data-theme="light"] :where(.nav-icon-box, .sidebar-footer) {
+  border-color: rgb(71 96 82 / 20%);
 }
 
 :root[data-theme="light"] .nav-icon-box {
@@ -99,6 +114,33 @@
   background-image:
     linear-gradient(rgb(81 111 91 / 5%) 1px, transparent 1px),
     linear-gradient(90deg, rgb(81 111 91 / 5%) 1px, transparent 1px);
+}
+
+:root[data-theme="light"] .vault-hero::after {
+  background:
+    linear-gradient(90deg, #edf5ed 0%, rgb(237 245 237 / 24%) 48%, transparent 72%),
+    url("/images/headers/materials-books.png") right 6% center / auto 92% no-repeat;
+  mix-blend-mode: multiply;
+  opacity: 0.48;
+}
+
+:root[data-theme="light"] .tutor-hero::after {
+  background:
+    linear-gradient(90deg, #f7f8f1 0%, rgb(247 248 241 / 30%) 42%, transparent 70%),
+    url("/images/headers/tutor-portrait.png") right center / cover no-repeat;
+  filter: saturate(0.68) contrast(0.92);
+  mix-blend-mode: multiply;
+  opacity: 0.24;
+}
+
+@media (max-width: 620px) {
+  :root[data-theme="light"] .vault-hero::after {
+    opacity: 0.28;
+  }
+
+  :root[data-theme="light"] .tutor-hero::after {
+    opacity: 0.15;
+  }
 }
 
 :root[data-theme="light"] .vault-hero {
@@ -319,19 +361,30 @@
 
 :root[data-theme="light"] :where(.auth-page) {
   background:
-    radial-gradient(circle at 16% 18%, rgb(190 220 199 / 40%), transparent 28%),
-    radial-gradient(circle at 80% 82%, rgb(211 201 231 / 42%), transparent 27%),
+    radial-gradient(circle at 11% 10%, rgb(198 225 207 / 62%), transparent 25%),
+    radial-gradient(circle at 84% 88%, rgb(239 211 190 / 48%), transparent 28%),
+    linear-gradient(112deg, #f1f5ec 0%, #f6f1e8 52%, #eeeaf3 100%),
     var(--color-canvas);
 }
 
 :root[data-theme="light"] .auth-page::before {
   background-image:
-    linear-gradient(rgb(81 111 91 / 5%) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(81 111 91 / 5%) 1px, transparent 1px);
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 31px,
+      rgb(81 111 91 / 7%) 32px
+    );
 }
 
-:root[data-theme="light"] :where(.auth-agent-map article, .auth-panel) {
-  background: rgb(248 249 242 / 82%);
+:root[data-theme="light"] .auth-panel {
+  background:
+    linear-gradient(150deg, rgb(251 250 243 / 96%), rgb(241 245 236 / 94%));
+  box-shadow: 0 24px 70px rgb(70 88 75 / 16%), 0 2px 10px rgb(70 88 75 / 7%);
+}
+
+:root[data-theme="light"] .auth-photo-stage {
+  background: linear-gradient(135deg, #f7f5e9, #e8efe7);
 }
 
 :root[data-theme="light"] .auth-tabs {

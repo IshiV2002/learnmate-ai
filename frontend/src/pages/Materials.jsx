@@ -8,7 +8,6 @@ import {
 import "./Materials.css";
 import DeleteDocumentModal from "./materials/DeleteDocumentModal.jsx";
 import KnowledgeSourceCard from "./materials/KnowledgeSourceCard.jsx";
-import LibraryGraphic from "./materials/LibraryGraphic.jsx";
 import LibrarySkeleton from "./materials/LibrarySkeleton.jsx";
 import MaterialIcon from "./materials/MaterialIcon.jsx";
 import ProcessingJourney from "./materials/ProcessingJourney.jsx";
@@ -228,7 +227,6 @@ function Materials({ onStudyDocument, onStudyWithTutor = null }) {
         </div>
 
         <div className="vault-library-overview" aria-label="Course library statistics">
-          <LibraryGraphic />
           <div className="vault-stat-grid">
             <div>
               <span>{isLoading ? "—" : libraryStats.documents}</span>

@@ -122,6 +122,30 @@
   z-index: 0;
 }
 
+.rec-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 0 55%;
+  z-index: 0;
+  background:
+    linear-gradient(90deg, var(--rec-surface-card), transparent 58%),
+    url("/images/headers/study-summary.png") right center / auto 100% no-repeat;
+  filter: saturate(0.8) contrast(0.96);
+  mix-blend-mode: screen;
+  opacity: 0.16;
+  pointer-events: none;
+}
+
+.recommendations-page[data-rec-theme="light"] .rec-hero::after {
+  mix-blend-mode: multiply;
+  opacity: 0.26;
+}
+
+.rec-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
 .rec-hero-header-bar {
   display: flex;
   justify-content: space-between;
@@ -1364,6 +1388,11 @@
    --------------------------------------------------------------------- */
 
 @media (max-width: 640px) {
+  .rec-hero::after {
+    inset: 42% -20% 0 36%;
+    opacity: 0.1;
+  }
+
   .rec-hero-header-bar {
     flex-direction: column;
     align-items: flex-start;

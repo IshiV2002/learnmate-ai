@@ -1,6 +1,6 @@
 import MaterialIcon from "./MaterialIcon.jsx";
 
-function ProcessingJourney({ fileName, status }) {
+function ProcessingJourney({ fileName, onStudy = null, status }) {
   if (status === "idle") {
     return null;
   }
@@ -71,7 +71,7 @@ function ProcessingJourney({ fileName, status }) {
             onClick={onStudy}
             type="button"
           >
-            <MaterialIcon name="brain" size={16} />
+            <MaterialIcon name="tutor" size={16} />
             <span>Study this Material with AI Tutor →</span>
           </button>
         </div>
