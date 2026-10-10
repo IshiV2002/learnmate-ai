@@ -32,15 +32,13 @@ function UploadDropzone({
         type="file"
       />
 
-      <span className="vault-upload-orbit" aria-hidden="true">
-        <span className="vault-upload-icon"><MaterialIcon name={selectedFile ? "check" : "upload"} size={26} /></span>
-        <span className="vault-orbit-dot vault-orbit-dot-one" />
-        <span className="vault-orbit-dot vault-orbit-dot-two" />
+      <span className="vault-upload-mark" aria-hidden="true">
+        <MaterialIcon name={selectedFile ? "check" : "upload"} size={25} />
       </span>
 
       <div className="vault-dropzone-copy">
         <p className="vault-dropzone-label">
-          {selectedFile ? "Knowledge source selected" : "Drop a course PDF or image into the vault"}
+          {selectedFile ? "File ready to upload" : "Drop a PDF or image here"}
         </p>
         <p className="vault-dropzone-detail">
           {selectedFile

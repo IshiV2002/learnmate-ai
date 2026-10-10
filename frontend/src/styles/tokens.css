@@ -5,17 +5,17 @@
   --font-sans: Inter, "Aptos", "Segoe UI Variable", "Segoe UI", sans-serif;
   --font-mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
 
-  --color-canvas: #f7f7f1;
-  --color-canvas-elevated: #fbfcf8;
-  --color-surface: #ffffff;
-  --color-surface-raised: #ffffff;
-  --color-surface-soft: #f1f4ec;
-  --color-surface-hover: #e9efe6;
-  --color-border: rgb(76 98 83 / 14%);
-  --color-border-strong: rgb(76 98 83 / 25%);
-  --color-text: #27332d;
-  --color-text-muted: #5f6d65;
-  --color-text-subtle: #7c8a81;
+  --color-canvas: #f1f1e9;
+  --color-canvas-elevated: #f6f7f1;
+  --color-surface: #fafbf6;
+  --color-surface-raised: #f8f9f3;
+  --color-surface-soft: #e9efe7;
+  --color-surface-hover: #dfe9df;
+  --color-border: rgb(72 96 79 / 18%);
+  --color-border-strong: rgb(72 96 79 / 30%);
+  --color-text: #19251f;
+  --color-text-muted: #384c40;
+  --color-text-subtle: #4d6356;
   --color-accent: #75aa99;
   --color-accent-strong: #4f8575;
   --color-accent-soft: rgb(117 170 153 / 14%);
@@ -25,9 +25,14 @@
   --color-warning: #b78343;
   --color-danger: #bd6467;
   --color-info: #5f88ad;
+  --color-pastel-sage: #e4eee4;
+  --color-pastel-lavender: #ece7f3;
+  --color-pastel-peach: #f5e9dc;
+  --color-pastel-blue: #e4edf1;
+  --color-pastel-cream: #f4efdc;
 
-  --shadow-sm: 0 8px 24px rgb(63 79 68 / 8%);
-  --shadow-md: 0 18px 48px rgb(63 79 68 / 13%);
+  --shadow-sm: 0 8px 24px rgb(63 79 68 / 10%);
+  --shadow-md: 0 18px 48px rgb(63 79 68 / 15%);
   --shadow-glow: 0 0 0 1px rgb(117 170 153 / 5%), 0 18px 55px rgb(84 124 107 / 10%);
   --radius-sm: 10px;
   --radius-md: 16px;
@@ -52,8 +57,8 @@
   --color-border: rgb(159 177 204 / 16%);
   --color-border-strong: rgb(159 177 204 / 28%);
   --color-text: #f4f7fb;
-  --color-text-muted: #a7b2c3;
-  --color-text-subtle: #748198;
+  --color-text-muted: #cbd5e1;
+  --color-text-subtle: #9fb0c8;
   --color-accent: #7dd3c7;
   --color-accent-strong: #49b7aa;
   --color-accent-soft: rgb(125 211 199 / 12%);

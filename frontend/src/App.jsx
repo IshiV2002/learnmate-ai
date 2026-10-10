@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import AppShell from "./components/layout/AppShell.jsx";
 import { useAuth } from "./auth/AuthContext.jsx";
 import Auth from "./pages/Auth.jsx";
+import Account from "./pages/Account.jsx";
 import Home from "./pages/Home.jsx";
 import Materials from "./pages/Materials.jsx";
 import Plans from "./pages/Plans.jsx";
@@ -25,6 +26,7 @@ function App() {
   const [handoffSubmission, setHandoffSubmission] = useState(null);
   const [handoffRecommendation, setHandoffRecommendation] = useState(null);
   const [tutorHandoff, setTutorHandoff] = useState(null);
+  const [selectedStudyDocument, setSelectedStudyDocument] = useState(null);
   const [showPlans, setShowPlans] = useState(
     () => window.location.pathname === "/plans",
   );
@@ -77,7 +79,32 @@ function App() {
 
   const handleLaunchTutorHandoff = (handoff) => {
     setTutorHandoff(handoff);
+    if (handoff?.document_id) {
+      setSelectedStudyDocument({ document_id: handoff.document_id });
+    }
     navigateToPage("tutor");
+  };
+
+  function handleStudyDocument(document, destination) {
+    setSelectedStudyDocument(document);
+    if (destination === "tutor") {
+      if (user?.user_id) {
+        localStorage.removeItem(`learnmate_active_tutor_session_${user.user_id}`);
+      }
+      setTutorHandoff({
+        document_id: document.document_id,
+        target_topics: [],
+        mode: "socratic",
+        topic_focus: document.original_filename?.replace(/\.pdf$/i, "") || "Lecture Material",
+      });
+    } else {
+      setTutorHandoff(null);
+    }
+    navigateToPage(destination);
+  }
+
+  const handleStudyMaterialWithTutor = (doc) => {
+    handleStudyDocument(doc, "tutor");
   };
 
   function handleAuthentication(authentication, authenticationMode) {
@@ -116,7 +143,9 @@ function App() {
     return (
       <Auth
         onAuthenticated={handleAuthentication}
+        onToggleTheme={toggleTheme}
         onViewPlans={openPlans}
+        theme={theme}
       />
     );
   }
@@ -136,9 +165,21 @@ function App() {
       user={user}
     >
       {currentPage === "home" && <Home onNavigate={navigateToPage} user={user} />}
-      {currentPage === "materials" && <Materials />}
+      {currentPage === "account" && (
+        <Account onNavigate={navigateToPage} onViewPlans={openPlans} user={user} />
+      )}
+      {currentPage === "materials" && (
+        <Materials
+          onNavigate={navigateToPage}
+          onStudyDocument={handleStudyDocument}
+          onStudyWithTutor={handleStudyMaterialWithTutor}
+        />
+      )}
       {currentPage === "quiz" && (
-        <Quiz onNavigateToRecommendations={handleNavigateToRecommendations} />
+        <Quiz
+          initialDocumentId={selectedStudyDocument?.document_id || ""}
+          onNavigateToRecommendations={handleNavigateToRecommendations}
+        />
       )}
       {currentPage === "recommendations" && (
         <Recommendations
@@ -152,6 +193,7 @@ function App() {
       )}
       {currentPage === "tutor" && (
         <Tutor
+          initialDocumentId={selectedStudyDocument?.document_id || ""}
           initialHandoff={tutorHandoff}
           onClearHandoff={() => setTutorHandoff(null)}
         />

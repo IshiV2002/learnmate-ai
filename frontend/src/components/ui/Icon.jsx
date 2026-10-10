@@ -30,6 +30,12 @@ const paths = {
       <circle cx="12" cy="12" r="3" />
     </>
   ),
+  account: (
+    <>
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5 20a7 7 0 0 1 14 0" />
+    </>
+  ),
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   close: <path d="m6 6 12 12M18 6 6 18" />,
   sun: (

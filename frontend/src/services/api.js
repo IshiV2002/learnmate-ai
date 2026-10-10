@@ -162,6 +162,10 @@ export function listAllQuizzes() {
   return apiRequest("/quizzes");
 }
 
+export function getQuizAttempts() {
+  return apiRequest("/quizzes/attempts");
+}
+
 export function submitQuizEvaluation(quizId, payload) {
   return apiRequest("/quizzes/" + encodeURIComponent(quizId) + "/evaluate", {
     method: "POST",

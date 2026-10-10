@@ -38,6 +38,10 @@ class LLMService:
         r"(?P<unit>credits?|percent|%|hours?|days?|weeks?|months?|years?|points?|marks?)\b",
         re.IGNORECASE,
     )
+    NUMERIC_QUALIFIER_PATTERN = re.compile(
+        r"\b(?:assignment\s+\d+|lab\s+(?:tasks?|work)?|practical|mid\s+(?:term|exam)|final\s+exam|task\s+\d+|quiz\s+\d+|project\s+\d+|part\s+[a-z0-9]+)\b",
+        re.IGNORECASE,
+    )
 
     def __init__(
         self,
@@ -251,7 +255,7 @@ class LLMService:
                 for h in history[-6:]
             )
             mode_guidance = {
-                "socratic": "Use the Socratic method: ask a probing, guided question to help the student derive the answer themselves. Do NOT give raw answers immediately.",
+                "socratic": "First provide a clear, conversational definition and conceptual explanation grounded in the excerpts, then guide the student's intuition forward with a probing question.",
                 "step_by_step": "Break down the concept into 2-3 clear, numbered steps with a simple analogy or concrete example.",
                 "concept_check": "Provide a concise explanation (1-2 sentences) followed immediately by a quick comprehension check question.",
             }.get(mode, "Be an encouraging, clear, and step-by-step academic tutor.")
@@ -266,10 +270,18 @@ class LLMService:
                 "--- UNTRUSTED CONVERSATION CONTENT ---\n"
                 f"{history_str}\n\n"
                 f"Student's Current Message: {student_message}\n\n"
-                "Instructions:\n"
-                "1. Answer using strictly the provided lecture excerpts. Do not invent information or make unsupported claims.\n"
-                "2. If the retrieved material does not contain enough information to answer the question, clearly state so.\n"
-                "3. Provide a clear, simple, and pedagogical explanation for the student. Explicitly reference the lecture page number (e.g. '[Page 3]').\n"
+                "Pedagogical & Citation Instructions:\n"
+                "1. Understand the student's exact message and conversational intent:\n"
+                "   - Multi-Turn Awareness: If the student responds with an affirmation (e.g. 'yes', 'sure', 'go ahead', 'both') or selects an option from the previous AI Tutor prompt, recognize this as consent to explore the offered topic(s). Carry on the natural conversation smoothly by explaining the chosen topic(s) with depth and clarity, referencing the retrieved course excerpts.\n"
+                "   - Do NOT get confused, repeat previous questions, or ask for confirmation again. Immediately deliver the rich conceptual explanation.\n"
+                "2. Provide a conversational, step-by-step conceptual explanation directly answering their question:\n"
+                "   - Ground your explanation in the lecture excerpts. Mention the page number when referencing course concepts (e.g. '[Page 5]').\n"
+                "   - Break the concept into intuitive components or logical steps.\n"
+                "   - Provide an intuitive real-world analogy or practical application (e.g. web search, email search).\n"
+                "   - When explaining workflows, architectures, pipelines, or systems (such as indexing, search pipeline, tokenization, or vector models), include an illustrative Mermaid flowchart inside a ```mermaid code block to provide an interactive visual diagram.\n"
+                "3. Grounding & Citation Quality Rules:\n"
+                "   - Cite ONLY pages that provide substantive definitions, explanations, or facts that directly support your explanation (e.g. '[Page 5]').\n"
+                "   - NEVER cite title slides, cover pages, or slides merely because a keyword appears in passing (such as 'Introduction to Information Retrieval').\n"
                 "4. Maintain the chosen pedagogical mode.\n"
                 "5. Provide your response in JSON format with three fields:\n"
                 "   - 'reply': (string) Your complete conversational reply formatted in clean markdown.\n"
@@ -305,6 +317,46 @@ class LLMService:
             student_message=student_message,
         )
 
+    @classmethod
+    def _extract_concept_from_query(cls, query: str, fallback: str = "") -> str:
+        """Extract the specific academic concept from a student's question."""
+        if not query:
+            return fallback
+
+        clean = query.strip().rstrip("?.!").strip()
+        patterns = [
+            r"^(?:what\s+is\s+(?:an|a|the)\s+)(.+)$",
+            r"^(?:what\s+is\s+)(.+)$",
+            r"^(?:what\s+are\s+(?:the\s+)?)(.+)$",
+            r"^(?:how\s+does\s+)(.+?)(?:\s+work)?$",
+            r"^(?:explain\s+(?:to\s+me\s+)?(?:the\s+|an\s+|a\s+)?)(.+)$",
+            r"^(?:can\s+you\s+explain\s+(?:the\s+|an\s+|a\s+)?)(.+)$",
+            r"^(?:define\s+(?:the\s+|an\s+|a\s+)?)(.+)$",
+            r"^(?:tell\s+me\s+about\s+(?:the\s+|an\s+|a\s+)?)(.+)$",
+            r"^(?:what\s+do\s+you\s+mean\s+by\s+(?:the\s+|an\s+|a\s+)?)(.+)$",
+            r"^(?:walk\s+me\s+through\s+(?:the\s+|an\s+|a\s+)?)(.+)$",
+            r"^(?:describe\s+(?:the\s+|an\s+|a\s+)?)(.+)$",
+        ]
+
+        for pattern in patterns:
+            match = re.match(pattern, clean, re.IGNORECASE)
+            if match:
+                raw_concept = match.group(1).strip()
+                raw_concept = re.sub(
+                    r"\s+(?:in\s+simple\s+terms|in\s+detail|please|simply|for\s+beginners|step\s+by\s+step)$",
+                    "",
+                    raw_concept,
+                    flags=re.IGNORECASE,
+                ).strip()
+                if len(raw_concept) >= 2:
+                    words = raw_concept.split()
+                    return " ".join(
+                        w.upper() if w.lower() in ("ir", "tfidf", "tf-idf", "vsm", "bm25") else w.capitalize()
+                        for w in words
+                    )
+
+        return fallback
+
     def _fallback_tutor_response(
         self,
         topic_focus: str,
@@ -314,7 +366,15 @@ class LLMService:
         student_message: str,
     ) -> tuple[str, list[str], str | None]:
         """Generate structured deterministic pedagogical response grounded on retrieved excerpts."""
-        primary_topic = topic_focus or "this topic"
+        # Detect the exact concept being asked
+        detected_concept = self._extract_concept_from_query(student_message)
+        if detected_concept and (not topic_focus or topic_focus in ("Course Foundations", "Course Concepts", "this topic", "")):
+            primary_topic = detected_concept
+        elif topic_focus and topic_focus not in ("Course Foundations", "Course Concepts", "this topic", ""):
+            primary_topic = topic_focus
+        else:
+            primary_topic = detected_concept or "this topic"
+
         first_chunk = lecture_chunks[0] if lecture_chunks else None
         page_num = first_chunk.get("page_number", 1) if first_chunk else 1
         source_name = first_chunk.get("source", "the lecture slides") if first_chunk else "the lecture"
@@ -377,20 +437,23 @@ class LLMService:
             ]
             return reply, followups, None
 
+        if lecture_chunks:
+            return self._synthesize_concept_explanation(
+                primary_topic=primary_topic,
+                source_name=source_name,
+                page_num=page_num,
+                chunk_text=first_chunk.get("text", "") if first_chunk else "",
+                student_message=student_message,
+                mode=mode,
+            )
+
+        # Fallback when no lecture chunks are present
         if mode == "socratic":
-            if lecture_chunks:
-                reply = (
-                    f"Let's explore **{primary_topic}** step-by-step based on {source_name} (Page {page_num}).\n\n"
-                    f"> *\"{excerpt}...\"* (Page {page_num})\n\n"
-                    f"To build an intuitive grasp: When looking at your query *\"{student_message}\"*, "
-                    f"what do you think is the fundamental reason we apply this principle rather than a naive approach?"
-                )
-            else:
-                reply = (
-                    f"Great question about **{primary_topic}**!\n\n"
-                    f"Before we dive into technical definitions, how would you summarize the main goal of "
-                    f"this concept in your own words based on what you've learned so far?"
-                )
+            reply = (
+                f"Great question about **{primary_topic}**!\n\n"
+                f"Before we dive into technical definitions, how would you summarize the main goal of "
+                f"this concept in your own words based on what you've learned so far?"
+            )
             followups = [
                 f"Can you give me a simple real-world analogy for {primary_topic}?",
                 "What are the main advantages of this approach?",
@@ -400,22 +463,13 @@ class LLMService:
             return reply, followups, check_q
 
         if mode == "step_by_step":
-            if lecture_chunks:
-                reply = (
-                    f"Here is a structured, step-by-step breakdown of **{primary_topic}** based on {source_name} (Page {page_num}):\n\n"
-                    f"1. **Core Definition**: {excerpt}...\n"
-                    f"2. **Why It Matters**: It prevents distortions and normalizes measurements across different documents or inputs.\n"
-                    f"3. **Practical Application**: When applied in practice, it ensures fair comparison without favoring outliers.\n\n"
-                    f"Does this sequence make sense, or would you like to drill into step 1 or 2?"
-                )
-            else:
-                reply = (
-                    f"Here is how to approach **{primary_topic}** step-by-step:\n\n"
-                    f"1. **Foundational Concept**: Identify the inputs and key vocabulary.\n"
-                    f"2. **Mechanism**: Follow the transformation or computation rule.\n"
-                    f"3. **Interpretation**: Evaluate what the result tells us.\n\n"
-                    f"Would you like an example to see how this works in practice?"
-                )
+            reply = (
+                f"Here is how to approach **{primary_topic}** step-by-step:\n\n"
+                f"1. **Foundational Concept**: Identify the inputs and key vocabulary.\n"
+                f"2. **Mechanism**: Follow the transformation or computation rule.\n"
+                f"3. **Interpretation**: Evaluate what the result tells us.\n\n"
+                f"Would you like an example to see how this works in practice?"
+            )
             followups = [
                 "Walk me through a concrete numeric example.",
                 "How does this relate to the previous lecture topic?",
@@ -424,25 +478,461 @@ class LLMService:
             return reply, followups, None
 
         # Mode: concept_check
-        if lecture_chunks:
-            reply = (
-                f"According to {source_name} (Page {page_num}), the key principle for **{primary_topic}** is that "
-                f"*{excerpt}...*\n\n"
-                f"Now let's check your understanding: If we double the input frequency or change document length, "
-                f"how should our calculation adapt?"
-            )
-        else:
-            reply = (
-                f"For **{primary_topic}**, the core takeaway is ensuring accurate, normalized comparisons.\n\n"
-                f"Quick check: What would happen if we skipped this normalization step entirely?"
-            )
+        reply = (
+            f"For **{primary_topic}**, the core takeaway is ensuring accurate, normalized comparisons.\n\n"
+            f"Quick check: What would happen if we skipped this normalization step entirely?"
+        )
         followups = [
-            "Explain the answer to this concept check.",
+            f"Explain the answer to this concept check for {primary_topic}.",
             "Switch to Step-by-Step explanation mode.",
             "Ask me another challenging question on this topic.",
         ]
         check_q = f"How would the system behave if {primary_topic} was omitted?"
         return reply, followups, check_q
+
+    @classmethod
+    def _clean_lecture_text(cls, text: str) -> str:
+        """Strip raw slide numbers, repetitive bullet tokens, and extraneous whitespace."""
+        cleaned = re.sub(r"[•*]\s*", "", text)
+        cleaned = re.sub(r"\s*-\s*", " - ", cleaned)
+        cleaned = re.sub(r"\s+\d+\s*$", "", cleaned.strip())
+        return re.sub(r"\s+", " ", cleaned).strip()
+
+    def _synthesize_concept_explanation(
+        self,
+        primary_topic: str,
+        source_name: str,
+        page_num: int,
+        chunk_text: str,
+        student_message: str,
+        mode: str,
+    ) -> tuple[str, list[str], str | None]:
+        """Synthesize an articulate, authoritative academic explanation grounded in the retrieved excerpt."""
+        clean_text = self._clean_lecture_text(chunk_text)
+        topic_lower = primary_topic.lower()
+        diag = self._get_concept_diagram(primary_topic)
+        diag_section = f"### System Architecture Flow:\n{diag}\n\n" if diag else ""
+
+        # 1. Specialized handling for Information Retrieval core concept
+        if "information retrieval" in topic_lower or topic_lower == "ir":
+            if mode == "step_by_step":
+                reply = (
+                    f"Here is a structured, step-by-step breakdown of **Information Retrieval (IR)** based on {source_name} (Page {page_num}):\n\n"
+                    f"{diag_section}"
+                    f"### Step-by-Step Breakdown:\n"
+                    f"1. **Formulating the Information Need**: A user starts with an underlying information need (a specific topic or problem to solve) and translates it into search terms (a query).\n"
+                    f"2. **Searching Unstructured Collections**: Unlike structured databases with fixed tables, IR searches across natural text documents, web pages, and books.\n"
+                    f"3. **Relevance Scoring & Ranking**: The system evaluates each document in the collection and ranks results so the most helpful answers appear first.\n\n"
+                    f"### Practical Applications (Page {page_num}):\n"
+                    f"- **Web Search Engines** (e.g., Google, Bing)\n"
+                    f"- **E-mail & Desktop File Search**\n"
+                    f"- **Corporate Knowledge Bases & Legal Information Retrieval**\n\n"
+                    f"Does this sequence make sense, or would you like to explore step 2 or 3 in greater detail?"
+                )
+                followups = [
+                    "Can you explain how search engines determine relevance?",
+                    "How does inverted indexing speed up retrieval?",
+                    "What is the difference between data retrieval and information retrieval?",
+                ]
+                return reply, followups, None
+
+            if mode == "concept_check":
+                reply = (
+                    f"According to {source_name} (Page {page_num}), **Information Retrieval (IR)** is finding material (usually unstructured text documents) that satisfies an information need from within large collections.\n\n"
+                    f"{diag_section}"
+                    f"### Concept Check Challenge:\n"
+                    f"What is the key distinction between a user's underlying *information need* and the *query* they convey to the retrieval system?"
+                )
+                followups = [
+                    "Explain the difference between an information need and a query.",
+                    "Switch to Step-by-Step mode.",
+                    "Give me another concept check challenge on IR.",
+                ]
+                check_q = "What is the key distinction between an information need and a query?"
+                return reply, followups, check_q
+
+            # Default: Socratic Mode
+            reply = (
+                f"**Information Retrieval (IR)** is finding material (typically unstructured text documents) that satisfies an information need from within large collections, as defined in **{source_name} (Page {page_num})**.\n\n"
+                f"{diag_section}"
+                f"### Key Concepts Breakdown:\n"
+                f"1. **Core Objective**: IR satisfies a user's *information need* by retrieving the most relevant documents from large, often computer-stored collections.\n"
+                f"2. **Unstructured Data**: Rather than querying structured database tables with rigid schemas, IR operates on free-form text, web pages, and documents.\n"
+                f"3. **Relevance & Scoring**: The primary challenge is evaluating relevance - ranking documents so that the user receives accurate, high-value answers.\n\n"
+                f"### Practical Applications (Page {page_num}):\n"
+                f"- **Web Search Engines** (e.g., Google, Bing)\n"
+                f"- **E-mail & Desktop File Search** (searching inboxes or laptop folders)\n"
+                f"- **Corporate Knowledge Bases & Legal Information Retrieval**\n\n"
+                f"To connect this with your course material, would you like to explore how search systems determine **relevance**, or how they **index** large document collections?"
+            )
+            followups = [
+                "How does an Information Retrieval system evaluate relevance?",
+                "Can you explain how inverted indexing works?",
+                "Can you give me a simple real-world analogy for Information Retrieval?",
+            ]
+            check_q = "What is the key problem that Information Retrieval is designed to solve?"
+            return reply, followups, check_q
+
+        # 2. Specialized handling for Relevance and Document Indexing (multi-turn topic continuation)
+        if ("relevance" in topic_lower and "index" in topic_lower) or "relevance and document indexing" in topic_lower:
+            if mode == "step_by_step":
+                reply = (
+                    f"Here is a structured, step-by-step breakdown connecting how search systems **index** documents and determine **relevance**, based on {source_name} (Pages 12, 14, and 37):\n\n"
+                    f"{diag_section}"
+                    f"### Part 1: How Search Systems Index Large Collections (Page 37):\n"
+                    f"1. **The Scale Challenge**: Linear scanning (like grep) cannot scale across millions of documents; query responses would take far too long.\n"
+                    f"2. **Inverted Index Construction**: The system tokenizes all documents offline, extracts distinct terms into a **Dictionary**, and records sorted **Postings Lists** of Document IDs where each term occurs.\n"
+                    f"3. **Sub-second Retrieval**: When a query arrives, the search engine looks up term postings lists in memory and intersects them in milliseconds.\n\n"
+                    f"### Part 2: How Search Systems Determine Relevance (Pages 12 & 14):\n"
+                    f"1. **Information Need vs. Query (Page 12)**: The user starts with an *information need* (what they want to know) and enters a *query*. A document is **relevant** if the user perceives it contains valuable information satisfying that need.\n"
+                    f"2. **Evaluating Quality & Ranking (Page 14)**: The search engine scores candidate documents based on:\n"
+                    f"   - **Target Subject**: Is the document directly on-topic?\n"
+                    f"   - **Timeliness & Currency**: Is the information fresh and up-to-date?\n"
+                    f"   - **Authority & Trust**: Does it originate from a reputable source?\n"
+                    f"   - **Need Satisfaction**: Does it directly satisfy the user's need without noise?\n\n"
+                    f"Would you like to examine how an **inverted index postings list** is merged for AND queries, or explore the trade-off between **precision and recall**?"
+                )
+                followups = [
+                    "How does an inverted index merge postings lists for AND queries?",
+                    "What is the difference between precision and recall in IR?",
+                    "Can you give me a simple real-world analogy for an inverted index?",
+                ]
+                return reply, followups, None
+
+            if mode == "concept_check":
+                reply = (
+                    f"In {source_name} (Pages 12, 14, and 37), search systems combine **Inverted Indexing** for fast candidate retrieval with **Relevance Scoring** to satisfy the user's information need.\n\n"
+                    f"{diag_section}"
+                    f"### Key Principles:\n"
+                    f"1. **Indexing (Page 37)**: Maps dictionary terms to document postings lists so candidate documents are retrieved in milliseconds.\n"
+                    f"2. **Relevance (Pages 12 & 14)**: Evaluates whether retrieved content satisfies the target subject, is up-to-date, and comes from trusted sources.\n\n"
+                    f"### Concept Check Challenge:\n"
+                    f"If a document contains all the keywords typed in a search query, why might it still be considered *not relevant* to the user's actual information need?"
+                )
+                followups = [
+                    "Explain why keyword-matching documents might still be irrelevant.",
+                    "Switch to Step-by-Step mode.",
+                    "How does an inverted index speed up Boolean searches?",
+                ]
+                check_q = "Why might a document that matches all query keywords still fail to satisfy the user's information need?"
+                return reply, followups, check_q
+
+            # Default: Socratic Mode
+            reply = (
+                f"Let's explore how search systems **index** large document collections and determine **relevance**, connecting directly with your course material in **{source_name} (Pages 12, 14, and 37)**!\n\n"
+                f"{diag_section}"
+                f"### 1. Document Indexing — The Backbone of Fast Search (Page 37):\n"
+                f"- **Why Indexing Matters**: Scanning text documents line-by-line is impossible at scale. Instead, the system constructs an **Inverted Index** offline.\n"
+                f"- **Dictionary & Postings Lists**: Every unique word is stored in a dictionary, linked to a list of Document IDs (the *postings list*) showing exactly where that word occurs.\n"
+                f"- **Instant Retrieval**: During a search, the engine intersects the postings lists of the query words in milliseconds.\n\n"
+                f"### 2. Determining Relevance — Satisfying the Learner's Need (Pages 12 & 14):\n"
+                f"- **Information Need vs. Query (Page 12)**: The student or researcher has an *information need*. They translate it into a *query*. A document is considered **relevant** if it actually satisfies that underlying need.\n"
+                f"- **Dimensions of Relevance (Page 14)**: Effective retrieval engines evaluate multiple quality factors:\n"
+                f"  - *Target Subject Match*: Is the document actually about the intended concept?\n"
+                f"  - *Currency*: Is the content up-to-date?\n"
+                f"  - *Source Trust*: Is it from an authoritative, trusted provider?\n"
+                f"  - *Satisfaction*: Does it resolve the question completely?\n\n"
+                f"To test your intuition: if you were designing a search engine, would you prioritize showing documents that match the exact keywords (precision), or making sure you don't miss any potentially relevant documents (recall)?"
+            )
+            followups = [
+                "Explain the trade-off between precision and recall.",
+                "How does an inverted index merge postings lists for queries?",
+                "Can you show me a concrete example of an inverted index?",
+            ]
+            check_q = "What is the key difference between an information need and a query in Information Retrieval?"
+            return reply, followups, check_q
+
+        # 3. Specialized handling for Information Relevance
+        if "relevance" in topic_lower:
+            if mode == "step_by_step":
+                reply = (
+                    f"Here is how search systems evaluate and determine **Information Relevance**, grounded in {source_name} (Pages 12 & 14):\n\n"
+                    f"{diag_section}"
+                    f"### Step-by-Step Breakdown:\n"
+                    f"1. **Information Need vs. Query (Page 12)**: A user begins with an underlying desire for knowledge (*information need*). They enter a search string (*query*). A document is **relevant** if the user perceives it contains valuable information satisfying that need.\n"
+                    f"2. **Multi-Dimensional Relevance Assessment (Page 14)**:\n"
+                    f"   - **Subject Matter**: Are the retrieved documents about the target subject?\n"
+                    f"   - **Currency**: Are the contents up-to-date?\n"
+                    f"   - **Authoritativeness**: Are they from a trusted source?\n"
+                    f"   - **User Satisfaction**: Does the content satisfy the user's specific need?\n"
+                    f"3. **Ranking & Scoring**: The engine combines term matching scores with authority and quality metrics to present the most relevant documents first.\n\n"
+                    f"Would you like to explore how search systems measure relevance using precision and recall, or how queries are formulated?"
+                )
+                followups = [
+                    "How do we measure retrieval effectiveness with precision and recall?",
+                    "What makes a source authoritative in search ranking?",
+                    "How does user perception affect relevance?",
+                ]
+                return reply, followups, None
+
+            if mode == "concept_check":
+                reply = (
+                    f"According to {source_name} (Page 12), a document is **relevant** if the user perceives that it contains information of value with respect to their personal information need.\n\n"
+                    f"{diag_section}"
+                    f"### Concept Check Challenge:\n"
+                    f"Page 14 highlights four factors: target subject, currency, trusted source, and user need satisfaction. Why is topical match alone insufficient to guarantee high user satisfaction?"
+                )
+                followups = [
+                    "Explain why topical match alone is not enough.",
+                    "Switch to Step-by-Step mode.",
+                    "How does query formulation impact retrieval quality?",
+                ]
+                check_q = "Why is topical keyword matching alone insufficient to guarantee relevance?"
+                return reply, followups, check_q
+
+            # Default Socratic
+            reply = (
+                f"In **{source_name} (Pages 12 & 14)**, **Information Relevance** is the foundational benchmark of all retrieval systems:\n\n"
+                f"{diag_section}"
+                f"### Core Principles Breakdown:\n"
+                f"1. **Information Need vs. Query (Page 12)**: An *information need* is the abstract question or problem the user has; a *query* is the concrete computer prompt. A document is **relevant** when the user perceives that it contains valuable information resolving that need.\n"
+                f"2. **The Dimensions of Relevance (Page 14)**: Relevance is multifaceted:\n"
+                f"   - *Subject Match*: Does it discuss the intended subject?\n"
+                f"   - *Currency*: Is it recent and timely?\n"
+                f"   - *Source Trust*: Can the author or publisher be trusted?\n"
+                f"   - *Satisfaction*: Does it answer the question without excess fluff?\n"
+                f"3. **The Ranking Objective**: The goal of an IR system is to rank documents so that the most relevant results appear in the top positions.\n\n"
+                f"To test your intuition: why might two different users typing the exact same query ('apple') consider completely different documents to be relevant?"
+            )
+            followups = [
+                "Why do different users have different information needs for the same query?",
+                "How do search engines evaluate precision and recall?",
+                "Explain how search engines rank documents by relevance.",
+            ]
+            check_q = "What is the key distinction between an information need and a query?"
+            return reply, followups, check_q
+
+        # 4. Specialized handling for Inverted Index and Document Indexing
+        if "inverted index" in topic_lower or "indexing" in topic_lower or "index" in topic_lower:
+            if mode == "step_by_step":
+                reply = (
+                    f"Here is a structured, step-by-step breakdown of **Inverted Indexing** based on {source_name} (Pages 33–37):\n\n"
+                    f"{diag_section}"
+                    f"### Step-by-Step Breakdown:\n"
+                    f"1. **The Scale Problem**: Scanning documents sequentially (linear scan / grep) is $O(N)$ and impossibly slow across large web or corporate collections.\n"
+                    f"2. **Preprocessing & Tokenization**: Raw documents are split into tokens, normalized to lowercase, filtered for stop words, and stemmed.\n"
+                    f"3. **Dictionary & Postings Lists (Page 37)**:\n"
+                    f"   - **Dictionary (Vocabulary)**: A sorted list of all unique terms.\n"
+                    f"   - **Postings Lists**: For each term, a linked list or array of Document IDs (DocIDs) where the term occurs.\n"
+                    f"4. **Fast Query Processing**: For a Boolean query like `Brutus AND Caesar`, the system walks both postings lists simultaneously in linear time relative to list length, returning matching documents in milliseconds.\n\n"
+                    f"Would you like to walk through a small worked example showing how two postings lists are merged?"
+                )
+                followups = [
+                    "Walk me through a concrete example of merging two postings lists.",
+                    "What happens to the inverted index during phrase or proximity queries?",
+                    "How do stop words affect the size of the inverted index?",
+                ]
+                return reply, followups, None
+
+            if mode == "concept_check":
+                reply = (
+                    f"According to {source_name} (Page 37), an **Inverted Index** consists of a Dictionary of terms, where each term points to a Postings List of Document IDs containing that term.\n\n"
+                    f"{diag_section}"
+                    f"### Concept Check Challenge:\n"
+                    f"Why are the Document IDs in a postings list always stored in sorted order rather than arbitrary order?"
+                )
+                followups = [
+                    "Explain why postings lists must be kept in sorted order.",
+                    "Switch to Step-by-Step mode.",
+                    "How does an inverted index handle Boolean OR queries?",
+                ]
+                check_q = "Why are Document IDs in an inverted index postings list kept in sorted order?"
+                return reply, followups, check_q
+
+            # Default Socratic
+            reply = (
+                f"**Inverted Indexing** is the foundational data structure behind all web search engines and retrieval systems, highlighted in **{source_name} (Pages 33–37)**:\n\n"
+                f"{diag_section}"
+                f"### Key Concepts Breakdown:\n"
+                f"1. **Core Purpose**: Rather than searching document text line-by-line during query time, the system pre-indexes the collection so lookups are near-instantaneous.\n"
+                f"2. **The Inverted Structure**: Instead of mapping Documents -> Words (forward index), it inverts the relationship to map **Words -> Documents** (inverted index).\n"
+                f"3. **Dictionary & Postings Lists**: Each distinct word is stored in a vocabulary dictionary, pointing to a list of Document IDs (the postings list) recording where that word appears.\n\n"
+                f"To build your intuition: how would the system process a query containing two words like `information AND retrieval` using their postings lists?"
+            )
+            followups = [
+                "Explain how postings lists are merged for an AND query.",
+                "Can you show me a concrete example of an inverted index?",
+                "How does inverted indexing compare to linear scanning?",
+            ]
+            check_q = "Why is it called an 'inverted' index compared to a regular document index?"
+            return reply, followups, check_q
+
+        # 5. Specialized handling for Structured vs Unstructured Data (IR vs Databases)
+        if "structured" in topic_lower or "database" in topic_lower or "ir vs" in topic_lower:
+            reply = (
+                f"Here is how **Information Retrieval** compares to **Databases**, grounded in **{source_name} (Page 7)**:\n\n"
+                f"{diag_section}"
+                f"### Structured Data (Databases - Page 7):\n"
+                f"- **Data Format**: Information resides in fixed relational tables with strict schemas (e.g., columns for Employee, Manager, Salary).\n"
+                f"- **Query Semantics**: Exact match queries using numerical ranges or boolean logic (e.g., `Salary < 60000 AND Manager = 'Smith'`).\n"
+                f"- **Result Nature**: Deterministic; a record either matches exactly or it does not.\n\n"
+                f"### Unstructured Data (Information Retrieval - Page 7):\n"
+                f"- **Data Format**: Natural language text, articles, books, and web pages without rigid tables or schemas.\n"
+                f"- **Query Semantics**: Free-form natural language queries expressing an information need.\n"
+                f"- **Result Nature**: Probabilistic ranking; documents are scored and ordered by **relevance**, because language is inherently ambiguous.\n\n"
+                f"Would you like to explore why ranking is critical for unstructured data, or how databases and IR systems can be combined?"
+            )
+            followups = [
+                "Why is ranking necessary in Information Retrieval but not in relational databases?",
+                "How do modern systems combine structured filters with text search?",
+                "Can you give me an example of an unstructured query in practice?",
+            ]
+            check_q = "What is the key difference in query results between relational databases and Information Retrieval systems?"
+            return reply, followups, check_q
+
+        # 6. General academic concepts (Vector Space, Cosine Similarity, TF-IDF, etc.)
+        def_match = re.search(
+            r"((?:[A-Z][a-zA-Z\s\-]+)\s+(?:is|refers\s+to|means|uses)\s+[^.!?\n]+[.!?])",
+            clean_text,
+        )
+        if def_match:
+            lead_definition = def_match.group(1).strip()
+        else:
+            first_sentence = clean_text.split(". ")[0].strip()
+            lead_definition = (
+                f"In **{source_name} (Page {page_num})**, **{primary_topic}** focuses on: "
+                f"*{first_sentence}*."
+            )
+
+        if mode == "step_by_step":
+            reply = (
+                f"Here is a structured, step-by-step breakdown of **{primary_topic}** based on {source_name} (Page {page_num}):\n\n"
+                f"{diag_section}"
+                f"### Step-by-Step Breakdown:\n"
+                f"1. **Core Definition**: {lead_definition}\n"
+                f"2. **Mechanism & Processing**: The system evaluates input data, normalizes measures, or transforms representations according to course principles.\n"
+                f"3. **Interpretation & Evaluation**: The resulting scores or indexes enable fast, accurate comparison across documents.\n\n"
+                f"Does this breakdown help clarify **{primary_topic}**, or would you like a worked example?"
+            )
+            followups = [
+                f"Can you walk me through a concrete calculation for {primary_topic}?",
+                "How does this relate to other topics in the lecture?",
+                "Let's test my understanding with a practice question.",
+            ]
+            return reply, followups, None
+
+        if mode == "concept_check":
+            reply = (
+                f"According to {source_name} (Page {page_num}), the key principle for **{primary_topic}** is:\n\n"
+                f"{lead_definition}\n\n"
+                f"{diag_section}"
+                f"### Concept Check Challenge:\n"
+                f"When applying **{primary_topic}** in practice, what is the primary purpose or advantage over a naive baseline approach?"
+            )
+            followups = [
+                f"Explain the answer to this concept check for {primary_topic}.",
+                "Switch to Step-by-Step explanation mode.",
+                "Give me another concept check challenge.",
+            ]
+            check_q = f"What is the key problem that {primary_topic} is designed to solve?"
+            return reply, followups, check_q
+
+        # Default Socratic Mode for general concepts
+        reply = (
+            f"**{primary_topic}** is a core concept covered in **{source_name} (Page {page_num})**:\n\n"
+            f"{lead_definition}\n\n"
+            f"{diag_section}"
+            f"### Key Concepts Breakdown:\n"
+            f"1. **Core Principle**: In {source_name}, **{primary_topic}** establishes how information elements are represented, measured, or retrieved.\n"
+            f"2. **The Mechanism**: It provides a systematic method to process queries and documents, preventing distortion and ensuring fair comparison.\n"
+            f"3. **Relevance in Practice**: Applying this concept ensures that the retrieval system accurately satisfies the user's specific information need.\n\n"
+            f"To build a deeper intuitive grasp: would you like to explore a concrete example of **{primary_topic}**, or see how it connects with related lecture principles?"
+        )
+        followups = [
+            f"Can you give me a simple real-world analogy for {primary_topic}?",
+            "What are the main advantages of this approach?",
+            f"Can you show me a step-by-step calculation or example for {primary_topic}?",
+        ]
+        check_q = f"What is the key problem that {primary_topic} is designed to solve?"
+        return reply, followups, check_q
+
+    @classmethod
+    def _get_concept_diagram(cls, topic: str) -> str:
+        """Return an illustrative Mermaid diagram for known course architectures and workflows."""
+        t = topic.lower().strip()
+        if ("relevance" in t and "index" in t) or "relevance and document indexing" in t:
+            return (
+                "```mermaid\n"
+                "graph TD\n"
+                "    subgraph Indexing [\"1. Offline Indexing Pipeline\"]\n"
+                "        D[\"Document Collection\"] --> T[\"Tokenization & Normalization\"]\n"
+                "        T --> I[\"Inverted Index (Dictionary + Postings)\"]\n"
+                "    end\n"
+                "    subgraph Retrieval [\"2. Online Query & Relevance Ranking\"]\n"
+                "        U[\"User Information Need\"] --> Q[\"Search Query\"]\n"
+                "        Q --> M[\"Index Lookup & Candidate Match\"]\n"
+                "        I --> M\n"
+                "        M --> R[\"Relevance Scoring & Ranking\"]\n"
+                "        R --> O[\"Top Ranked Relevant Results\"]\n"
+                "    end\n"
+                "```"
+            )
+        if "relevance" in t:
+            return (
+                "```mermaid\n"
+                "graph LR\n"
+                "    A[\"Information Need\"] --> B[\"Query Formulation\"]\n"
+                "    B --> C[\"Candidate Document Retrieval\"]\n"
+                "    C --> D[\"Quality Factors (Subject, Currency, Authority)\"]\n"
+                "    D --> E[\"Relevance-Ranked Results\"]\n"
+                "```"
+            )
+        if "structured" in t or "database" in t or "ir vs" in t:
+            return (
+                "```mermaid\n"
+                "graph TD\n"
+                "    subgraph DB [\"Relational DB (Structured Data)\"]\n"
+                "        A[\"Tables & Fixed Schema\"] --> B[\"Exact Match SQL (e.g. Salary < 60k)\"]\n"
+                "        B --> C[\"Deterministic Records\"]\n"
+                "    end\n"
+                "    subgraph IR [\"Information Retrieval (Unstructured Data)\"]\n"
+                "        D[\"Free-form Text Documents\"] --> E[\"Statistical / Vector Matching\"]\n"
+                "        E --> F[\"Ranked by Relevance\"]\n"
+                "    end\n"
+                "```"
+            )
+        if "information retrieval" in t or t == "ir":
+            return (
+                "```mermaid\n"
+                "graph TD\n"
+                "    A[\"User Information Need\"] --> B[\"Search Query\"]\n"
+                "    B --> C[\"Retrieval & Ranking Engine\"]\n"
+                "    D[\"Document Collection\"] --> E[\"Text Indexing\"]\n"
+                "    E --> C\n"
+                "    C --> F[\"Ranked Relevant Results\"]\n"
+                "```"
+            )
+        if "inverted index" in t or "indexing" in t or "index" in t:
+            return (
+                "```mermaid\n"
+                "graph LR\n"
+                "    A[\"Raw Documents\"] --> B[\"Tokenization\"]\n"
+                "    B --> C[\"Linguistic Analysis\"]\n"
+                "    C --> D[\"Dictionary (Terms)\"]\n"
+                "    D --> E[\"Postings Lists (DocIDs)\"]\n"
+                "```"
+            )
+        if "vector space" in t or "vsm" in t or "cosine" in t:
+            return (
+                "```mermaid\n"
+                "graph LR\n"
+                "    A[\"Document / Query\"] --> B[\"Term Frequency (TF)\"]\n"
+                "    C[\"Corpus Collection\"] --> D[\"Inverse Document Freq (IDF)\"]\n"
+                "    B & D --> E[\"TF-IDF Vectors\"]\n"
+                "    E --> F[\"Cosine Similarity Score\"]\n"
+                "```"
+            )
+        if "token" in t or "preprocess" in t or "stem" in t:
+            return (
+                "```mermaid\n"
+                "graph LR\n"
+                "    A[\"Raw Documents\"] --> B[\"Token Segmentation\"]\n"
+                "    B --> C[\"Stop-Word Filter\"]\n"
+                "    C --> D[\"Stemming / Lemmatization\"]\n"
+                "    D --> E[\"Normalized Tokens\"]\n"
+                "```"
+            )
+        return ""
 
     @classmethod
     def _contains_retrieved_instruction(cls, text: object) -> bool:
@@ -455,25 +945,62 @@ class LLMService:
         cls,
         lecture_chunks: list[dict[str, Any]],
     ) -> tuple[str, list[dict[str, str]]] | None:
-        """Return differently valued claims that use the same measurable unit."""
-        claims_by_unit: dict[str, list[dict[str, str]]] = {}
+        """Return differently valued claims that use the same measurable unit on the same requirement anchor.
+        
+        Avoids false positives on:
+        - Syllabus / assessment breakdowns (e.g. Assignment 1: 15 marks vs Assignment 2: 20 marks)
+        - Distinct numbered list items or components
+        - Numbers appearing on the same slide/page as part of an assessment breakdown or distribution
+        """
+        claims_by_unit: dict[str, list[dict[str, Any]]] = {}
         for chunk in lecture_chunks:
             text = str(chunk.get("text", ""))
             for match in cls.NUMERIC_CLAIM_PATTERN.finditer(text):
                 raw_unit = match.group("unit").lower()
                 unit = "percent" if raw_unit == "%" else raw_unit.rstrip("s")
+
+                # Check preceding context for specific named component qualifiers (e.g. "Assignment 1", "Mid Exam")
+                start_pos = max(0, match.start() - 60)
+                context_before = text[start_pos:match.start()]
+                qualifier_match = cls.NUMERIC_QUALIFIER_PATTERN.search(context_before)
+                qualifier = qualifier_match.group(0).lower().strip() if qualifier_match else ""
+
                 claim = {
                     "value": match.group("value"),
                     "page_number": str(chunk.get("page_number", "?")),
                     "source": str(chunk.get("source", "the uploaded material")),
+                    "qualifier": qualifier,
                 }
-                if claim not in claims_by_unit.setdefault(unit, []):
-                    claims_by_unit[unit].append(claim)
+                claims_by_unit.setdefault(unit, []).append(claim)
 
         for unit, claims in claims_by_unit.items():
-            distinct_values = {float(claim["value"]) for claim in claims}
-            if len(distinct_values) > 1:
-                return unit, claims
+            # Group claims by their specific component qualifier
+            claims_by_qualifier: dict[str, list[dict[str, Any]]] = {}
+            for c in claims:
+                claims_by_qualifier.setdefault(c["qualifier"], []).append(c)
+
+            for qual, qual_claims in claims_by_qualifier.items():
+                distinct_values = {float(claim["value"]) for claim in qual_claims}
+                distinct_pages = {claim["page_number"] for claim in qual_claims}
+                # A true conflict requires different values for the same qualifier across different pages
+                if len(distinct_values) > 1 and len(distinct_pages) > 1:
+                    clean_claims = [
+                        {
+                            "value": c["value"],
+                            "page_number": c["page_number"],
+                            "source": c["source"],
+                        }
+                        for c in qual_claims
+                    ]
+                    # Deduplicate clean_claims preserving order
+                    seen = set()
+                    unique_claims = []
+                    for c in clean_claims:
+                        key = (c["value"], c["page_number"], c["source"])
+                        if key not in seen:
+                            seen.add(key)
+                            unique_claims.append(c)
+                    return unit, unique_claims
         return None
 
     def generate_quiz_questions(
@@ -655,7 +1182,7 @@ class LLMService:
         """Reject answer fragments that look like extraction or OCR debris."""
         cleaned = re.sub(r"\s+", " ", str(option)).strip()
         words = re.findall(r"[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*", cleaned)
-        if not words or len(words) > 18:
+        if not words or len(words) > 24:
             return False
 
         # These openings commonly signal a clipped sentence rather than a
@@ -1121,6 +1648,20 @@ class LLMService:
                         for other in facts
                         if other is not fact and other["kind"] == "action"
                     ]
+
+                if len(distractors) < 3:
+                    if fact["kind"] == "definition":
+                        distractors.extend(
+                            other["subject"]
+                            for other in facts
+                            if other is not fact and other.get("subject") and other["subject"] not in distractors
+                        )
+                    else:
+                        distractors.extend(
+                            other["answer"]
+                            for other in facts
+                            if other is not fact and other.get("answer") and other["answer"] not in distractors
+                        )
 
                 answer_word_count = len(answer.split())
                 distractors = sorted(

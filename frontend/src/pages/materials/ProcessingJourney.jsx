@@ -1,6 +1,6 @@
 import MaterialIcon from "./MaterialIcon.jsx";
 
-function ProcessingJourney({ fileName, status }) {
+function ProcessingJourney({ fileName, onStudy = null, status }) {
   if (status === "idle") {
     return null;
   }
@@ -62,6 +62,19 @@ function ProcessingJourney({ fileName, status }) {
         <p className="vault-journey-note">
           The backend completes validation, extraction, page-aware chunking, and indexing in one request, so exact stage timing is not available.
         </p>
+      )}
+
+      {isComplete && onStudy && (
+        <div style={{ marginTop: "14px", display: "flex", justifyContent: "flex-end" }}>
+          <button
+            className="vault-button vault-button-primary"
+            onClick={onStudy}
+            type="button"
+          >
+            <MaterialIcon name="tutor" size={16} />
+            <span>Study this Material with AI Tutor →</span>
+          </button>
+        </div>
       )}
     </div>
   );

@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import re
 from typing import Any, TYPE_CHECKING
 import uuid
 
 if TYPE_CHECKING:
     from app.agents.retrieval_agent import RetrievalAgent
 
+from app.agents.retrieval_agent import filter_substantive_chunks
 from app.database.database import DocumentDatabase, DocumentDatabaseError
 from app.database.models import (
     TutorChatRequest,
@@ -144,6 +146,135 @@ class TutorAgent:
             updated_at=now_timestamp,
         )
 
+    @classmethod
+    def resolve_conversational_turn(
+        cls,
+        student_message: str,
+        previous_messages: list[TutorMessageRecord | dict[str, Any]],
+        session_topic: str,
+    ) -> tuple[str, str, bool]:
+        """Resolve conversational student turns into effective retrieval query and topic focus.
+        
+        Handles:
+        1. Affirmative continuation turns ('yes', 'sure', 'please', 'continue', 'sounds good')
+        2. Option selections ('relevance', 'indexing', 'the first one', 'both')
+        3. Short conversational prompts ('why?', 'how?', 'give me an example')
+        4. Direct conceptual queries (e.g., 'What is inverted index?')
+        
+        Returns:
+            (search_query, active_topic, is_followup)
+        """
+        raw_msg = (student_message or "").strip()
+        msg_clean = raw_msg.lower().rstrip("!?.")
+
+        # 1. Inspect previous tutor message to understand conversational context
+        last_tutor_text = ""
+        for msg in reversed(previous_messages):
+            role = getattr(msg, "role", None) or (msg.get("role") if isinstance(msg, dict) else None)
+            content = getattr(msg, "content", None) or (msg.get("content", "") if isinstance(msg, dict) else "")
+            if role == "tutor":
+                last_tutor_text = content
+                break
+
+        last_tutor_lower = last_tutor_text.lower()
+
+        # Check first if the student asked a direct, self-contained conceptual question
+        detected_concept = LLMService._extract_concept_from_query(raw_msg)
+        if detected_concept:
+            return (
+                raw_msg,
+                detected_concept,
+                False,
+            )
+
+        # 2. Check for affirmative agreement or continuation
+        affirmative_phrases = {
+            "yes", "yeah", "yep", "sure", "ok", "okay", "yup", "yes please",
+            "please", "go ahead", "let's do it", "lets do it", "sounds good",
+            "continue", "tell me more", "explain please", "proceed", "both",
+            "all of them", "why not", "definitely", "sure thing", "i would",
+            "yes i would", "yes lets do that", "yes please explain", "absolutely",
+            "yes definitely", "yes sure", "yes go ahead", "yes please do"
+        }
+        is_affirmative = (
+            msg_clean in affirmative_phrases
+            or bool(re.match(r"^(?:yes|sure|okay|ok|yeah|yep|definitely|please|continue|go ahead|sounds good|absolutely)\b", msg_clean))
+        )
+
+        effective_fallback_topic = (
+            session_topic
+            if session_topic and session_topic not in ("Course Foundations", "Course Concepts", "this topic", "")
+            else "Information Retrieval"
+        )
+
+        # Did the last tutor prompt offer options between relevance and indexing?
+        has_relevance_and_indexing_prompt = (
+            "relevance" in last_tutor_lower
+            and ("index" in last_tutor_lower or "indexing" in last_tutor_lower)
+        )
+
+        if is_affirmative:
+            if has_relevance_and_indexing_prompt:
+                # Student agreed to explore how search systems determine relevance and index documents
+                return (
+                    "how search systems determine relevance and index large document collections inverted index",
+                    "Relevance and Document Indexing",
+                    True,
+                )
+            if "example" in last_tutor_lower or "analogy" in last_tutor_lower:
+                return (
+                    f"{effective_fallback_topic} concrete practical worked example",
+                    effective_fallback_topic,
+                    True,
+                )
+            # General affirmative: continue exploring course principles
+            return (
+                f"{effective_fallback_topic} core concepts and principles",
+                effective_fallback_topic,
+                True,
+            )
+
+        # 3. Check for topic or option selection from the tutor's prompt
+        if has_relevance_and_indexing_prompt:
+            if re.search(r"\b(relevance|relevant|scoring|ranking|first|1|option 1|part 1)\b", msg_clean):
+                return (
+                    "how search systems determine relevance information need",
+                    "Information Relevance",
+                    True,
+                )
+            if re.search(r"\b(index|indexing|inverted|second|2|option 2|part 2)\b", msg_clean):
+                return (
+                    "how search systems index large document collections inverted index postings list",
+                    "Document Indexing",
+                    True,
+                )
+            if re.search(r"\b(both|either|all|two)\b", msg_clean):
+                return (
+                    "how search systems determine relevance and index large document collections inverted index",
+                    "Relevance and Document Indexing",
+                    True,
+                )
+
+        # 4. Check for short follow-up or probing questions
+        if msg_clean in {
+            "why", "how", "how so", "what do you mean", "why is that",
+            "explain more", "tell me why", "can you explain", "give me an example", "what else"
+        } or (len(msg_clean.split()) <= 4 and any(w in msg_clean for w in ("why", "how", "what", "more", "example"))):
+            return (
+                f"{effective_fallback_topic} {raw_msg}",
+                effective_fallback_topic,
+                True,
+            )
+
+        # 5. Standard direct question
+        detected_concept = LLMService._extract_concept_from_query(raw_msg)
+        active_topic = detected_concept or session_topic or "Course Concepts"
+        return (
+            raw_msg,
+            active_topic,
+            False,
+        )
+
     def respond(self, request: TutorChatRequest) -> TutorChatResponse:
         """Process student message, perform semantic retrieval grounding, and generate tutor response."""
         now_timestamp = datetime.now(timezone.utc).isoformat()
@@ -157,7 +288,26 @@ class TutorAgent:
         if session is None:
             raise TutorAgentError(f"Tutor session '{request.session_id}' not found.")
 
-        # 2. Persist Student Message
+        # 2. Retrieve Conversation History before saving student turn
+        try:
+            all_messages = self.database.get_session_messages(request.session_id)
+        except DocumentDatabaseError:
+            all_messages = []
+
+        # Resolve conversational multi-turn intent (e.g. 'yes', 'relevance', 'indexing', or direct questions)
+        search_query, active_topic, is_followup = self.resolve_conversational_turn(
+            student_message=request.message,
+            previous_messages=all_messages,
+            session_topic=session.topic_focus,
+        )
+        detected_concept = LLMService._extract_concept_from_query(request.message)
+        persisted_topic = (
+            active_topic
+            if (active_topic and session.topic_focus in ("Course Foundations", "Course Concepts", "this topic", ""))
+            else session.topic_focus
+        )
+
+        # 3. Persist Student Message
         student_msg_id = f"msg_{uuid.uuid4().hex[:12]}"
         student_msg_record = TutorMessageRecord(
             message_id=student_msg_id,
@@ -172,27 +322,44 @@ class TutorAgent:
         except DocumentDatabaseError as error:
             raise TutorAgentError("Could not save student message.") from error
 
-        # 3. Retrieve Conversation History
-        try:
-            all_messages = self.database.get_session_messages(request.session_id)
-        except DocumentDatabaseError:
-            all_messages = [student_msg_record]
-
+        # Updated history including current student message for LLM context
+        all_messages_with_student = all_messages + [student_msg_record]
         history_for_llm = [
             {"role": m.role, "content": m.content}
-            for m in all_messages[-8:]
+            for m in all_messages_with_student[-8:]
         ]
 
-        # 4. RAG Grounding: Query Retrieval Agent for verified lecture excerpts
+        # 4. RAG Grounding: Query Retrieval Agent for verified lecture excerpts using resolved query
         retrieved_citations: list[dict[str, Any]] = []
         if self.retrieval_agent and session.document_id:
             try:
+                # Query candidate pool using the resolved semantic search query
                 search_results = self.retrieval_agent.search(
                     document_id=session.document_id,
-                    query=request.message,
-                    top_k=3,
+                    query=search_query,
+                    top_k=6,
                 )
-                for res in search_results:
+                # Filter for substantive, meaningful chunks (excludes title slides like Page 4)
+                substantive_results = filter_substantive_chunks(search_results, min_words=12, limit=3)
+
+                # Keep only chunks that are tightly relevant to the query.
+                if substantive_results:
+                    best_dist = substantive_results[0].get("distance", 0.0)
+                    is_specific_query = bool(detected_concept) or is_followup
+                    max_delta = 0.06 if is_specific_query else 0.10
+
+                    tight_results = [
+                        res for res in substantive_results
+                        if res.get("distance", 0.0) <= best_dist + max_delta
+                    ]
+                    if is_specific_query and len(tight_results) > 1:
+                        tight_results = tight_results[:3]
+
+                    final_results = tight_results if tight_results else substantive_results[:1]
+                else:
+                    final_results = []
+
+                for res in final_results:
                     retrieved_citations.append(
                         {
                             "page_number": res.get("page_number", 1),
@@ -232,7 +399,7 @@ class TutorAgent:
             check_q = None
         else:
             reply_text, followups, check_q = self.llm_service.generate_tutor_response(
-                topic_focus=session.topic_focus,
+                topic_focus=active_topic,
                 mode=active_mode,
                 pedagogical_directive=pedagogical_directive,
                 lecture_chunks=retrieved_citations,
@@ -257,6 +424,7 @@ class TutorAgent:
                 session_id=request.session_id,
                 updated_at=now_timestamp,
                 mode=active_mode,
+                topic_focus=persisted_topic,
             )
         except DocumentDatabaseError as error:
             raise TutorAgentError("Could not persist tutor response turn.") from error

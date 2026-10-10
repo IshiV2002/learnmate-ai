@@ -34,6 +34,13 @@ export const navigationItems = [
     title: "Study Recommendations",
     icon: "recommendations",
   },
+  {
+    id: "account",
+    label: "My Account",
+    description: "Profile & activity",
+    title: "My Account",
+    icon: "account",
+  },
 ];
 
 const studyPageIds = new Set(["materials", "tutor", "quiz", "recommendations"]);

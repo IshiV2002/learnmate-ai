@@ -1,33 +1,50 @@
 /* Light mode is the default. These rules replace older page-specific dark fills. */
 :root[data-theme="light"] body {
   background:
-    radial-gradient(circle at 82% -12%, rgb(206 195 229 / 30%), transparent 31rem),
-    radial-gradient(circle at 14% 94%, rgb(190 220 199 / 30%), transparent 34rem),
-    var(--color-canvas);
+    radial-gradient(circle at 84% -8%, rgb(207 195 231 / 55%), transparent 35rem),
+    radial-gradient(circle at 8% 78%, rgb(188 219 199 / 46%), transparent 38rem),
+    radial-gradient(circle at 62% 58%, rgb(240 213 185 / 34%), transparent 32rem),
+    linear-gradient(135deg, #f2f4ec 0%, #f4f0e9 52%, #eef3ec 100%);
+  background-attachment: fixed;
 }
 
 :root[data-theme="light"] .ambient-grid {
-  opacity: 0.26;
+  opacity: 0.2;
   background-image:
     linear-gradient(rgb(81 111 91 / 5%) 1px, transparent 1px),
     linear-gradient(90deg, rgb(81 111 91 / 5%) 1px, transparent 1px);
 }
 
-:root[data-theme="light"] .ambient-aurora-one { background: #d5cbe7; }
-:root[data-theme="light"] .ambient-aurora-two { background: #c4dfcf; }
+:root[data-theme="light"] .ambient-aurora-one { background: #c8b9e1; }
+:root[data-theme="light"] .ambient-aurora-two { background: #b6d8c2; }
 :root[data-theme="light"] .network-line,
 :root[data-theme="light"] .network-node { opacity: 0.1; }
 
 :root[data-theme="light"] .app-sidebar {
-  background: rgb(252 253 249 / 90%);
+  border-right-color: rgb(65 89 75 / 20%);
+  background:
+    radial-gradient(circle at 4% 8%, rgb(124 174 153 / 24%), transparent 15rem),
+    radial-gradient(circle at 104% 50%, rgb(154 135 187 / 20%), transparent 18rem),
+    linear-gradient(180deg, rgb(210 224 213 / 98%), rgb(220 217 231 / 97%) 58%, rgb(232 220 210 / 97%));
+  box-shadow: 12px 0 36px rgb(48 69 57 / 13%);
 }
 
 :root[data-theme="light"] .app-topbar {
-  background: rgb(247 247 241 / 82%);
+  background: linear-gradient(90deg, rgb(244 241 232 / 92%), rgb(235 242 235 / 90%), rgb(240 236 246 / 90%));
+  box-shadow: 0 8px 28px rgb(62 78 66 / 7%);
+}
+
+:root[data-theme="light"] .app-page-frame {
+  background:
+    radial-gradient(circle at 12% 18%, rgb(194 220 202 / 18%), transparent 28rem),
+    radial-gradient(circle at 88% 44%, rgb(212 201 232 / 17%), transparent 27rem);
 }
 
 :root[data-theme="light"] .mobile-navigation-panel {
-  background: #fbfcf8;
+  border-right: 1px solid rgb(65 89 75 / 20%);
+  background:
+    radial-gradient(circle at 0 8%, rgb(124 174 153 / 22%), transparent 15rem),
+    linear-gradient(180deg, #d5e2d7, #dfdbe8 58%, #eadfd5);
   box-shadow: 24px 0 70px rgb(63 79 68 / 18%);
 }
 
@@ -46,7 +63,7 @@
 :root[data-theme="light"] .tutor-hero-trust span,
 :root[data-theme="light"] .vault-security-label,
 :root[data-theme="light"] .quiz-security-label {
-  background: rgb(255 255 255 / 64%);
+  background: rgb(250 250 244 / 76%);
 }
 
 :root[data-theme="light"] .app-brand-mark {
@@ -58,8 +75,21 @@
 }
 
 :root[data-theme="light"] .app-nav-item-active {
-  border-color: rgb(91 139 119 / 20%);
-  background: linear-gradient(90deg, rgb(205 229 215 / 75%), rgb(235 228 244 / 55%));
+  border-color: rgb(75 123 102 / 36%);
+  background: linear-gradient(90deg, rgb(235 246 239 / 95%), rgb(234 227 244 / 88%));
+  box-shadow: inset 3px 0 #73aa95, 0 8px 22px rgb(54 78 64 / 9%);
+}
+
+:root[data-theme="light"] .app-nav-item:hover {
+  background: rgb(242 246 239 / 72%);
+}
+
+:root[data-theme="light"] :where(.app-brand-copy small, .sidebar-context, .nav-copy small, .sidebar-footer p) {
+  color: #53685d;
+}
+
+:root[data-theme="light"] :where(.nav-icon-box, .sidebar-footer) {
+  border-color: rgb(71 96 82 / 20%);
 }
 
 :root[data-theme="light"] .nav-icon-box {
@@ -72,35 +102,74 @@
   background: #f3eff8;
 }
 
-:root[data-theme="light"] :where(.vault-hero, .quiz-hero, .tutor-hero) {
+:root[data-theme="light"] :where(.quiz-hero, .tutor-hero) {
   background:
-    radial-gradient(circle at 88% 12%, rgb(220 210 237 / 58%), transparent 22rem),
-    radial-gradient(circle at 10% 88%, rgb(210 232 216 / 58%), transparent 22rem),
-    linear-gradient(145deg, #fcfdf9, #f2f5ee);
+    radial-gradient(circle at 88% 12%, rgb(214 201 235 / 76%), transparent 22rem),
+    radial-gradient(circle at 10% 88%, rgb(199 226 207 / 72%), transparent 22rem),
+    linear-gradient(145deg, #f7f8f1, #ebf0e8);
 }
 
-:root[data-theme="light"] :where(.vault-hero, .quiz-hero, .tutor-hero)::before {
+:root[data-theme="light"] :where(.quiz-hero, .tutor-hero)::before {
   opacity: 0.35;
   background-image:
     linear-gradient(rgb(81 111 91 / 5%) 1px, transparent 1px),
     linear-gradient(90deg, rgb(81 111 91 / 5%) 1px, transparent 1px);
 }
 
+:root[data-theme="light"] .vault-hero::after {
+  background:
+    linear-gradient(90deg, #edf5ed 0%, rgb(237 245 237 / 24%) 48%, transparent 72%),
+    url("/images/headers/materials-books.png") right 6% center / auto 92% no-repeat;
+  mix-blend-mode: multiply;
+  opacity: 0.48;
+}
+
+:root[data-theme="light"] .tutor-hero::after {
+  background:
+    linear-gradient(90deg, #f7f8f1 0%, rgb(247 248 241 / 30%) 42%, transparent 70%),
+    url("/images/headers/tutor-portrait.png") right center / cover no-repeat;
+  filter: saturate(0.68) contrast(0.92);
+  mix-blend-mode: multiply;
+  opacity: 0.24;
+}
+
+@media (max-width: 620px) {
+  :root[data-theme="light"] .vault-hero::after {
+    opacity: 0.28;
+  }
+
+  :root[data-theme="light"] .tutor-hero::after {
+    opacity: 0.15;
+  }
+}
+
+:root[data-theme="light"] .vault-hero {
+  background:
+    radial-gradient(circle at 92% 10%, rgb(211 201 232 / 66%), transparent 21rem),
+    linear-gradient(145deg, #edf5ed, #f5eee5 58%, #f1edf6);
+}
+
+:root[data-theme="light"] .vault-hero::before {
+  border-color: rgb(91 119 101 / 12%);
+  background: transparent;
+  opacity: 0.7;
+}
+
 :root[data-theme="light"] :where(.vault-hero-trust span, .quiz-hero-trust span, .tutor-hero-trust span, .vault-security-label, .quiz-security-label, .tutor-security-label) {
   color: var(--color-text-muted);
 }
 
-:root[data-theme="light"] :where(.vault-knowledge-map, .quiz-assessment-map, .tutor-stat-grid > div) {
+:root[data-theme="light"] :where(.quiz-assessment-map, .tutor-stat-grid > div) {
   border-color: var(--color-border);
   background: rgb(255 255 255 / 66%);
   box-shadow: inset 0 1px rgb(255 255 255 / 70%);
 }
 
-:root[data-theme="light"] :where(.vault-map-node, .quiz-map-node) {
+:root[data-theme="light"] .quiz-map-node {
   background: #f4faf5;
 }
 
-:root[data-theme="light"] :where(.vault-map-core, .quiz-map-core, .tutor-map-core, .vault-upload-icon, .quiz-empty-document, .vault-empty-document, .tutor-empty-icon-core) {
+:root[data-theme="light"] :where(.quiz-map-core, .tutor-map-core, .quiz-empty-document, .vault-empty-document, .tutor-empty-icon-core) {
   color: var(--color-accent-strong);
   background: linear-gradient(145deg, #e4f0e7, #eee9f5);
   box-shadow: 0 10px 26px rgb(82 113 94 / 12%);
@@ -116,10 +185,33 @@
   box-shadow: var(--shadow-sm);
 }
 
+:root[data-theme="light"] .vault-panel {
+  background: linear-gradient(145deg, #f5f8f1, #f6f1e9);
+}
+
+:root[data-theme="light"] .quiz-panel {
+  background: linear-gradient(145deg, #f3f1f8, #edf3f3);
+}
+
+:root[data-theme="light"] .tutor-panel {
+  background: linear-gradient(145deg, #edf4f1, #f3f0f7);
+}
+
+:root[data-theme="light"] :where(.tutor-chat-card, .tutor-evidence-drawer, .question-display-card) {
+  background: #f9faf5;
+}
+
 :root[data-theme="light"] :where(.vault-dropzone, .quiz-doc-multiselect-wrap, .question-display-card) {
   background:
     radial-gradient(circle at 10% 50%, rgb(195 224 207 / 28%), transparent 14rem),
     #fafcf8;
+}
+
+:root[data-theme="light"] .vault-dropzone {
+  border-color: #aac8b8;
+  background:
+    radial-gradient(circle at 8% 50%, rgb(187 220 198 / 46%), transparent 14rem),
+    linear-gradient(120deg, #eef6ee, #f2eef6);
 }
 
 :root[data-theme="light"] .vault-dropzone:hover,
@@ -131,12 +223,183 @@
   box-shadow: inset 0 0 0 1px rgb(117 170 153 / 8%), 0 14px 32px rgb(63 79 68 / 8%);
 }
 
+/* Keep upload progress readable against the light study palette. */
+:root[data-theme="light"] .vault-journey {
+  border-color: #c9d8ce;
+  background: linear-gradient(135deg, #f1f7f2, #f5f3f8);
+  box-shadow: inset 0 1px rgb(255 255 255 / 80%);
+}
+
+:root[data-theme="light"] .vault-journey-complete {
+  border-color: #b8d2c0;
+  background: linear-gradient(135deg, #eaf5ed, #f2f6ee);
+}
+
+:root[data-theme="light"] .vault-journey-error {
+  border-color: #ddbabc;
+  background: #fbf1f1;
+}
+
+:root[data-theme="light"] .vault-journey-heading strong {
+  color: #25352d;
+}
+
+:root[data-theme="light"] .vault-journey-heading small,
+:root[data-theme="light"] .vault-journey-note,
+:root[data-theme="light"] .vault-journey-track li {
+  color: var(--color-text-muted);
+}
+
+:root[data-theme="light"] .vault-journey-track li:not(:last-child)::after {
+  background: #b8cac0;
+}
+
+:root[data-theme="light"] .vault-stage-node {
+  border-color: #a9beb2;
+  color: #50655b;
+  background: #fff;
+  box-shadow: 0 2px 7px rgb(63 79 68 / 9%);
+}
+
+:root[data-theme="light"] .vault-stage-active .vault-stage-node {
+  border-color: #6f9f8e;
+  color: #3f7766;
+  background: #e7f2eb;
+}
+
+:root[data-theme="light"] .vault-stage-complete .vault-stage-node {
+  border-color: #72a684;
+  color: #35764f;
+  background: #dceee2;
+}
+
+:root[data-theme="light"] .quiz-journey {
+  border-color: #c9d8ce;
+  color: #25352d;
+  background: linear-gradient(135deg, #f1f7f2, #f5f3f8);
+  box-shadow: inset 0 1px rgb(255 255 255 / 80%);
+}
+
+:root[data-theme="light"] .quiz-journey-complete {
+  border-color: #b8d2c0;
+  background: linear-gradient(135deg, #eaf5ed, #f2f6ee);
+}
+
+:root[data-theme="light"] .quiz-journey-error {
+  border-color: #ddbabc;
+  background: #fbf1f1;
+}
+
+:root[data-theme="light"] .quiz-journey-heading strong {
+  color: #25352d;
+}
+
+:root[data-theme="light"] .quiz-journey-heading small,
+:root[data-theme="light"] .quiz-journey-note,
+:root[data-theme="light"] .quiz-journey-track li {
+  color: var(--color-text-muted);
+}
+
+:root[data-theme="light"] .quiz-journey-track li:not(:last-child)::after {
+  background: #b8cac0;
+}
+
+:root[data-theme="light"] .quiz-stage-node {
+  border-color: #a9beb2;
+  color: #50655b;
+  background: #fff;
+  box-shadow: 0 2px 7px rgb(63 79 68 / 9%);
+}
+
+:root[data-theme="light"] .quiz-stage-active .quiz-stage-node {
+  border-color: #6f9f8e;
+  color: #3f7766;
+  background: #e7f2eb;
+}
+
+:root[data-theme="light"] .quiz-stage-complete .quiz-stage-node {
+  border-color: #72a684;
+  color: #35764f;
+  background: #dceee2;
+}
+
+:root[data-theme="light"] .quiz-stage-error .quiz-stage-node {
+  border-color: #ddbabc;
+  color: #9e4d52;
+  background: #fbf1f1;
+}
+
+:root[data-theme="light"] .quiz-journey-status-icon {
+  color: #3f7766;
+  background: #e7f2eb;
+}
+
+:root[data-theme="light"] .quiz-journey-error .quiz-journey-status-icon {
+  color: #9e4d52;
+  background: #f5e4e4;
+}
+
+:root[data-theme="light"] .quiz-processing-spinner {
+  border-color: rgb(63 119 102 / 20%);
+  border-top-color: #3f7766;
+}
+
+:root[data-theme="light"] .vault-button:disabled {
+  border-color: #d2dcd5;
+  color: #69776f;
+  background: #edf1ee;
+  box-shadow: none;
+  opacity: 1;
+}
+
+:root[data-theme="light"] .vault-button-primary:disabled {
+  border-color: #bfd3ca;
+  color: #52665d;
+  background: #d7e7e1;
+}
+
+:root[data-theme="light"] .vault-next-step {
+  border-color: #bacbbd;
+  background:
+    radial-gradient(circle at 8% 30%, rgb(169 211 190 / 48%), transparent 12rem),
+    linear-gradient(120deg, #eef4e7, #f5ecdf);
+}
+
+:root[data-theme="light"] .vault-transparency {
+  border-color: rgb(118 105 157 / 22%);
+  background: linear-gradient(110deg, #ece8f3, #e9f1ed 62%, #f3eadf);
+}
+
+:root[data-theme="light"] .vault-library-toolbar {
+  background: linear-gradient(90deg, #edf3eb, #f1edf5);
+}
+
+:root[data-theme="light"] .knowledge-source-card:nth-child(4n + 1) {
+  background: linear-gradient(150deg, #f2f7ef, #edf3ef);
+}
+
+:root[data-theme="light"] .knowledge-source-card:nth-child(4n + 2) {
+  background: linear-gradient(150deg, #f4f0f7, #eeeaf4);
+}
+
+:root[data-theme="light"] .knowledge-source-card:nth-child(4n + 3) {
+  background: linear-gradient(150deg, #f8f1e8, #f4ebdf);
+}
+
+:root[data-theme="light"] .knowledge-source-card:nth-child(4n) {
+  background: linear-gradient(150deg, #edf3f6, #e7eff1);
+}
+
+:root[data-theme="light"] .source-card-actions {
+  background: rgb(250 250 245 / 62%);
+}
+
 :root[data-theme="light"] :where(.source-metadata-item, .quiz-form-control, .tutor-form-control, .tutor-chat-textarea, .app-content input[type="text"], .app-content input[type="number"], .app-content select, .app-content textarea) {
   color: var(--color-text);
   background: #fbfcf9;
 }
 
-:root[data-theme="light"] :where(.source-grounding-note, .tutor-chat-header, .tutor-input-bar, .tutor-evidence-header, .tutor-evidence-desc) {
+:root[data-theme="light"] :where(.tutor-chat-header, .tutor-input-bar, .tutor-evidence-header, .tutor-evidence-desc) {
   background: #f7f9f4;
 }
 
@@ -155,12 +418,12 @@
 
 :root[data-theme="light"] .app-content :where(.panel, .card-panel, .tutor-control-panel, .question-display-card, .result-item-card) {
   color: var(--color-text);
-  background: var(--color-surface);
+  background: linear-gradient(145deg, #f8f9f3, #f2f3ec);
 }
 
 :root[data-theme="light"] .app-content :where(.document-card, .saved-quiz-card, .option-card, .question-item, .topic-mastery-row, .action-item-card, .evidence-chunk-card) {
   color: var(--color-text);
-  background: #fbfcf9;
+  background: #f5f7f1;
 }
 
 :root[data-theme="light"] .app-content :where(.document-card, .saved-quiz-card, .option-card, .action-item-card, .evidence-chunk-card):hover {
@@ -169,19 +432,30 @@
 
 :root[data-theme="light"] :where(.auth-page) {
   background:
-    radial-gradient(circle at 16% 18%, rgb(190 220 199 / 40%), transparent 28%),
-    radial-gradient(circle at 80% 82%, rgb(211 201 231 / 42%), transparent 27%),
+    radial-gradient(circle at 11% 10%, rgb(198 225 207 / 62%), transparent 25%),
+    radial-gradient(circle at 84% 88%, rgb(239 211 190 / 48%), transparent 28%),
+    linear-gradient(112deg, #f1f5ec 0%, #f6f1e8 52%, #eeeaf3 100%),
     var(--color-canvas);
 }
 
 :root[data-theme="light"] .auth-page::before {
   background-image:
-    linear-gradient(rgb(81 111 91 / 5%) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(81 111 91 / 5%) 1px, transparent 1px);
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 31px,
+      rgb(81 111 91 / 7%) 32px
+    );
 }
 
-:root[data-theme="light"] :where(.auth-agent-map article, .auth-panel) {
-  background: rgb(255 255 255 / 76%);
+:root[data-theme="light"] .auth-panel {
+  background:
+    linear-gradient(150deg, rgb(251 250 243 / 96%), rgb(241 245 236 / 94%));
+  box-shadow: 0 24px 70px rgb(70 88 75 / 16%), 0 2px 10px rgb(70 88 75 / 7%);
+}
+
+:root[data-theme="light"] .auth-photo-stage {
+  background: linear-gradient(135deg, #f7f5e9, #e8efe7);
 }
 
 :root[data-theme="light"] .auth-tabs {
@@ -189,7 +463,47 @@
 }
 
 :root[data-theme="light"] .auth-form input {
-  background: #fff;
+  background: #f8faf5;
+}
+
+/* Give the account dashboard clear pastel sections without making data harder to scan. */
+:root[data-theme="light"] .account-profile {
+  background: linear-gradient(135deg, #e7f1e8, #efebf5);
+}
+
+:root[data-theme="light"] .account-plan-card {
+  background:
+    radial-gradient(circle at 90% 12%, rgb(204 224 210 / 70%), transparent 13rem),
+    linear-gradient(135deg, #f6eadc, #f3efdf);
+}
+
+:root[data-theme="light"] .account-overview {
+  background: linear-gradient(135deg, #e9f1f2, #f1edf5);
+}
+
+:root[data-theme="light"] .account-stat-grid article:nth-child(1) { background: #edf4e9; }
+:root[data-theme="light"] .account-stat-grid article:nth-child(2) { background: #f7ecdf; }
+:root[data-theme="light"] .account-stat-grid article:nth-child(3) { background: #e9f1f4; }
+:root[data-theme="light"] .account-stat-grid article:nth-child(4) { background: #efeaf5; }
+
+:root[data-theme="light"] .account-activity-card:first-child {
+  background: linear-gradient(145deg, #f8eee3, #f2edf5);
+}
+
+:root[data-theme="light"] .account-activity-card:last-child {
+  background: linear-gradient(145deg, #eaf3e9, #e9f1f3);
+}
+
+:root[data-theme="light"] .account-suggestions {
+  background: linear-gradient(135deg, #f0ebf5, #eaf3ec);
+}
+
+:root[data-theme="light"] .account-suggestion-grid > button:nth-child(3n + 1) { background: #edf4e9; }
+:root[data-theme="light"] .account-suggestion-grid > button:nth-child(3n + 2) { background: #f6ebdf; }
+:root[data-theme="light"] .account-suggestion-grid > button:nth-child(3n) { background: #e8f0f3; }
+
+:root[data-theme="light"] .account-details {
+  background: linear-gradient(135deg, #f5efdf, #eef3e9);
 }
 
 :root[data-theme="light"] :where(.auth-error, .vault-feedback-error, .quiz-feedback-error, .tutor-feedback-error) {

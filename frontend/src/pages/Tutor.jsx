@@ -12,6 +12,7 @@ import TutorIcon from "./tutor/TutorIcon.jsx";
 import TutorSkeleton from "./tutor/TutorSkeleton.jsx";
 import DeleteSessionModal from "./tutor/DeleteSessionModal.jsx";
 import SessionHistoryModal from "./tutor/SessionHistoryModal.jsx";
+import TutorMessageRenderer from "./tutor/TutorMessageRenderer.jsx";
 import {
   getTutorStats,
   getModeMeta,
@@ -20,13 +21,18 @@ import {
 } from "./tutor/tutorUtils.js";
 import "./Tutor.css";
 
-export default function Tutor({ initialHandoff = null, onClearHandoff = null }) {
+export default function Tutor({
+  initialDocumentId = "",
+  initialHandoff = null,
+  onClearHandoff = null,
+}) {
   const { user } = useAuth();
   const studentId = user?.user_id || "student_default";
+  const activeSessionStorageKey = `learnmate_active_tutor_session_${studentId}`;
 
   // Data states
   const [documents, setDocuments] = useState([]);
-  const [selectedDocId, setSelectedDocId] = useState("");
+  const [selectedDocId, setSelectedDocId] = useState(initialDocumentId);
   const [topicFocus, setTopicFocus] = useState("");
   const [mode, setMode] = useState("socratic"); // 'socratic' | 'step_by_step' | 'concept_check'
 
@@ -51,8 +57,38 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
+  // Responsive chat viewport state (Maximize / Focus mode)
+  const [isChatMaximized, setIsChatMaximized] = useState(false);
+
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+
+  // Close maximized chat on Escape key for convenience
+  useEffect(() => {
+    if (!isChatMaximized) return;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setIsChatMaximized(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isChatMaximized]);
+
+  const handleToggleChatMaximize = () => {
+    setIsChatMaximized((prev) => {
+      const next = !prev;
+      if (next) {
+        setTimeout(() => {
+          document.getElementById("tutor-workspace-heading")?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        }, 80);
+      }
+      return next;
+    });
+  };
 
   // Compute workspace stats
   const stats = useMemo(
@@ -75,10 +111,24 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
       try {
         const docs = await getDocuments();
         const docList = Array.isArray(docs) ? docs : [];
+        const preferredDocumentExists = docList.some(
+          (document) => document.document_id === initialDocumentId,
+        );
         setDocuments(docList);
-        if (docList.length > 0 && !selectedDocId) {
-          setSelectedDocId(docList[0].document_id);
+        if (preferredDocumentExists && !initialHandoff) {
+          setSuccessMessage(
+            "Your chosen material is ready. Pick a study style and start the session.",
+          );
         }
+        setSelectedDocId((currentDocumentId) => {
+          const currentDocumentExists = docList.some(
+            (document) => document.document_id === currentDocumentId,
+          );
+
+          if (preferredDocumentExists) return initialDocumentId;
+          if (currentDocumentExists) return currentDocumentId;
+          return docList[0]?.document_id || "";
+        });
       } catch (err) {
         console.error("Failed to load documents:", err);
       }
@@ -86,7 +136,7 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
     loadDocs();
   }, []);
 
-  // Handle incoming initial remedial handoff from Recommendations tab
+  // Handle incoming initial remedial handoff or auto-restore active session from localStorage
   useEffect(() => {
     if (initialHandoff && initialHandoff.document_id) {
       setSelectedDocId(initialHandoff.document_id);
@@ -94,8 +144,15 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
         setTopicFocus(initialHandoff.target_topics[0]);
       }
       initSessionFromHandoff(initialHandoff);
+      return;
     }
-  }, [initialHandoff]);
+
+    // Auto-restore active session from localStorage if present
+    const savedSessionId = localStorage.getItem(activeSessionStorageKey);
+    if (savedSessionId && !currentSession) {
+      handleSelectPastSession(savedSessionId, false);
+    }
+  }, [studentId, initialHandoff]);
 
   // Load student past sessions
   useEffect(() => {
@@ -132,6 +189,7 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
       }
       setMode(session.mode || "socratic");
       setTopicFocus(session.topic_focus || "");
+      localStorage.setItem(activeSessionStorageKey, session.session_id);
       loadStudentSessions();
       setSuccessMessage("Remedial Socratic session initialized from Recommendations.");
     } catch (err) {
@@ -176,6 +234,7 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
       setSuggestedFollowups([]);
       setConceptCheck(null);
       setHighlightedCitationIndex(null);
+      localStorage.setItem(activeSessionStorageKey, session.session_id);
       loadStudentSessions();
       setSuccessMessage("New Socratic dialogue session established.");
     } catch (err) {
@@ -185,29 +244,48 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
     }
   }
 
-  async function handleSelectPastSession(sessionId) {
+  async function handleSelectPastSession(sessionId, showNotice = true) {
     setSessionLoading(true);
     setErrorMessage("");
     setShowHistoryModal(false);
     try {
       const session = await getTutorSession(sessionId);
-      setCurrentSession(session);
-      setMessages(session.messages || []);
-      setSelectedDocId(session.document_id);
-      setMode(session.mode);
-      setTopicFocus(session.topic_focus || "");
-      const lastTutorMsg = [...(session.messages || [])]
-        .reverse()
-        .find((m) => m.role === "tutor");
-      setActiveCitations(lastTutorMsg?.citations || []);
-      setSuggestedFollowups([]);
-      setConceptCheck(null);
-      setHighlightedCitationIndex(null);
+      if (session && session.session_id) {
+        setCurrentSession(session);
+        setMessages(session.messages || []);
+        setSelectedDocId(session.document_id);
+        setMode(session.mode);
+        setTopicFocus(session.topic_focus || "");
+        const lastTutorMsg = [...(session.messages || [])]
+          .reverse()
+          .find((m) => m.role === "tutor");
+        setActiveCitations(lastTutorMsg?.citations || []);
+        setSuggestedFollowups([]);
+        setConceptCheck(null);
+        setHighlightedCitationIndex(null);
+        localStorage.setItem(activeSessionStorageKey, session.session_id);
+        if (showNotice) {
+          setSuccessMessage("Session restored from your workspace.");
+        }
+      } else {
+        localStorage.removeItem(activeSessionStorageKey);
+      }
     } catch (err) {
-      setErrorMessage(err.message || "Could not load session.");
+      console.warn("Could not load session:", err);
+      localStorage.removeItem(activeSessionStorageKey);
     } finally {
       setSessionLoading(false);
     }
+  }
+
+  function handleResetToNewSessionConfig() {
+    localStorage.removeItem(activeSessionStorageKey);
+    setCurrentSession(null);
+    setMessages([]);
+    setActiveCitations([]);
+    setSuggestedFollowups([]);
+    setConceptCheck(null);
+    setSuccessMessage("Configuring a new study session. Choose a document or topic below.");
   }
 
   function handlePromptDeleteSession(session) {
@@ -222,6 +300,7 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
     try {
       await deleteTutorSession(sessionPendingDelete.session_id);
       if (currentSession?.session_id === sessionPendingDelete.session_id) {
+        localStorage.removeItem(activeSessionStorageKey);
         setCurrentSession(null);
         setMessages([]);
         setActiveCitations([]);
@@ -542,9 +621,9 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
           </span>
         </div>
 
-        <div className="tutor-workspace-grid">
+        <div className={`tutor-workspace-grid ${isChatMaximized ? "tutor-workspace-grid-maximized" : ""}`}>
           {/* Main Chat Stream Card */}
-          <div className="tutor-chat-card">
+          <div className={`tutor-chat-card ${isChatMaximized ? "tutor-chat-card-maximized" : ""}`}>
             <div className="tutor-chat-header">
               <div className="tutor-session-status">
                 <span className="tutor-pulse-dot" aria-hidden="true" />
@@ -566,6 +645,46 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
                     {activeDocName}
                   </span>
                 )}
+                {currentSession && (
+                  <button
+                    className="tutor-button tutor-button-secondary tutor-button-sm"
+                    onClick={handleResetToNewSessionConfig}
+                    title="Start a new tutoring session on a different material or topic"
+                    type="button"
+                  >
+                    <TutorIcon name="sparkles" size={13} />
+                    <span>Start New Session</span>
+                  </button>
+                )}
+                {isChatMaximized && activeCitations.length > 0 && (
+                  <button
+                    className="tutor-citations-nav-pill"
+                    onClick={() => {
+                      document.querySelector(".tutor-evidence-drawer")?.scrollIntoView({
+                        behavior: "smooth",
+                      });
+                    }}
+                    title="Scroll down to view verified lecture citations"
+                    type="button"
+                  >
+                    <TutorIcon name="book" size={13} />
+                    <span>{activeCitations.length} Citations Below</span>
+                  </button>
+                )}
+                <button
+                  aria-label={isChatMaximized ? "Restore standard chat view" : "Maximize chat view"}
+                  className={`tutor-expand-btn ${isChatMaximized ? "tutor-expand-btn-active" : ""}`}
+                  onClick={handleToggleChatMaximize}
+                  title={
+                    isChatMaximized
+                      ? "Minimize chat back to standard split view"
+                      : "Maximize chat view for spacious reading and diagrams"
+                  }
+                  type="button"
+                >
+                  <TutorIcon name={isChatMaximized ? "minimize" : "maximize"} size={13} />
+                  <span>{isChatMaximized ? "Minimize" : "Maximize"}</span>
+                </button>
               </div>
             </div>
 
@@ -639,9 +758,7 @@ export default function Tutor({ initialHandoff = null, onClearHandoff = null }) 
                       </div>
 
                       <div className="tutor-bubble-text">
-                        {msg.content.split("\n\n").map((para, pIdx) => (
-                          <p key={pIdx}>{para}</p>
-                        ))}
+                        <TutorMessageRenderer content={msg.content} />
                       </div>
 
                       {/* Inline Citations Tray in Tutor replies */}

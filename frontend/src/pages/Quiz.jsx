@@ -23,7 +23,7 @@ import {
 import SavedQuizCard from "./quiz/SavedQuizCard.jsx";
 import "./Quiz.css";
 
-function Quiz({ onNavigateToRecommendations }) {
+function Quiz({ initialDocumentId = "", onNavigateToRecommendations }) {
   const { user } = useAuth();
   const currentStudentId = user?.user_id || "student_default";
 
@@ -32,7 +32,7 @@ function Quiz({ onNavigateToRecommendations }) {
 
   // Data States
   const [documents, setDocuments] = useState([]);
-  const [selectedDocumentId, setSelectedDocumentId] = useState("");
+  const [selectedDocumentId, setSelectedDocumentId] = useState(initialDocumentId);
   const [savedQuizzes, setSavedQuizzes] = useState([]);
 
   // Quiz Configuration State
@@ -92,10 +92,24 @@ function Quiz({ onNavigateToRecommendations }) {
     try {
       const docs = await getDocuments();
       const docList = Array.isArray(docs) ? docs : [];
+      const preferredDocumentExists = docList.some(
+        (document) => document.document_id === initialDocumentId,
+      );
       setDocuments(docList);
-      if (docList.length > 0 && !selectedDocumentId) {
-        setSelectedDocumentId(docList[0].document_id);
+      if (preferredDocumentExists) {
+        setSuccessMessage(
+          "Your chosen material is ready. Adjust the quiz settings, then generate your quiz.",
+        );
       }
+      setSelectedDocumentId((currentDocumentId) => {
+        const currentDocumentExists = docList.some(
+          (document) => document.document_id === currentDocumentId,
+        );
+
+        if (preferredDocumentExists) return initialDocumentId;
+        if (currentDocumentExists) return currentDocumentId;
+        return docList[0]?.document_id || "";
+      });
       return true;
     } catch (err) {
       setErrorMessage(err.message || "Failed to load uploaded documents.");
