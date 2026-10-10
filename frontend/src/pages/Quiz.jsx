@@ -23,6 +23,61 @@ import {
 import SavedQuizCard from "./quiz/SavedQuizCard.jsx";
 import "./Quiz.css";
 
+function renderFormattedText(text) {
+  if (!text || typeof text !== "string") return text;
+  if (!text.includes("**") && !text.includes("*") && !text.includes("`") && !text.includes("\n")) {
+    return text;
+  }
+
+  const lines = text.split("\n");
+  return lines.map((line, lineIdx) => {
+    const regex = /(\*\*[^*]+?\*\*|\*[^*]+?\*|`[^`]+?`)/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(line)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(line.slice(lastIndex, match.index));
+      }
+
+      const token = match[0];
+      if (token.startsWith("**") && token.endsWith("**")) {
+        parts.push(
+          <strong key={`b_${lineIdx}_${match.index}`}>
+            {token.slice(2, -2)}
+          </strong>
+        );
+      } else if (token.startsWith("*") && token.endsWith("*")) {
+        parts.push(
+          <em key={`i_${lineIdx}_${match.index}`}>
+            {token.slice(1, -1)}
+          </em>
+        );
+      } else if (token.startsWith("`") && token.endsWith("`")) {
+        parts.push(
+          <code key={`c_${lineIdx}_${match.index}`}>
+            {token.slice(1, -1)}
+          </code>
+        );
+      }
+
+      lastIndex = regex.lastIndex;
+    }
+
+    if (lastIndex < line.length) {
+      parts.push(line.slice(lastIndex));
+    }
+
+    return (
+      <span key={`l_${lineIdx}`}>
+        {parts.length > 0 ? parts : line}
+        {lineIdx < lines.length - 1 && <br />}
+      </span>
+    );
+  });
+}
+
 function Quiz({ initialDocumentId = "", onNavigateToRecommendations }) {
   const { user } = useAuth();
   const currentStudentId = user?.user_id || "student_default";
@@ -1101,14 +1156,14 @@ function Quiz({ initialDocumentId = "", onNavigateToRecommendations }) {
                   {res.explanation && (
                     <div className="result-explanation-box">
                       <strong>💡 Concept Explanation</strong>
-                      <p>{res.explanation}</p>
+                      <p>{renderFormattedText(res.explanation)}</p>
                     </div>
                   )}
 
                   {res.feedback && res.feedback !== res.explanation && (
                     <div className="result-feedback-box">
                       <strong>Pedagogical Feedback</strong>
-                      <p>{res.feedback}</p>
+                      <p>{renderFormattedText(res.feedback)}</p>
                     </div>
                   )}
                 </div>

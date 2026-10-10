@@ -8,6 +8,62 @@ import {
 } from "../services/api.js";
 import "./Recommendations.css";
 
+// Renders markdown-style bold (**text**), italic (*text*), code (`code`), and newlines as React elements
+function renderFormattedText(text) {
+  if (!text || typeof text !== "string") return text;
+  if (!text.includes("**") && !text.includes("*") && !text.includes("`") && !text.includes("\n")) {
+    return text;
+  }
+
+  const lines = text.split("\n");
+  return lines.map((line, lineIdx) => {
+    const regex = /(\*\*[^*]+?\*\*|\*[^*]+?\*|`[^`]+?`)/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(line)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(line.slice(lastIndex, match.index));
+      }
+
+      const token = match[0];
+      if (token.startsWith("**") && token.endsWith("**")) {
+        parts.push(
+          <strong key={`b_${lineIdx}_${match.index}`}>
+            {token.slice(2, -2)}
+          </strong>
+        );
+      } else if (token.startsWith("*") && token.endsWith("*")) {
+        parts.push(
+          <em key={`i_${lineIdx}_${match.index}`}>
+            {token.slice(1, -1)}
+          </em>
+        );
+      } else if (token.startsWith("`") && token.endsWith("`")) {
+        parts.push(
+          <code key={`c_${lineIdx}_${match.index}`}>
+            {token.slice(1, -1)}
+          </code>
+        );
+      }
+
+      lastIndex = regex.lastIndex;
+    }
+
+    if (lastIndex < line.length) {
+      parts.push(line.slice(lastIndex));
+    }
+
+    return (
+      <span key={`l_${lineIdx}`}>
+        {parts.length > 0 ? parts : line}
+        {lineIdx < lines.length - 1 && <br />}
+      </span>
+    );
+  });
+}
+
 // Built-in preset quizzes for sandbox testing and grading demonstrations
 const PRESET_QUIZZES = [
   {
@@ -242,7 +298,6 @@ export default function Recommendations({
   const [activeDrills, setActiveDrills] = useState({});
   const [digestFilter, setDigestFilter] = useState("all"); // 'all' | 'missed' | 'correct'
   const [digestTopicFilter, setDigestTopicFilter] = useState("all");
-  const [digestSearchQuery, setDigestSearchQuery] = useState("");
   const [digestViewMode, setDigestViewMode] = useState("detailed"); // 'detailed' | 'compact'
   const [expandedDigestCards, setExpandedDigestCards] = useState({});
 
@@ -409,8 +464,7 @@ export default function Recommendations({
 
   const hasActiveDigestFilters =
     digestFilter !== "all" ||
-    digestTopicFilter !== "all" ||
-    digestSearchQuery.trim() !== "";
+    digestTopicFilter !== "all";
 
   const filteredDigest = useMemo(() => {
     return questionsDigest.filter((q) => {
@@ -423,27 +477,13 @@ export default function Recommendations({
         return false;
       }
 
-      // 3. Search Query Filter
-      if (digestSearchQuery.trim()) {
-        const query = digestSearchQuery.toLowerCase().trim();
-        const textMatch = (q.question_text || "").toLowerCase().includes(query);
-        const topicMatch = (q.topic || "").toLowerCase().includes(query);
-        const ansMatch = (q.selected_answer || "").toLowerCase().includes(query);
-        const correctAnsMatch = (q.correct_answer || "").toLowerCase().includes(query);
-        const explMatch = (q.explanation || "").toLowerCase().includes(query);
-        if (!textMatch && !topicMatch && !ansMatch && !correctAnsMatch && !explMatch) {
-          return false;
-        }
-      }
-
       return true;
     });
-  }, [questionsDigest, digestFilter, digestTopicFilter, digestSearchQuery]);
+  }, [questionsDigest, digestFilter, digestTopicFilter]);
 
   function handleResetDigestFilters() {
     setDigestFilter("all");
     setDigestTopicFilter("all");
-    setDigestSearchQuery("");
   }
 
   function toggleDigestCardExpansion(qId) {
@@ -663,35 +703,6 @@ export default function Recommendations({
             <span className="rec-pulse-dot" />
             AI Study Coach & Knowledge Diagnostics
           </div>
-
-          <button
-            type="button"
-            className="rec-theme-toggle"
-            onClick={onToggleTheme}
-            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-            title={`Toggle ${theme === "dark" ? "Light" : "Dark"} Mode`}
-          >
-            <span className="rec-theme-icon">
-              {theme === "dark" ? (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="5" />
-                  <line x1="12" y1="1" x2="12" y2="3" />
-                  <line x1="12" y1="21" x2="12" y2="23" />
-                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-                  <line x1="1" y1="12" x2="3" y2="12" />
-                  <line x1="21" y1="12" x2="23" y2="12" />
-                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-                </svg>
-              ) : (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                </svg>
-              )}
-            </span>
-            <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
-          </button>
         </div>
 
         <h1 className="rec-hero-title">Your Personalized Revision Guide</h1>
@@ -865,7 +876,7 @@ export default function Recommendations({
               </h2>
 
               <p className="rec-summary-quote">
-                "{scholarMeta.message}"
+                "{renderFormattedText(scholarMeta.message)}"
               </p>
 
               <div className="rec-boost-box">
@@ -876,15 +887,6 @@ export default function Recommendations({
                   Target: {Math.min(100, recommendationResult.score_percentage + scholarMeta.boostPercent)}%
                 </span>
                 <span>(with Quick Win practice)</span>
-              </div>
-
-              <div className="rec-meta-tags" style={{ marginTop: "14px" }}>
-                <span className="rec-meta-tag">
-                  <span>👤</span> Student: <strong>{recommendationResult.student_id}</strong>
-                </span>
-                <span className="rec-meta-tag">
-                  <span>🆔</span> Run: <code>{recommendationResult.recommendation_id}</code>
-                </span>
               </div>
             </div>
           </section>
@@ -974,6 +976,17 @@ export default function Recommendations({
                       </select>
                     </div>
 
+                    {hasActiveDigestFilters && (
+                      <button
+                        type="button"
+                        className="rec-filter-reset-btn"
+                        onClick={handleResetDigestFilters}
+                        title="Reset all filters"
+                      >
+                        <span>↻</span> Reset
+                      </button>
+                    )}
+
                     {/* View Mode Toggle: Detailed vs Compact */}
                     <div className="rec-digest-view-toggle" role="group" aria-label="View density toggle">
                       <button
@@ -1010,49 +1023,6 @@ export default function Recommendations({
                     </div>
                   </div>
                 </div>
-
-                {/* Row 2: Search Bar + Active Filters Indicators */}
-                <div className="rec-digest-search-row">
-                  <div className="rec-digest-search-box">
-                    <span className="rec-search-icon">🔍</span>
-                    <input
-                      type="text"
-                      className="rec-digest-search-input"
-                      placeholder="Search questions, options, topics, or explanations..."
-                      value={digestSearchQuery}
-                      onChange={(e) => setDigestSearchQuery(e.target.value)}
-                    />
-                    {digestSearchQuery && (
-                      <button
-                        type="button"
-                        className="rec-search-clear-btn"
-                        onClick={() => setDigestSearchQuery("")}
-                        title="Clear search query"
-                        aria-label="Clear search"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="rec-digest-filter-summary">
-                    <span className="rec-filter-count-label">
-                      Showing <strong>{filteredDigest.length}</strong> of{" "}
-                      <strong>{questionsDigest.length}</strong> questions
-                    </span>
-
-                    {hasActiveDigestFilters && (
-                      <button
-                        type="button"
-                        className="rec-filter-reset-btn"
-                        onClick={handleResetDigestFilters}
-                        title="Reset all filters and search query"
-                      >
-                        <span>↻</span> Reset Filters
-                      </button>
-                    )}
-                  </div>
-                </div>
               </div>
 
               {/* Empty Search/Filter State */}
@@ -1069,7 +1039,7 @@ export default function Recommendations({
                   <p className="rec-digest-empty-desc">
                     {digestFilter === "missed" && missedCount === 0
                       ? "Flawless score! You got every question right on this assessment attempt."
-                      : "Try clearing your search terms or selecting a different status/topic filter."}
+                      : "Try selecting a different status or topic filter."}
                   </p>
                   <button
                     type="button"
@@ -1178,7 +1148,7 @@ export default function Recommendations({
                                   <span>💡</span> Pedagogical Insight
                                 </div>
                                 <p className="rec-digest-explanation-text">
-                                  {q.explanation}
+                                  {renderFormattedText(q.explanation)}
                                 </p>
                               </div>
                             )}
@@ -1217,42 +1187,46 @@ export default function Recommendations({
                     <span>🌟</span> Verified Strengths
                   </h3>
                   <p className="rec-balance-desc">
-                    Concepts with solid retention (≥ 70% accuracy). Great foundation!
+                    Concepts you've mastered (≥ 70% retention).
                   </p>
                 </div>
                 <span className="rec-balance-badge strengths">
-                  {masteredTopics.length} Confirmed
+                  {masteredTopics.length} Mastered
                 </span>
               </div>
 
               {masteredTopics.length === 0 ? (
                 <div className="rec-balance-empty">
-                  Take more practice assessments or complete quick drills to establish verified strengths.
+                  Complete a practice assessment or quick drill to identify your strengths.
                 </div>
               ) : (
-                <div className="rec-balance-list">
+                <ul className="rec-bullet-list strengths">
                   {masteredTopics.map((top) => {
                     const masteryObj = (recommendationResult.topic_mastery || []).find(
                       (tm) => tm.topic === top
                     );
                     const pct = masteryObj ? masteryObj.accuracy_percentage : 100;
                     return (
-                      <div key={top} className="rec-balance-item">
-                        <div>
-                          <div className="rec-balance-topic">
-                            <span>✓</span> {top}
-                          </div>
-                          <div className="rec-balance-sub">
-                            High conceptual retention demonstrated
-                          </div>
+                      <li key={top} className="rec-bullet-item">
+                        <span className="rec-bullet-icon strengths">✓</span>
+                        <div className="rec-bullet-content">
+                          <strong>{top}</strong> ({pct}%)
+                          <span className="rec-bullet-advice">
+                            {" "}— Solid grasp confirmed. Keep sharp with occasional light practice.
+                          </span>
                         </div>
-                        <span className="rec-balance-score-chip strengths">
-                          {pct}%
-                        </span>
-                      </div>
+                      </li>
                     );
                   })}
-                </div>
+                  <li className="rec-bullet-item rec-bullet-tip">
+                    <span className="rec-bullet-icon tip">💡</span>
+                    <div className="rec-bullet-content">
+                      <span className="rec-bullet-advice">
+                        <strong>Agent Recommendation:</strong> Spend minimal revision time here; use these mastered topics as confidence anchors for harder units.
+                      </span>
+                    </div>
+                  </li>
+                </ul>
               )}
             </div>
 
@@ -1264,7 +1238,7 @@ export default function Recommendations({
                     <span>🎯</span> Priority Growth Areas
                   </h3>
                   <p className="rec-balance-desc">
-                    Targeted concepts to correct (&lt; 70% accuracy) for fastest grade leap.
+                    Targeted focus areas for your fastest score jump.
                   </p>
                 </div>
                 <span className="rec-balance-badge weaknesses">
@@ -1277,7 +1251,7 @@ export default function Recommendations({
                   🎉 Fantastic work! All tested concepts are currently above the 70% mastery threshold.
                 </div>
               ) : (
-                <div className="rec-balance-list">
+                <ul className="rec-bullet-list weaknesses">
                   {weakTopics.map((top) => {
                     const masteryObj = (recommendationResult.topic_mastery || []).find(
                       (tm) => tm.topic === top
@@ -1286,23 +1260,29 @@ export default function Recommendations({
                     const matchingGap = (recommendationResult.knowledge_gaps || []).find(
                       (kg) => kg.topic === top
                     );
+                    const isHigh = matchingGap?.severity === "High";
                     return (
-                      <div key={top} className="rec-balance-item">
-                        <div>
-                          <div className="rec-balance-topic">
-                            <span>⚡</span> {top}
-                          </div>
-                          <div className="rec-balance-sub">
-                            {matchingGap?.severity || "Needs"} attention · {masteryObj ? `${masteryObj.correct_count}/${masteryObj.total_questions} correct` : "Gap identified"}
-                          </div>
+                      <li key={top} className="rec-bullet-item">
+                        <span className="rec-bullet-icon weaknesses">⚡</span>
+                        <div className="rec-bullet-content">
+                          <strong>{top}</strong> ({pct}%)
+                          <span className="rec-bullet-advice">
+                            {" "}— {isHigh ? "High priority: " : "Recommended: "} 
+                            Review key slide definitions or start a 5-minute Socratic tutoring session.
+                          </span>
                         </div>
-                        <span className="rec-balance-score-chip weaknesses">
-                          {pct}%
-                        </span>
-                      </div>
+                      </li>
                     );
                   })}
-                </div>
+                  <li className="rec-bullet-item rec-bullet-tip">
+                    <span className="rec-bullet-icon tip">🚀</span>
+                    <div className="rec-bullet-content">
+                      <span className="rec-bullet-advice">
+                        <strong>Agent Recommendation:</strong> Complete the 5-Minute Quick Win below to convert your largest gap into high-retention points first.
+                      </span>
+                    </div>
+                  </li>
+                </ul>
               )}
             </div>
           </section>
@@ -1320,10 +1300,10 @@ export default function Recommendations({
               </div>
 
               <h3 className="rec-quick-win-title">
-                Master Concept: "{quickWin.topic}"
+                Master Concept: "{renderFormattedText(quickWin.topic)}"
               </h3>
               <p className="rec-quick-win-desc">
-                {quickWin.explanation}
+                {renderFormattedText(quickWin.explanation)}
               </p>
 
               <div className="rec-quick-win-actions">
@@ -1405,9 +1385,11 @@ export default function Recommendations({
                     ) : (
                       <div className={`rec-drill-feedback ${drillState.isCorrect ? "success" : "error"}`}>
                         <span>
-                          {drillState.isCorrect
-                            ? "🎉 Spot on! Concept recovered (+50 XP). Your mastery level increased!"
-                            : "💡 Not quite. " + drill.explanation}
+                          {drillState.isCorrect ? (
+                            "🎉 Spot on! Concept recovered (+50 XP). Your mastery level increased!"
+                          ) : (
+                            <span>💡 Not quite. {renderFormattedText(drill.explanation)}</span>
+                          )}
                         </span>
                         {drillState.isCorrect && (
                           <span className="rec-gap-evidence-pill" style={{ background: "rgba(16,185,129,0.2)" }}>
@@ -1478,8 +1460,8 @@ export default function Recommendations({
                         )}
                       </div>
 
-                      <h4 className="rec-quest-item-title">{mission.title}</h4>
-                      <p className="rec-quest-item-desc">{mission.desc}</p>
+                      <h4 className="rec-quest-item-title">{renderFormattedText(mission.title)}</h4>
+                      <p className="rec-quest-item-desc">{renderFormattedText(mission.desc)}</p>
 
                       <div className="rec-quest-cta-row">
                         {mission.actionType === "tutor" && (
@@ -1634,7 +1616,7 @@ export default function Recommendations({
                       </span>
                     </div>
                     <p className="rec-tutor-bridge-text">
-                      {recommendationResult.tutor_handoff.cognitive_bridge_analogy}
+                      {renderFormattedText(recommendationResult.tutor_handoff.cognitive_bridge_analogy)}
                     </p>
                   </div>
                 )}
@@ -1642,7 +1624,7 @@ export default function Recommendations({
                 <div className="rec-tutor-bubble-box">
                   <div className="rec-tutor-avatar">LM</div>
                   <div className="rec-tutor-bubble-text">
-                    "{recommendationResult.tutor_handoff.suggested_opening_prompt}"
+                    "{renderFormattedText(recommendationResult.tutor_handoff.suggested_opening_prompt)}"
                   </div>
                 </div>
               </div>
@@ -1731,7 +1713,7 @@ export default function Recommendations({
                           Pedagogical Rationale
                         </div>
                         <p className="rec-explainability-text">
-                          {gap.explanation}
+                          {renderFormattedText(gap.explanation)}
                         </p>
                       </div>
 
@@ -1742,7 +1724,7 @@ export default function Recommendations({
                           </div>
                           <ul className="rec-misconceptions-list">
                             {gap.sample_misconceptions.map((m, mIdx) => (
-                              <li key={mIdx}>{m}</li>
+                              <li key={mIdx}>{renderFormattedText(m)}</li>
                             ))}
                           </ul>
                         </div>
@@ -2088,7 +2070,7 @@ export default function Recommendations({
                 <div className="rec-contract-field">
                   <label>Cognitive Bridge Analogy</label>
                   <div className="rec-quote-box" style={{ borderColor: "rgba(99, 102, 241, 0.3)", background: "rgba(99, 102, 241, 0.05)" }}>
-                    🌉 {recommendationResult.tutor_handoff.cognitive_bridge_analogy}
+                    🌉 {renderFormattedText(recommendationResult.tutor_handoff.cognitive_bridge_analogy)}
                   </div>
                 </div>
               )}
@@ -2096,14 +2078,14 @@ export default function Recommendations({
               <div className="rec-contract-field">
                 <label>Pedagogical Directive for Tutor Agent</label>
                 <div className="rec-quote-box">
-                  {recommendationResult.tutor_handoff.pedagogical_instruction}
+                  {renderFormattedText(recommendationResult.tutor_handoff.pedagogical_instruction)}
                 </div>
               </div>
 
               <div className="rec-contract-field">
                 <label>Suggested Opening Socratic Prompt</label>
                 <div className="rec-quote-box" style={{ fontStyle: "italic" }}>
-                  "{recommendationResult.tutor_handoff.suggested_opening_prompt}"
+                  "{renderFormattedText(recommendationResult.tutor_handoff.suggested_opening_prompt)}"
                 </div>
               </div>
 
