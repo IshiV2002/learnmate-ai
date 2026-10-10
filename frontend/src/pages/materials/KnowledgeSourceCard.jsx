@@ -11,7 +11,7 @@ function MetadataItem({ icon, label, value }) {
   );
 }
 
-function KnowledgeSourceCard({ document, isDeleting, onDelete, onQuiz, onTutor }) {
+function KnowledgeSourceCard({ document, isDeleting, onDelete, onQuiz, onTutor, onView }) {
   const filename = document.original_filename || "Untitled material";
   const materialType = getMaterialType(filename);
 
@@ -31,7 +31,7 @@ function KnowledgeSourceCard({ document, isDeleting, onDelete, onQuiz, onTutor }
           <h3 title={filename}>{filename}</h3>
           <p>Added {formatUploadDate(document.created_at)}</p>
         </div>
-        <div className="source-card-actions">
+        <div className="source-card-controls">
           <button
             aria-label={`Delete ${filename}`}
             className="source-delete-button"
@@ -56,6 +56,14 @@ function KnowledgeSourceCard({ document, isDeleting, onDelete, onQuiz, onTutor }
         className="source-card-actions"
         role="group"
       >
+        <button
+          className="source-action-button source-action-view"
+          onClick={() => onView(document)}
+          type="button"
+        >
+          <MaterialIcon name="view" size={17} />
+          View document
+        </button>
         <button
           className="source-action-button source-action-primary"
           onClick={() => onTutor(document)}

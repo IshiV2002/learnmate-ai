@@ -61,6 +61,34 @@ async function apiRequest(path, options = {}) {
   return responseBody;
 }
 
+async function apiBlobRequest(path) {
+  const headers = new Headers();
+
+  if (accessToken) {
+    headers.set("Authorization", `Bearer ${accessToken}`);
+  }
+
+  let response;
+  try {
+    response = await fetch(API_BASE_URL + path, { headers });
+  } catch {
+    throw new ApiError(
+      "Could not connect to LearnMate. Make sure the backend is running.",
+    );
+  }
+
+  if (!response.ok) {
+    const responseBody = await response.json().catch(() => null);
+
+    if (response.status === 401 && accessToken) {
+      window.dispatchEvent(new Event("learnmate:unauthorized"));
+    }
+    throw new ApiError(getErrorMessage(responseBody), response.status);
+  }
+
+  return response.blob();
+}
+
 export function signup(payload) {
   return apiRequest("/auth/signup", {
     method: "POST",
@@ -101,6 +129,12 @@ export function uploadDocument(file) {
     method: "POST",
     body: formData,
   });
+}
+
+export function getDocumentContent(documentId) {
+  return apiBlobRequest(
+    "/documents/" + encodeURIComponent(documentId) + "/content",
+  );
 }
 
 export function deleteDocument(documentId) {
