@@ -2406,11 +2406,11 @@
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
 }
 
-/* Search Row */
+/* Filter Summary Row */
 .rec-digest-search-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   flex-wrap: wrap;
   gap: 12px;
   padding-top: 12px;
@@ -2973,6 +2973,77 @@
   font-style: italic;
   padding: 12px;
   text-align: center;
+}
+
+/* Concise Recommendation Bullet Lists */
+.rec-bullet-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rec-bullet-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--rec-surface-elevated);
+  border: 1px solid var(--rec-border);
+  font-size: 0.86rem;
+  line-height: 1.45;
+  transition: all 0.2s ease;
+}
+
+.rec-bullet-item:hover {
+  border-color: var(--rec-border-hover);
+  transform: translateX(2px);
+}
+
+.rec-bullet-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 0.78rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.rec-bullet-icon.strengths {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--rec-emerald);
+}
+
+.rec-bullet-icon.weaknesses {
+  background: rgba(244, 63, 94, 0.15);
+  color: var(--rec-rose);
+}
+
+.rec-bullet-icon.tip {
+  background: rgba(245, 158, 11, 0.15);
+  font-size: 0.85rem;
+}
+
+.rec-bullet-content {
+  flex: 1;
+  color: var(--rec-text);
+}
+
+.rec-bullet-advice {
+  color: var(--rec-text-muted);
+  font-weight: normal;
+}
+
+.rec-bullet-item.rec-bullet-tip {
+  background: var(--rec-surface-soft);
+  border-style: dashed;
 }
 
 /* ---------------------------------------------------------------------
