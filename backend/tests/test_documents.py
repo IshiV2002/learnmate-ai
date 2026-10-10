@@ -648,6 +648,7 @@ def make_document_record(
     document_id: str,
     stored_filename: str = "0123456789abcdef0123456789abcdef.pdf",
     created_at: str | None = None,
+    user_id: str = TEST_USER.user_id,
 ) -> DocumentRecord:
     """Create predictable metadata for document-management API tests."""
     return DocumentRecord(
@@ -659,7 +660,7 @@ def make_document_record(
         chunk_count=3,
         file_size_bytes=100,
         created_at=created_at or datetime.now(timezone.utc).isoformat(),
-        user_id=TEST_USER.user_id,
+        user_id=user_id,
     )
 
 
@@ -726,6 +727,38 @@ class DocumentManagementApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["document_id"], "document-1")
         self.assertNotIn("stored_filename", response.json())
+
+    def test_owner_can_view_stored_document_inline(self) -> None:
+        stored_filename = "0123456789abcdef0123456789abcdef.pdf"
+        stored_pdf = self.upload_directory / stored_filename
+        pdf_content = create_test_pdf(["Private lecture material"])
+        stored_pdf.write_bytes(pdf_content)
+        self.database.create_document(
+            make_document_record("document-1", stored_filename=stored_filename)
+        )
+
+        response = self.client.get("/documents/document-1/content")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "application/pdf")
+        self.assertTrue(response.headers["content-disposition"].startswith("inline"))
+        self.assertEqual(response.headers["cache-control"], "private, no-store")
+        self.assertEqual(response.content, pdf_content)
+        self.assertNotIn(stored_filename, response.headers["content-disposition"])
+
+    def test_document_view_is_private_and_reports_missing_file(self) -> None:
+        self.database.create_document(
+            make_document_record("someone-elses-document", user_id="another-user")
+        )
+        self.database.create_document(make_document_record("missing-file"))
+
+        private_response = self.client.get(
+            "/documents/someone-elses-document/content"
+        )
+        missing_response = self.client.get("/documents/missing-file/content")
+
+        self.assertEqual(private_response.status_code, 404)
+        self.assertEqual(missing_response.status_code, 404)
 
     def test_unknown_document_and_delete_return_not_found(self) -> None:
         get_response = self.client.get("/documents/unknown")

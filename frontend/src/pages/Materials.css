@@ -709,7 +709,7 @@
 .source-ready-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-success); box-shadow: 0 0 9px rgb(104 217 160 / 55%); }
 .source-title-group h3 { overflow: hidden; margin-bottom: 6px; color: var(--color-text); font-size: 0.98rem; text-overflow: ellipsis; white-space: nowrap; }
 .source-title-group p { margin-bottom: 0; color: var(--color-text-subtle); font-size: 0.69rem; }
-.source-card-actions {
+.source-card-controls {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -751,6 +751,8 @@
 .source-action-button:active { transform: translateY(0) scale(0.98); }
 .source-action-primary { border-color: rgb(125 211 199 / 32%); color: var(--color-accent-strong); background: var(--color-accent-soft); }
 .source-action-primary:hover { box-shadow: 0 8px 18px rgb(73 183 170 / 12%); }
+.source-action-view { grid-column: 1 / -1; border-color: rgb(139 125 211 / 28%); color: var(--color-violet); background: rgb(139 125 211 / 8%); }
+.source-action-view:hover { border-color: rgb(139 125 211 / 44%); box-shadow: 0 8px 18px rgb(139 125 211 / 10%); }
 
 .vault-source-skeleton { display: grid; grid-template-columns: auto 1fr; gap: 14px; min-height: 185px; padding: 20px; border: 1px solid var(--color-border); border-radius: 20px; background: rgb(255 255 255 / 2%); }
 .skeleton-block { display: block; border-radius: 8px; background: linear-gradient(90deg, rgb(255 255 255 / 3%), rgb(255 255 255 / 8%), rgb(255 255 255 / 3%)); background-size: 220% 100%; animation: vault-skeleton 1.4s ease-in-out infinite; }
@@ -795,6 +797,46 @@
 .vault-delete-dialog h2 { margin-bottom: 11px; color: var(--color-text); font-size: 1.45rem; letter-spacing: -0.035em; overflow-wrap: anywhere; }
 .vault-delete-dialog > p:last-of-type { margin-bottom: 23px; color: var(--color-text-muted); font-size: 0.82rem; line-height: 1.65; }
 .vault-dialog-actions { display: flex; justify-content: flex-end; gap: 9px; }
+
+.document-viewer-layer { z-index: 230; padding: 14px; }
+.document-viewer-dialog {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(1460px, 100%);
+  height: min(94vh, 980px);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 24px;
+  color: var(--color-text);
+  background: var(--color-canvas-elevated);
+  box-shadow: 0 32px 110px rgb(0 0 0 / 56%);
+  animation: vault-dialog-enter 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.document-viewer-header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 13px; align-items: center; padding: 15px 17px; border-bottom: 1px solid var(--color-border); background: var(--color-surface); }
+.document-viewer-title-icon { display: grid; width: 42px; height: 46px; place-items: center; border: 1px solid rgb(125 211 199 / 20%); border-radius: 12px; color: var(--color-accent); background: var(--color-accent-soft); }
+.document-viewer-title-group { min-width: 0; }
+.document-viewer-title-group > span { display: block; margin-bottom: 3px; color: var(--color-accent-strong); font-size: 0.58rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+.document-viewer-title-group h2 { overflow: hidden; margin: 0 0 3px; font-size: 0.92rem; text-overflow: ellipsis; white-space: nowrap; }
+.document-viewer-title-group p { margin: 0; color: var(--color-text-subtle); font-size: 0.66rem; }
+.document-viewer-actions { display: flex; align-items: center; gap: 7px; }
+.document-viewer-actions .vault-button { min-height: 38px; text-decoration: none; }
+.document-viewer-close { display: grid; width: 40px; height: 40px; place-items: center; border: 1px solid var(--color-border); border-radius: 12px; color: var(--color-text-muted); background: transparent; transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast); }
+.document-viewer-close:hover,
+.document-viewer-close:focus-visible { border-color: var(--color-border-strong); color: var(--color-text); background: var(--color-surface-hover); }
+.document-viewer-body { position: relative; min-height: 0; background: #d8d9d5; }
+.document-viewer-frame { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
+.document-viewer-loading,
+.document-viewer-error { display: grid; height: 100%; min-height: 300px; place-items: center; align-content: center; padding: 30px; color: var(--color-text); text-align: center; background: var(--color-surface-soft); }
+.document-viewer-loading strong,
+.document-viewer-error strong { margin: 14px 0 5px; font-size: 0.95rem; }
+.document-viewer-loading p,
+.document-viewer-error p { max-width: 470px; margin: 0; color: var(--color-text-muted); font-size: 0.76rem; line-height: 1.55; }
+.document-viewer-error .vault-icon { color: var(--color-danger); }
+.document-viewer-error .vault-button { margin-top: 17px; }
+.document-viewer-footer { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 16px; border-top: 1px solid var(--color-border); color: var(--color-text-subtle); background: var(--color-surface); font-size: 0.61rem; line-height: 1.4; text-align: center; }
+.document-viewer-footer .vault-icon { flex: 0 0 auto; color: var(--color-accent); }
 
 .vault-icon-spinning { animation: vault-spin 800ms linear infinite; }
 
@@ -867,6 +909,18 @@
   .source-card-actions { grid-template-columns: 1fr; }
   .vault-library-heading > .vault-button { width: 100%; }
   .vault-delete-dialog { padding: 24px 20px; }
+  .document-viewer-layer { padding: 5px; }
+  .document-viewer-dialog { height: calc(100dvh - 10px); border-radius: 18px; }
+  .document-viewer-header { grid-template-columns: auto minmax(0, 1fr); padding: 11px; }
+  .document-viewer-actions { grid-column: 1 / -1; justify-content: flex-end; }
+  .document-viewer-actions .vault-button { width: auto; }
+  .document-viewer-footer { justify-content: flex-start; text-align: left; }
+}
+
+@media (max-width: 440px) {
+  .document-viewer-actions { display: grid; grid-template-columns: 1fr 1fr auto; }
+  .document-viewer-actions .vault-button { padding: 0 10px; }
+  .document-viewer-actions .vault-button span { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -876,6 +930,7 @@
   .vault-feedback,
   .vault-next-step,
   .vault-delete-dialog,
+  .document-viewer-dialog,
   .vault-icon-spinning {
     animation: none !important;
   }

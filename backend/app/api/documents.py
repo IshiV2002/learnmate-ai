@@ -4,6 +4,7 @@ from threading import Lock
 from uuid import uuid4
 
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, field_validator
 from starlette.concurrency import run_in_threadpool
 
@@ -457,6 +458,52 @@ def get_document(
         )
 
     return record.to_public_dict()
+
+
+@router.get("/{document_id}/content", response_class=FileResponse)
+def view_document_content(
+    document_id: str,
+    current_user: CurrentUser,
+) -> FileResponse:
+    """Stream one owned material as an inline PDF without exposing its storage name."""
+    try:
+        record = get_document_database().get_document(
+            document_id,
+            current_user.user_id,
+        )
+    except DocumentDatabaseError as error:
+        raise _database_error_response(error) from error
+
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
+        )
+
+    stored_path = _stored_document_path(record.stored_filename)
+    if not stored_path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="The stored document file is unavailable.",
+        )
+
+    original_path = Path(record.original_filename)
+    display_filename = (
+        original_path.name
+        if original_path.suffix.lower() == ".pdf"
+        else f"{original_path.stem or 'study-material'}.pdf"
+    )
+
+    return FileResponse(
+        path=stored_path,
+        media_type="application/pdf",
+        filename=display_filename,
+        content_disposition_type="inline",
+        headers={
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.delete("/{document_id}")
