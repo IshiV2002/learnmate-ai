@@ -1,6 +1,37 @@
+import { useEffect, useState } from "react";
+
 import MaterialIcon from "./MaterialIcon.jsx";
 
 function ProcessingJourney({ fileName, onStudy = null, status }) {
+  const [activeStage, setActiveStage] = useState(0);
+
+  useEffect(() => {
+    if (status === "idle") {
+      setActiveStage(0);
+      return undefined;
+    }
+
+    if (status === "complete") {
+      setActiveStage(4);
+      return undefined;
+    }
+
+    if (status !== "processing") {
+      return undefined;
+    }
+
+    setActiveStage(0);
+    const stageTimers = [
+      window.setTimeout(() => setActiveStage(1), 800),
+      window.setTimeout(() => setActiveStage(2), 1900),
+      window.setTimeout(() => setActiveStage(3), 3200),
+    ];
+
+    return () => {
+      stageTimers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [fileName, status]);
+
   if (status === "idle") {
     return null;
   }
@@ -15,6 +46,25 @@ function ProcessingJourney({ fileName, onStudy = null, status }) {
     "Create knowledge sections",
     "Ready",
   ];
+  const progressMessages = [
+    "Uploading your material",
+    isImage ? "Reading the image with OCR" : "Reading the PDF pages",
+    "Preparing searchable text",
+    "Creating knowledge sections",
+    "Knowledge source ready",
+  ];
+
+  function getStageState(index) {
+    if (isComplete || index < activeStage) {
+      return "complete";
+    }
+
+    if (index === activeStage) {
+      return isError ? "error" : "active";
+    }
+
+    return "pending";
+  }
 
   return (
     <div
@@ -38,31 +88,30 @@ function ProcessingJourney({ fileName, onStudy = null, status }) {
               ? "Knowledge source ready"
               : isError
                 ? "Processing was not completed"
-                : "Uploading and processing securely"}
+                : progressMessages[activeStage]}
           </strong>
           <small>{fileName}</small>
         </div>
       </div>
 
       <ol className="vault-journey-track" aria-label="Material processing journey">
-        {stages.map((stage, index) => (
-          <li
-            className={isComplete ? "vault-stage-complete" : isError ? "vault-stage-error" : "vault-stage-active"}
-            key={stage}
-          >
-            <span className="vault-stage-node" aria-hidden="true">
-              {isComplete ? <MaterialIcon name="check" size={13} /> : index + 1}
-            </span>
-            <span>{stage}</span>
-          </li>
-        ))}
-      </ol>
+        {stages.map((stage, index) => {
+          const stageState = getStageState(index);
 
-      {!isComplete && !isError && (
-        <p className="vault-journey-note">
-          The backend completes validation, extraction, page-aware chunking, and indexing in one request, so exact stage timing is not available.
-        </p>
-      )}
+          return (
+            <li
+              aria-current={stageState === "active" ? "step" : undefined}
+              className={`vault-stage-${stageState}`}
+              key={stage}
+            >
+              <span className="vault-stage-node" aria-hidden="true">
+                {stageState === "complete" ? <MaterialIcon name="check" size={13} /> : index + 1}
+              </span>
+              <span>{stage}</span>
+            </li>
+          );
+        })}
+      </ol>
 
       {isComplete && onStudy && (
         <div style={{ marginTop: "14px", display: "flex", justifyContent: "flex-end" }}>

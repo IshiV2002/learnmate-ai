@@ -473,6 +473,7 @@
   height: 1px;
   background: var(--color-border-strong);
   content: "";
+  transition: background-color 320ms ease, opacity 320ms ease;
 }
 
 .vault-stage-node {
@@ -490,10 +491,13 @@
   font-size: 0.62rem;
 }
 
-.vault-stage-active .vault-stage-node { border-color: rgb(125 211 199 / 38%); color: var(--color-accent); animation: vault-stage-pulse 1.8s ease-in-out infinite; }
+.vault-stage-active { color: var(--color-text); font-weight: 720; }
+.vault-stage-active .vault-stage-node { border-color: rgb(125 211 199 / 58%); color: var(--color-accent); background: var(--color-accent-soft); animation: vault-stage-pulse 1.8s ease-in-out infinite; }
+.vault-stage-active:not(:last-child)::after { background: linear-gradient(90deg, rgb(125 211 199 / 56%), var(--color-border-strong) 62%); }
 .vault-stage-complete .vault-stage-node { border-color: rgb(104 217 160 / 34%); color: var(--color-success); background: rgb(104 217 160 / 9%); }
+.vault-stage-complete:not(:last-child)::after { background: rgb(104 217 160 / 42%); }
 .vault-stage-error .vault-stage-node { border-color: rgb(255 143 154 / 25%); color: var(--color-danger); }
-.vault-journey-note { margin: 17px 0 0; color: var(--color-text-subtle); font-size: 0.68rem; line-height: 1.55; text-align: center; }
+.vault-stage-pending { color: var(--color-text-subtle); opacity: 0.58; }
 
 .vault-next-step {
   display: grid;
