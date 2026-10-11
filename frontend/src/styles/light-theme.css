@@ -294,6 +294,10 @@
   color: #25352d;
 }
 
+:root[data-theme="light"] .quiz-journey-error-detail {
+  color: #9e4d52;
+}
+
 :root[data-theme="light"] .quiz-journey-heading small,
 :root[data-theme="light"] .quiz-journey-note,
 :root[data-theme="light"] .quiz-journey-track li {

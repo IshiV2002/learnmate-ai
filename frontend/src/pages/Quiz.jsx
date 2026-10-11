@@ -4,9 +4,9 @@ import {
   deleteQuiz,
   evaluateAndRecommendQuiz,
   generateQuiz,
-  getDocumentQuizzes,
   getDocuments,
   getQuiz,
+  listAllQuizzes,
   submitQuizEvaluation,
 } from "../services/api.js";
 import DeleteQuizModal from "./quiz/DeleteQuizModal.jsx";
@@ -140,6 +140,24 @@ function Quiz({ initialDocumentId = "", onNavigateToRecommendations }) {
     [documents, selectedDocumentId],
   );
 
+  function getQuizSourceName(quiz) {
+    const sourceIds = (quiz?.document_id || "")
+      .split(",")
+      .map((documentId) => documentId.trim())
+      .filter(Boolean);
+    const sourceNames = sourceIds
+      .map((documentId) =>
+        documents.find((document) => document.document_id === documentId)
+          ?.original_filename,
+      )
+      .filter(Boolean);
+
+    if (sourceIds.length > 1) {
+      return `Mixed assessment (${sourceIds.length} course sources)`;
+    }
+    return sourceNames[0] || "Course material unavailable";
+  }
+
   // Load documents on initial mount
   async function loadDocs(showLoading = true) {
     if (showLoading) setIsLoadingDocs(true);
@@ -178,30 +196,25 @@ function Quiz({ initialDocumentId = "", onNavigateToRecommendations }) {
     loadDocs();
   }, []);
 
-  // Load saved quizzes whenever selected document changes
-  async function loadSavedQuizzes(docId) {
-    if (!docId) {
-      setSavedQuizzes([]);
-      return;
-    }
+  // The assessment library spans all materials owned by the signed-in user.
+  async function loadSavedQuizzes() {
     setIsLoadingSaved(true);
     try {
-      const quizzes = await getDocumentQuizzes(docId);
+      const quizzes = await listAllQuizzes();
       setSavedQuizzes(Array.isArray(quizzes) ? quizzes : []);
-    } catch {
-      setSavedQuizzes([]);
+      setErrorMessage("");
+    } catch (err) {
+      setErrorMessage(
+        err.message || "Could not load your assessment library. Please try again.",
+      );
     } finally {
       setIsLoadingSaved(false);
     }
   }
 
   useEffect(() => {
-    if (selectedDocumentId) {
-      loadSavedQuizzes(selectedDocumentId);
-    } else {
-      setSavedQuizzes([]);
-    }
-  }, [selectedDocumentId]);
+    loadSavedQuizzes();
+  }, []);
 
   // Timer lifecycle during active quiz taking
   useEffect(() => {
@@ -255,7 +268,7 @@ function Quiz({ initialDocumentId = "", onNavigateToRecommendations }) {
       setSuccessMessage("Assessment generated and grounded successfully!");
 
       // Refresh saved quizzes in background
-      loadSavedQuizzes(selectedDocumentId);
+      loadSavedQuizzes();
     } catch (err) {
       setGenerationStatus("error");
       setErrorMessage(
@@ -649,6 +662,7 @@ function Quiz({ initialDocumentId = "", onNavigateToRecommendations }) {
 
                 <QuizGenerationJourney
                   documentName={selectedDocObj?.original_filename}
+                  errorMessage={generationStatus === "error" ? errorMessage : ""}
                   status={generationStatus}
                   topic={generationTopic}
                 />
@@ -706,18 +720,15 @@ function Quiz({ initialDocumentId = "", onNavigateToRecommendations }) {
                       </div>
                       <h2 id="quiz-library-heading">Available Quizzes</h2>
                       <p>
-                        Saved assessments for{" "}
-                        <strong>
-                          {selectedDocObj?.original_filename || "selected document"}
-                        </strong>
+                        Saved assessments across all your course materials.
                       </p>
                     </div>
                     <div className="quiz-library-actions">
                       <button
                         className="quiz-button quiz-button-secondary quiz-refresh-btn"
                         disabled={isLoadingSaved || isGenerating}
-                        onClick={() => loadSavedQuizzes(selectedDocumentId)}
-                        title="Reload assessments for this lecture"
+                        onClick={loadSavedQuizzes}
+                        title="Reload all your saved assessments"
                         type="button"
                       >
                         <QuizIcon
@@ -786,10 +797,10 @@ function Quiz({ initialDocumentId = "", onNavigateToRecommendations }) {
                       <span className="quiz-empty-connection" />
                     </div>
                     <p className="quiz-section-kicker">Ready for assessment</p>
-                    <h3>No saved quizzes yet for this document</h3>
+                    <h3>No saved quizzes yet</h3>
                     <p>
-                      Generate your first lecture-grounded assessment using the
-                      form above!
+                      Generate an assessment from any of your course materials
+                      using the form above.
                     </p>
                   </div>
                 ) : filteredQuizzes.length === 0 ? (
@@ -808,7 +819,9 @@ function Quiz({ initialDocumentId = "", onNavigateToRecommendations }) {
                   <div className="saved-quiz-grid">
                     {filteredQuizzes.map((q) => (
                       <SavedQuizCard
-                        documentName={selectedDocObj?.original_filename}
+                        documentName={
+                          getQuizSourceName(q)
+                        }
                         isDeleting={deletingQuizId === q.quiz_id}
                         key={q.quiz_id}
                         onDelete={setQuizPendingDelete}
@@ -841,7 +854,7 @@ function Quiz({ initialDocumentId = "", onNavigateToRecommendations }) {
               <h2>{activeQuiz.title}</h2>
               <p className="quiz-subtitle">
                 Topic: <strong>{activeQuiz.topic}</strong> · Source:{" "}
-                <strong>{selectedDocObj?.original_filename}</strong>
+                <strong>{getQuizSourceName(activeQuiz)}</strong>
               </p>
             </div>
 
