@@ -317,15 +317,65 @@
   white-space: nowrap;
 }
 
+.account-result-score-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.account-result-percentage,
 .account-result-list > li > span {
-  min-width: 54px;
-  padding: 8px 10px;
-  border-radius: 10px;
+  min-width: 48px;
+  padding: 6px 10px;
+  border-radius: 9px;
   color: var(--color-accent-strong);
   background: var(--color-accent-soft);
   font-size: 0.8rem;
   font-weight: 850;
   text-align: center;
+}
+
+.account-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.account-status-completed {
+  color: #059669;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+}
+
+.account-status-incomplete {
+  color: #d97706;
+  background: rgba(245, 158 11, 0.12);
+  border: 1px solid rgba(245, 158 11, 0.28);
+}
+
+.account-status-pending {
+  color: var(--color-text-subtle);
+  background: var(--color-surface-soft);
+  border: 1px solid var(--color-border);
+}
+
+:root[data-theme="dark"] .account-status-completed {
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.18);
+  border-color: rgba(52, 211, 153, 0.35);
+}
+
+:root[data-theme="dark"] .account-status-incomplete {
+  color: #fbbf24;
+  background: rgba(245, 158 11, 0.18);
+  border-color: rgba(251, 191, 36, 0.35);
 }
 
 .account-material-list li {

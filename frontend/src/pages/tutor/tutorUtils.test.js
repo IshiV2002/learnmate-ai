@@ -51,7 +51,7 @@ test("resolves mode metadata accurately and falls back to socratic", () => {
   const socraticMeta = getModeMeta("socratic");
   assert.strictEqual(socraticMeta.id, "socratic");
   assert.strictEqual(socraticMeta.icon, "brain");
-  assert.strictEqual(socraticMeta.label, "Socratic Discovery");
+  assert.strictEqual(socraticMeta.label, "Guided Study");
 
   const stepMeta = getModeMeta("step_by_step");
   assert.strictEqual(stepMeta.id, "step_by_step");
