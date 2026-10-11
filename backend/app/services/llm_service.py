@@ -349,6 +349,35 @@ class LLMService:
         )
 
     @classmethod
+    def _detect_student_intent(cls, message: str) -> str:
+        """Detect the student's communicative intent from common study actions.
+
+        Returns one of: 'example', 'test', 'explain', 'advantages', 'general'.
+        """
+        msg_clean = (message or "").strip().lower()
+        if re.search(
+            r"\b(?:give me (?:an? )?example|show me (?:an? )?example|concrete example|real-world (?:example|analogy)|practical example|another example|worked example|for example)\b",
+            msg_clean,
+        ):
+            return "example"
+        if re.search(
+            r"\b(?:test my understanding|test me|quiz me|check my understanding|practice question|ask me a question|challenge me)\b",
+            msg_clean,
+        ):
+            return "test"
+        if re.search(
+            r"\b(?:explain this topic|explain this concept|explain this|can you explain|explain to me|help me understand|walk me through this|what is this)\b",
+            msg_clean,
+        ):
+            return "explain"
+        if re.search(
+            r"\b(?:advantages?|benefits?|why use|why is this better|pros and cons)\b",
+            msg_clean,
+        ):
+            return "advantages"
+        return "general"
+
+    @classmethod
     def _extract_concept_from_query(cls, query: str, fallback: str = "") -> str:
         """Extract the specific academic concept from a student's question."""
         if not query:
@@ -356,10 +385,18 @@ class LLMService:
 
         clean = query.strip().rstrip("?.!").strip()
         patterns = [
+            r"^(?:what\s+is\s+the\s+difference\s+between\s+)(.+)$",
+            r"^(?:explain\s+the\s+difference\s+between\s+)(.+)$",
+            r"^(?:explain\s+the\s+trade-?off\s+between\s+)(.+)$",
+            r"^(?:can\s+you\s+give\s+me\s+(?:a\s+|an\s+)?(?:simple\s+)?(?:real-world\s+)?analogy\s+for\s+)(.+)$",
+            r"^(?:give\s+me\s+(?:a\s+|an\s+)?(?:simple\s+)?(?:real-world\s+)?analogy\s+for\s+)(.+)$",
+            r"^(?:can\s+you\s+explain\s+how\s+)(.+)$",
+            r"^(?:explain\s+how\s+)(.+)$",
+            r"^(?:how\s+do\s+)(.+)$",
+            r"^(?:how\s+does\s+)(.+?)(?:\s+work)?$",
             r"^(?:what\s+is\s+(?:an|a|the)\s+)(.+)$",
             r"^(?:what\s+is\s+)(.+)$",
             r"^(?:what\s+are\s+(?:the\s+)?)(.+)$",
-            r"^(?:how\s+does\s+)(.+?)(?:\s+work)?$",
             r"^(?:explain\s+(?:to\s+me\s+)?(?:the\s+|an\s+|a\s+)?)(.+)$",
             r"^(?:can\s+you\s+explain\s+(?:the\s+|an\s+|a\s+)?)(.+)$",
             r"^(?:define\s+(?:the\s+|an\s+|a\s+)?)(.+)$",
@@ -367,7 +404,19 @@ class LLMService:
             r"^(?:what\s+do\s+you\s+mean\s+by\s+(?:the\s+|an\s+|a\s+)?)(.+)$",
             r"^(?:walk\s+me\s+through\s+(?:the\s+|an\s+|a\s+)?)(.+)$",
             r"^(?:describe\s+(?:the\s+|an\s+|a\s+)?)(.+)$",
+            r"^(?:why\s+do\s+)(.+)$",
+            r"^(?:why\s+is\s+)(.+)$",
         ]
+
+        generic_stop_phrases = {
+            "this topic", "this concept", "this approach", "this", "it", "that",
+            "the topic", "the concept", "the approach", "the lesson",
+            "an example", "example", "examples", "a concrete example",
+            "my understanding", "understanding", "test my understanding",
+            "main advantages of this approach", "advantages of this approach",
+            "the main advantages of this approach", "advantages", "disadvantages",
+            "pros and cons", "difference", "trade-off", "tradeoff",
+        }
 
         for pattern in patterns:
             match = re.match(pattern, clean, re.IGNORECASE)
@@ -379,6 +428,12 @@ class LLMService:
                     raw_concept,
                     flags=re.IGNORECASE,
                 ).strip()
+                raw_concept = re.sub(r"^(?:an|a|the)\s+", "", raw_concept, flags=re.IGNORECASE).strip()
+                raw_concept = re.sub(r"\s+in\s+ir$", "", raw_concept, flags=re.IGNORECASE).strip()
+                if raw_concept.lower() in generic_stop_phrases:
+                    return fallback
+                if raw_concept.lower().startswith(("this ", "that ", "it ")):
+                    return fallback
                 if len(raw_concept) >= 2:
                     words = raw_concept.split()
                     return " ".join(
@@ -397,14 +452,14 @@ class LLMService:
         student_message: str,
     ) -> tuple[str, list[str], str | None]:
         """Generate structured deterministic pedagogical response grounded on retrieved excerpts."""
-        # Detect the exact concept being asked
+        # Detect the exact concept being asked in the student's current turn
         detected_concept = self._extract_concept_from_query(student_message)
-        if detected_concept and (not topic_focus or topic_focus in ("Course Foundations", "Course Concepts", "this topic", "")):
+        if detected_concept:
             primary_topic = detected_concept
         elif topic_focus and topic_focus not in ("Course Foundations", "Course Concepts", "this topic", ""):
             primary_topic = topic_focus
         else:
-            primary_topic = detected_concept or "this topic"
+            primary_topic = "this topic"
 
         first_chunk = lecture_chunks[0] if lecture_chunks else None
         page_num = first_chunk.get("page_number", 1) if first_chunk else 1
@@ -541,8 +596,235 @@ class LLMService:
         """Synthesize an articulate, authoritative academic explanation grounded in the retrieved excerpt."""
         clean_text = self._clean_lecture_text(chunk_text)
         topic_lower = primary_topic.lower()
+        msg_lower = (student_message or "").lower()
         diag = self._get_concept_diagram(primary_topic)
         diag_section = f"### System Architecture Flow:\n{diag}\n\n" if diag else ""
+
+        # A. Specialized handling for Analogy requests
+        if "analogy" in msg_lower or "analogy" in topic_lower:
+            if "index" in msg_lower or "index" in topic_lower or "postings" in msg_lower:
+                analogy_diag = (
+                    "```mermaid\n"
+                    "graph LR\n"
+                    "    A[\"Student Search: 'Photosynthesis'\"] --> B[\"Back-of-Book Index\"]\n"
+                    "    B --> C[\"Pages: 42, 88, 105\"]\n"
+                    "    C --> D[\"Direct Access (Skip Reading All 500 Pages!)\"]\n"
+                    "```\n\n"
+                )
+                reply = (
+                    f"Here is an intuitive, real-world analogy for an **Inverted Index**, connecting with **{source_name} (Page 37)**:\n\n"
+                    f"### The Back-of-the-Book Index Analogy:\n"
+                    f"{analogy_diag}"
+                    f"Imagine you are holding a 500-page biology textbook and want to find every mention of *Photosynthesis*:\n\n"
+                    f"1. **Linear Scan (Without an Index)**: You would have to flip through all 500 pages line by line from page 1 to 500. This is slow and tedious ($O(N)$ sequential scanning).\n"
+                    f"2. **The Inverted Index (With an Index)**: You flip straight to the alphabetical index at the very back of the book. Under letter **P**, you find:\n"
+                    f"   > **Photosynthesis**: pages 42, 88, 105.\n\n"
+                    f"In search engine terminology:\n"
+                    f"- The word **Photosynthesis** is the **Dictionary Term**.\n"
+                    f"- The list `[42, 88, 105]` is the **Postings List** (the sorted Document IDs where that term occurs).\n\n"
+                    f"Instead of reading every file on your computer, the search engine looks up the term in memory and jumps straight to matching documents!"
+                )
+                followups = [
+                    "How does an inverted index merge postings lists for AND queries?",
+                    "Can you show me a concrete example of an inverted index?",
+                    "Explain the trade-off between precision and recall.",
+                ]
+                check_q = "In the book index analogy, what corresponds to the postings list in an IR system?"
+                return reply, followups, check_q
+
+            # Default: Analogy for Information Retrieval
+            analogy_diag = (
+                "```mermaid\n"
+                "graph LR\n"
+                "    A[\"Student Question (Information Need)\"] --> B[\"Library Card Catalog\"]\n"
+                "    B --> C[\"Subject & Shelf Numbers\"]\n"
+                "    C --> D[\"Relevant Books on the Shelves\"]\n"
+                "```\n\n"
+            )
+            reply = (
+                f"Here is a simple, real-world analogy for **Information Retrieval (IR)**, connecting with **{source_name} (Page {page_num})**:\n\n"
+                f"### The University Library Card Catalog Analogy:\n"
+                f"{analogy_diag}"
+                f"Imagine walking into a university library containing 1,000,000 books:\n\n"
+                f"1. **Your Information Need**: You are writing a paper on *Renewable Energy Storage*. That is your underlying research goal.\n"
+                f"2. **Your Query**: You search the catalog terminal for *\"battery storage solar power\"*.\n"
+                f"3. **The Retrieval System**: The catalog doesn't just return every book containing the word 'power'. Instead, it ranks and suggests the top books focusing specifically on energy storage.\n"
+                f"4. **Relevance**: You walk to the shelf, open the books, and evaluate whether they actually answer your research question.\n\n"
+                f"Notice that you didn't ask for a specific database row or ID number—you had an open-ended topic, and the retrieval system guided you to the most relevant materials!"
+            )
+            followups = [
+                "How does an inverted index speed up search?",
+                "Explain the trade-off between precision and recall.",
+                "How do search engines merge postings lists for AND queries?",
+            ]
+            check_q = "Why is searching a library different from querying an exact database table?"
+            return reply, followups, check_q
+
+        # B. Specialized handling for Precision and Recall / Trade-off
+        if "precision" in topic_lower or "recall" in topic_lower or ("precision" in msg_lower and "recall" in msg_lower) or ("trade-off" in msg_lower and ("precision" in msg_lower or "recall" in msg_lower)):
+            pr_diag = (
+                "```mermaid\n"
+                "graph TD\n"
+                "    subgraph P [\"Precision: Quality of Returned Results\"]\n"
+                "        P1[\"Formula: TP / (TP + FP)\"]\n"
+                "        P2[\"What fraction of retrieved items are relevant?\"]\n"
+                "    end\n"
+                "    subgraph R [\"Recall: Completeness of Retrieval\"]\n"
+                "        R1[\"Formula: TP / (TP + FN)\"]\n"
+                "        R2[\"What fraction of all relevant items were found?\"]\n"
+                "    end\n"
+                "    P & R --> F[\"F-Measure: Balanced Harmonic Mean\"]\n"
+                "```\n\n"
+            )
+            reply = (
+                f"Here is the breakdown of **Precision and Recall** and their fundamental trade-off in Information Retrieval, based on **{source_name}**:\n\n"
+                f"{pr_diag}"
+                f"### 1. Definitions & Formulas:\n"
+                f"- **Precision (Quality)**:\n"
+                f"  $$\\text{{Precision}} = \\frac{{\\text{{Relevant Documents Retrieved}}}}{{\\text{{Total Documents Retrieved}}}} = \\frac{{TP}}{{TP + FP}}$$\n"
+                f"  *In plain English*: Of all the results the search engine displayed on your screen, how many were actually helpful?\n\n"
+                f"- **Recall (Quantity / Completeness)**:\n"
+                f"  $$\\text{{Recall}} = \\frac{{\\text{{Relevant Documents Retrieved}}}}{{\\text{{Total Relevant Documents in Entire Collection}}}} = \\frac{{TP}}{{TP + FN}}$$\n"
+                f"  *In plain English*: Did the search engine find all the good documents that exist, or did it miss important ones?\n\n"
+                f"### 2. The Precision vs. Recall Trade-off:\n"
+                f"- If a system returns **only 1 document** that it is 100% sure is correct: **Precision is 100%**, but **Recall is very low** (it missed hundreds of other good documents).\n"
+                f"- If a system returns **all 1,000,000 documents** in the collection: **Recall is 100%** (no good document was missed), but **Precision is almost 0%** (the user is buried in irrelevant noise).\n\n"
+                f"### 3. Balancing with F-Measure:\n"
+                f"To balance both metrics in a single score, search systems use the harmonic mean:\n"
+                f"$$F_1 = 2 \\times \\frac{{\\text{{Precision}} \\times \\text{{Recall}}}}{{\\text{{Precision}} + \\text{{Recall}}}}$$"
+            )
+            followups = [
+                "When should a search system prioritize recall over precision?",
+                "How does an inverted index merge postings lists for AND queries?",
+                "Can you give me a simple real-world analogy for Information Retrieval?",
+            ]
+            check_q = "Why does returning more search results usually increase recall but decrease precision?"
+            return reply, followups, check_q
+
+        # C. Specialized handling for Postings List Merge / Boolean AND Queries
+        if ("merge" in topic_lower or "merge" in msg_lower or "merging" in msg_lower) and ("postings" in topic_lower or "postings" in msg_lower or "and quer" in msg_lower or "index" in topic_lower or "index" in msg_lower):
+            merge_diag = (
+                "```mermaid\n"
+                "graph LR\n"
+                "    subgraph Term1 [\"Postings: Brutus\"]\n"
+                "        B[\"[1, 2, 4, 11, 31, 45]\"]\n"
+                "    end\n"
+                "    subgraph Term2 [\"Postings: Caesar\"]\n"
+                "        C[\"[1, 4, 15, 31, 88]\"]\n"
+                "    end\n"
+                "    B & C --> M[\"2-Pointer Linear Walk O(x+y)\"]\n"
+                "    M --> R[\"Intersection: DocIDs [1, 4, 31]\"]\n"
+                "```\n\n"
+            )
+            reply = (
+                f"Here is how search systems **merge postings lists** for Boolean AND queries, based on **{source_name} (Page 37)**:\n\n"
+                f"{merge_diag}"
+                f"### The Two-Pointer Intersection Walkthrough:\n"
+                f"Suppose a student searches for `Brutus AND Caesar`:\n\n"
+                f"- **List 1 (`Brutus`)**: `[1, 2, 4, 11, 31, 45]` (length $x$)\n"
+                f"- **List 2 (`Caesar`)**: `[1, 4, 15, 31, 88]` (length $y$)\n\n"
+                f"Because both postings lists are stored in **sorted order by DocID**, we can find documents containing both words in a single linear pass using two pointers (p1 and p2):\n\n"
+                f"1. **Step 1**: $p1 = 1, p2 = 1$. They match! Add `1` to results $\\rightarrow$ `[1]`. Advance both pointers.\n"
+                f"2. **Step 2**: $p1 = 2, p2 = 4$. $2 < 4$, so advance $p1$.\n"
+                f"3. **Step 3**: $p1 = 4, p2 = 4$. They match! Add `4` to results $\\rightarrow$ `[1, 4]`. Advance both pointers.\n"
+                f"4. **Step 4**: $p1 = 11, p2 = 15$. $11 < 15$, so advance $p1$.\n"
+                f"5. **Step 5**: $p1 = 31, p2 = 15$. $31 > 15$, so advance $p2$.\n"
+                f"6. **Step 6**: $p1 = 31, p2 = 31$. They match! Add `31` to results $\\rightarrow$ `[1, 4, 31]`. Advance both pointers.\n"
+                f"7. **Step 7**: $p1 = 45, p2 = 88$. $45 < 88$, so advance $p1$.\n"
+                f"8. **Step 8**: List 1 is exhausted. Finish!\n\n"
+                f"### Complexity Advantage:\n"
+                f"- **Linear Time**: Takes at most $O(x + y)$ comparisons.\n"
+                f"- The matching documents satisfying the AND query are **Doc 1, Doc 4, and Doc 31**."
+            )
+            followups = [
+                "How do skip pointers make postings merges even faster?",
+                "Explain the trade-off between precision and recall.",
+                "Can you give me a simple real-world analogy for an inverted index?",
+            ]
+            check_q = "Why must the Document IDs in postings lists be sorted for this algorithm to work?"
+            return reply, followups, check_q
+
+        # D. Specialized handling for Information Need vs. Query distinction
+        if ("need" in topic_lower and "query" in topic_lower) or ("difference between an information need and a query" in msg_lower) or ("need and a query" in msg_lower):
+            need_diag = (
+                "```mermaid\n"
+                "graph TD\n"
+                "    A[\"User's Mind: Information Need (Desire for Knowledge)\"] --> B[\"Translation Gap: Query Formulation\"]\n"
+                "    B --> C[\"Computer System: Query (Keywords / String)\"]\n"
+                "    C --> D[\"Retrieved Documents Ranked by System\"]\n"
+                "    D --> E[\"User Evaluation: Does this satisfy the original need?\"]\n"
+                "```\n\n"
+            )
+            reply = (
+                f"Here is the key distinction between an **Information Need** and a **Query**, as defined in **{source_name} (Page 12)**:\n\n"
+                f"{need_diag}"
+                f"### 1. What is an Information Need? (Page 12)\n"
+                f"- An **information need** is the topic or problem that a user wishes to know more about. It exists in the user's mind and is abstract and subjective.\n"
+                f"- *Example*: *\"I need to find a quiet coffee shop near the university campus with reliable Wi-Fi and power outlets to study for my exam tonight.\"*\n\n"
+                f"### 2. What is a Query? (Page 12)\n"
+                f"- A **query** is the concrete sequence of words or symbols submitted to the computer retrieval system to convey that information need.\n"
+                f"- *Example*: *\"quiet coffee shop campus wifi\"*\n\n"
+                f"### 3. The Semantic Gap:\n"
+                f"- A document might contain all the words in the query, but still fail to satisfy the user's information need (e.g., a news article about a permanently closed coffee shop).\n"
+                f"- In Information Retrieval, a document is only **relevant** if it actually satisfies the user's underlying information need, not just matches the query words!"
+            )
+            followups = [
+                "How do search engines evaluate precision and recall?",
+                "How does an inverted index speed up document retrieval?",
+                "Can you give me a simple real-world analogy for Information Retrieval?",
+            ]
+            check_q = "Why might a document that matches every word in a query still fail to satisfy the user's information need?"
+            return reply, followups, check_q
+
+        # E. Specialized handling for Concrete Example of Inverted Index
+        if ("concrete example" in msg_lower or "example of an inverted index" in msg_lower or "worked example" in msg_lower) and ("index" in topic_lower or "index" in msg_lower):
+            ex_diag = (
+                "```mermaid\n"
+                "graph LR\n"
+                "    subgraph Dictionary [\"Vocabulary\"]\n"
+                "        T1[\"home\"]\n"
+                "        T2[\"new\"]\n"
+                "        T3[\"sales\"]\n"
+                "    end\n"
+                "    subgraph Postings [\"Postings Lists (DocIDs)\"]\n"
+                "        P1[\"[1, 2, 3]\"]\n"
+                "        P2[\"[1, 3]\"]\n"
+                "        P3[\"[1, 2, 3]\"]\n"
+                "    end\n"
+                "    T1 --> P1\n"
+                "    T2 --> P2\n"
+                "    T3 --> P3\n"
+                "```\n\n"
+            )
+            reply = (
+                f"Here is a concrete worked example of an **Inverted Index**, based on **{source_name} (Page 37)**:\n\n"
+                f"{ex_diag}"
+                f"### Consider a Collection of 3 Short Documents:\n"
+                f"- **Doc 1**: *\"new home sales\"*\n"
+                f"- **Doc 2**: *\"home sales rise\"*\n"
+                f"- **Doc 3**: *\"new home sales rise\"*\n\n"
+                f"### 1. The Resulting Inverted Index:\n"
+                f"We extract every unique term (Dictionary) and record which documents contain each term (Postings List):\n\n"
+                f"| Term | Document Frequency | Postings List (Sorted DocIDs) |\n"
+                f"| :--- | :--- | :--- |\n"
+                f"| **home** | 3 | `[1, 2, 3]` |\n"
+                f"| **new** | 2 | `[1, 3]` |\n"
+                f"| **rise** | 2 | `[2, 3]` |\n"
+                f"| **sales** | 3 | `[1, 2, 3]` |\n\n"
+                f"### 2. Processing a Query:\n"
+                f"If a user searches for `new AND rise`:\n"
+                f"- Look up `new` $\\rightarrow$ `[1, 3]`\n"
+                f"- Look up `rise` $\\rightarrow$ `[2, 3]`\n"
+                f"- Intersect both lists $\\rightarrow$ **Doc 3**!\n\n"
+                f"The search engine finds the exact document without reading the text of Doc 1, 2, or 3 at query time!"
+            )
+            followups = [
+                "How does an inverted index merge postings lists for AND queries?",
+                "Explain the trade-off between precision and recall.",
+                "Can you give me a simple real-world analogy for an inverted index?",
+            ]
+            check_q = "How does this inverted index structure make Boolean searches so fast?"
+            return reply, followups, check_q
 
         # 1. Specialized handling for Information Retrieval core concept
         if "information retrieval" in topic_lower or topic_lower == "ir":
@@ -961,6 +1243,33 @@ class LLMService:
                 "    B --> C[\"Stop-Word Filter\"]\n"
                 "    C --> D[\"Stemming / Lemmatization\"]\n"
                 "    D --> E[\"Normalized Tokens\"]\n"
+                "```"
+            )
+        if "precision" in t or "recall" in t:
+            return (
+                "```mermaid\n"
+                "graph TD\n"
+                "    subgraph Precision [\"Precision: Quality of Returned Results\"]\n"
+                "        P[\"TP / (TP + FP)\"]\n"
+                "    end\n"
+                "    subgraph Recall [\"Recall: Completeness of Retrieval\"]\n"
+                "        R[\"TP / (TP + FN)\"]\n"
+                "    end\n"
+                "    P & R --> F[\"F-Measure: Balanced Harmonic Mean\"]\n"
+                "```"
+            )
+        if "merge" in t or "postings" in t:
+            return (
+                "```mermaid\n"
+                "graph LR\n"
+                "    subgraph Term1 [\"Postings: Brutus\"]\n"
+                "        B[\"[1, 2, 4, 11, 31, 45]\"]\n"
+                "    end\n"
+                "    subgraph Term2 [\"Postings: Caesar\"]\n"
+                "        C[\"[1, 4, 15, 31, 88]\"]\n"
+                "    end\n"
+                "    B & C --> M[\"2-Pointer Linear Merge O(x+y)\"]\n"
+                "    M --> R[\"Intersection: [1, 4, 31]\"]\n"
                 "```"
             )
         return ""

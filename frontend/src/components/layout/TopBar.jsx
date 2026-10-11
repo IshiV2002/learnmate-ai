@@ -2,17 +2,29 @@ import Button from "../ui/Button.jsx";
 import Icon from "../ui/Icon.jsx";
 import { getNavigationItem } from "./navigation.js";
 
-function TopBar({ currentPage, onLogout, onNavigate, onOpenMenu, onToggleTheme, onViewPlans, theme, user }) {
+function TopBar({ currentPage, isSidebarCollapsed, onLogout, onNavigate, onOpenMenu, onToggleSidebar, onToggleTheme, onViewPlans, theme, user }) {
   const page = getNavigationItem(currentPage);
 
   return (
     <header className="app-topbar">
       <div className="topbar-main">
+        {isSidebarCollapsed && (
+          <button
+            aria-label="Open sidebar"
+            className="topbar-collapsed-brand"
+            onClick={onToggleSidebar}
+            title="Open sidebar"
+            type="button"
+          >
+            <span className="app-brand-mark" aria-hidden="true">LM</span>
+          </button>
+        )}
         <Button
-          aria-label="Open navigation menu"
-          className="mobile-menu-button"
+          aria-label={isSidebarCollapsed ? "Open sidebar navigation" : "Close sidebar navigation"}
+          className="sidebar-toggle-button"
           icon={<Icon name="menu" />}
-          onClick={onOpenMenu}
+          onClick={onToggleSidebar || onOpenMenu}
+          title={isSidebarCollapsed ? "Open sidebar" : "Close sidebar"}
         />
         <div className="topbar-copy">
           <p className="topbar-kicker">Your study space</p>

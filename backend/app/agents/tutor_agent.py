@@ -303,7 +303,7 @@ class TutorAgent:
         detected_concept = LLMService._extract_concept_from_query(request.message)
         persisted_topic = (
             active_topic
-            if (active_topic and session.topic_focus in ("Course Foundations", "Course Concepts", "this topic", ""))
+            if (active_topic and active_topic not in ("Course Foundations", "Course Concepts", "this topic", ""))
             else session.topic_focus
         )
 

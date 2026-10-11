@@ -8,6 +8,7 @@ import BookOpeningTransition from "../transitions/BookOpeningTransition.jsx";
 
 function AppShell({ children, currentPage, navigationDirection, navigationTransition, onEntryAnimationComplete, onLogout, onNavigate, onToggleTheme, onViewPlans, playEntryAnimation, theme, user }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const contentRef = useRef(null);
   const previousPage = useRef(currentPage);
 
@@ -25,8 +26,16 @@ function AppShell({ children, currentPage, navigationDirection, navigationTransi
     setMobileMenuOpen(false);
   }
 
+  function handleToggleSidebar() {
+    if (window.innerWidth <= 980) {
+      setMobileMenuOpen((prev) => !prev);
+    } else {
+      setIsSidebarCollapsed((prev) => !prev);
+    }
+  }
+
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${isSidebarCollapsed ? "app-shell-sidebar-collapsed" : ""}`}>
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <AmbientBackground />
       <Sidebar currentPage={currentPage} onNavigate={handleNavigate} />
@@ -34,9 +43,11 @@ function AppShell({ children, currentPage, navigationDirection, navigationTransi
       <div className="app-workspace">
         <TopBar
           currentPage={currentPage}
+          isSidebarCollapsed={isSidebarCollapsed}
           onLogout={onLogout}
           onNavigate={handleNavigate}
           onOpenMenu={() => setMobileMenuOpen(true)}
+          onToggleSidebar={handleToggleSidebar}
           onToggleTheme={onToggleTheme}
           onViewPlans={onViewPlans}
           theme={theme}

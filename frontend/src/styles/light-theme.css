@@ -403,20 +403,43 @@
   background: #fbfcf9;
 }
 
-:root[data-theme="light"] :where(.tutor-chat-header, .tutor-input-bar, .tutor-evidence-header, .tutor-evidence-desc) {
+:root[data-theme="light"] :where(.tutor-chat-header, .tutor-input-bar, .tutor-interactive-panel, .tutor-evidence-header, .tutor-evidence-desc) {
   background: #f7f9f4;
+}
+
+:root[data-theme="light"] .tutor-concept-check-card {
+  border-color: #ebd39f;
+  background: #fef9ed;
+  color: var(--color-text);
+}
+
+:root[data-theme="light"] .tutor-concept-check-text p {
+  color: var(--color-text);
+}
+
+:root[data-theme="light"] .tutor-followup-pill {
+  border-color: #c9d8ce;
+  background: #ffffff;
+  color: var(--color-text);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 4%);
+}
+
+:root[data-theme="light"] .tutor-followup-pill:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  background: #eef6f2;
+  color: var(--color-accent-strong);
 }
 
 :root[data-theme="light"] :where(.quiz-format-pill, .quiz-scope-btn, .quiz-refresh-btn, .tf-option-card, .quiz-tag, .tutor-mode-pill, .tutor-evidence-count-badge) {
   background: #fafbf8;
 }
 
-:root[data-theme="light"] :where(.vault-delete-dialog, .quiz-delete-dialog) {
+:root[data-theme="light"] :where(.vault-delete-dialog, .quiz-delete-dialog, .tutor-delete-dialog, .tutor-history-dialog) {
   background: var(--color-surface);
   box-shadow: 0 28px 90px rgb(63 79 68 / 24%);
 }
 
-:root[data-theme="light"] :where(.vault-modal-backdrop, .quiz-modal-backdrop, .app-content .modal-overlay) {
+:root[data-theme="light"] :where(.vault-modal-backdrop, .quiz-modal-backdrop, .tutor-modal-backdrop, .app-content .modal-overlay) {
   background: rgb(36 48 41 / 42%);
 }
 
@@ -512,6 +535,50 @@
 
 :root[data-theme="light"] :where(.auth-error, .vault-feedback-error, .quiz-feedback-error, .tutor-feedback-error) {
   color: #9e4d52;
+}
+
+/* Ensure study mode flip card backs always have bright white readable text against dark background fills in light mode */
+:root[data-theme="light"] .tutor-mode-flip-back,
+:root[data-theme="light"] .tutor-mode-flip-back * {
+  color: #ffffff !important;
+}
+
+:root[data-theme="light"] .tutor-mode-back-kicker,
+:root[data-theme="light"] .tutor-mode-back-description,
+:root[data-theme="light"] .tutor-mode-back-cta {
+  color: #ffffff !important;
+}
+
+/* Primary buttons in light mode: ensure high contrast white text on solid emerald/teal background */
+:root[data-theme="light"] .tutor-button-primary,
+:root[data-theme="light"] .ui-button-primary {
+  color: #ffffff !important;
+  background: linear-gradient(135deg, #187158, #0e5441);
+  box-shadow: 0 4px 14px rgb(22 112 87 / 28%);
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 22%);
+}
+
+:root[data-theme="light"] .tutor-button-primary:hover:not(:disabled),
+:root[data-theme="light"] .ui-button-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1b8266, #12634d);
+  color: #ffffff !important;
+  box-shadow: 0 6px 18px rgb(22 112 87 / 35%);
+}
+
+/* Fix pale or low-contrast pills and badges in light mode */
+:root[data-theme="light"] .tutor-mode-pill {
+  background: #ffffff;
+  color: #1a4f40;
+  border-color: #c4d7cc;
+  font-weight: 700;
+}
+
+:root[data-theme="light"] .ui-badge-accent {
+  background: rgba(16, 185, 129, 0.12);
+  color: #065f46;
+  border-color: rgba(16, 185, 129, 0.3);
+  font-weight: 700;
 }
 
 @media (max-width: 720px) {

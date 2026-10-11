@@ -9,11 +9,13 @@ import {
   listAllQuizzes,
 } from "../services/api.js";
 import {
+  deduplicateAttempts,
   formatAccountDate,
   getAccountStats,
   getAccountSuggestions,
   getAttemptPercentage,
   getInitials,
+  isAttemptCompleted,
 } from "./account/accountUtils.js";
 import "./Account.css";
 
@@ -87,10 +89,31 @@ function Account({ onNavigate, onViewPlans, user }) {
     () => newestFirst(activity.documents).slice(0, 4),
     [activity.documents],
   );
-  const recentAttempts = useMemo(
-    () => newestFirst(activity.attempts).slice(0, 4),
-    [activity.attempts],
-  );
+  const recentQuizHistory = useMemo(() => {
+    const dedupedAttempts = deduplicateAttempts(activity.attempts);
+    const sortedAttempts = newestFirst(dedupedAttempts);
+
+    // Track which quizzes have already been attempted
+    const attemptedQuizIds = new Set(
+      sortedAttempts.map((a) => a.quiz_id).filter(Boolean),
+    );
+
+    // Include any generated quizzes that haven't been completed as pending
+    const pendingQuizzes = (activity.quizzes || [])
+      .filter((q) => q.quiz_id && !attemptedQuizIds.has(q.quiz_id))
+      .map((q) => ({
+        attempt_id: `pending_${q.quiz_id}`,
+        quiz_id: q.quiz_id,
+        quiz_title: q.title || "Practice quiz",
+        created_at: q.created_at,
+        is_completed: false,
+        is_pending: true,
+        total_questions: q.total_questions || 0,
+        score: null,
+      }));
+
+    return [...sortedAttempts, ...pendingQuizzes].slice(0, 6);
+  }, [activity.attempts, activity.quizzes]);
 
   return (
     <div className="account-page">
@@ -148,7 +171,13 @@ function Account({ onNavigate, onViewPlans, user }) {
             <span className="account-stat-icon account-stat-peach"><Icon name="quiz" size={20} /></span>
             <strong>{isLoading ? "—" : stats.quizzesTaken}</strong>
             <p>Quizzes taken</p>
-            <small>{isLoading ? "Loading results" : `${stats.generatedQuizzes} quizzes generated`}</small>
+            <small>
+              {isLoading
+                ? "Loading results"
+                : stats.incompleteQuizzes > 0
+                  ? `${stats.completedQuizzes} completed · ${stats.incompleteQuizzes} incomplete`
+                  : `${stats.completedQuizzes} completed · ${stats.generatedQuizzes} generated`}
+            </small>
           </article>
           <article>
             <span className="account-stat-icon account-stat-blue"><Icon name="tutor" size={20} /></span>
@@ -177,7 +206,7 @@ function Account({ onNavigate, onViewPlans, user }) {
 
           {isLoading ? (
             <p className="account-card-empty">Loading quiz history…</p>
-          ) : recentAttempts.length === 0 ? (
+          ) : recentQuizHistory.length === 0 ? (
             <div className="account-card-empty">
               <Icon name="quiz" size={24} />
               <strong>No completed quizzes yet</strong>
@@ -185,15 +214,53 @@ function Account({ onNavigate, onViewPlans, user }) {
             </div>
           ) : (
             <ul className="account-result-list">
-              {recentAttempts.map((attempt) => {
-                const percentage = getAttemptPercentage(attempt);
+              {recentQuizHistory.map((item) => {
+                const isPending = item.is_pending === true;
+                const isCompleted = !isPending && isAttemptCompleted(item);
+                const percentage = getAttemptPercentage(item);
+                const totalQ = item.total_questions || 0;
+                const answeredQ =
+                  item.questions_answered !== undefined
+                    ? item.questions_answered
+                    : totalQ;
+
                 return (
-                  <li key={attempt.attempt_id}>
+                  <li key={item.attempt_id}>
                     <div>
-                      <strong>{attempt.quiz_title || "Practice quiz"}</strong>
-                      <small>{formatAccountDate(attempt.created_at)}</small>
+                      <strong>{item.quiz_title || "Practice quiz"}</strong>
+                      <small>
+                        {formatAccountDate(item.created_at)}
+                        {totalQ > 0 && ` · ${totalQ} questions`}
+                      </small>
                     </div>
-                    <span>{percentage === null ? "—" : `${percentage}%`}</span>
+                    <div className="account-result-score-box">
+                      {isCompleted ? (
+                        <>
+                          <span className="account-result-percentage">
+                            {percentage === null ? "—" : `${percentage}%`}
+                          </span>
+                          <span className="account-status-pill account-status-completed">
+                            Completed
+                          </span>
+                        </>
+                      ) : isPending ? (
+                        <span className="account-status-pill account-status-pending">
+                          Pending
+                        </span>
+                      ) : (
+                        <>
+                          <span className="account-result-percentage">
+                            {percentage === null ? "—" : `${percentage}%`}
+                          </span>
+                          <span
+                            className="account-status-pill account-status-incomplete"
+                            title={`${answeredQ} of ${totalQ} questions answered`}
+                          >
+                            Incomplete ({answeredQ}/{totalQ})
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </li>
                 );
               })}

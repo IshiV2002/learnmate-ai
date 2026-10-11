@@ -375,6 +375,7 @@ class QuizAgent:
 
         # Build RecommendationAgent-compatible payload
         recommendation_payload = QuizSubmissionRequest(
+            attempt_id=attempt_id,
             student_id=submission.student_id,
             document_id=quiz.document_id,
             quiz_id=quiz.quiz_id,

@@ -384,22 +384,10 @@ export default function Tutor({
       {/* Hero Header & Telemetry Map */}
       <header className="tutor-hero">
         <div className="tutor-hero-copy">
-          <p className="tutor-eyebrow">Tutor · Socratic Guidance</p>
-          <h1>Master complex concepts with lecture-grounded dialogue.</h1>
+          <h1>Master your course concepts with your personal study tutor.</h1>
           <p className="tutor-hero-description">
-            Engage in personalized Socratic study sessions grounded strictly in your uploaded course lecture PDFs, with verified page-aware citations.
+            Ask questions, explore topics step-by-step, and get clear answers grounded in your uploaded lecture slides and course materials.
           </p>
-          <div className="tutor-hero-trust">
-            <span>
-              <TutorIcon name="shield" size={15} /> Server-grounded retrieval
-            </span>
-            <span>
-              <TutorIcon name="book" size={15} /> Page-aware citations
-            </span>
-            <span>
-              <TutorIcon name="brain" size={15} /> Bloom-aligned scaffolding
-            </span>
-          </div>
         </div>
 
         <div className="tutor-telemetry-map" aria-label="Tutor workspace statistics">
@@ -450,35 +438,15 @@ export default function Tutor({
             </button>
           </div>
         )}
-
-        {successMessage && (
-          <div className="tutor-feedback tutor-feedback-success" role="status">
-            <span className="tutor-feedback-icon" aria-hidden="true">
-              <TutorIcon name="check" size={17} />
-            </span>
-            <div>
-              <strong>Dialogue updated</strong>
-              <p>{successMessage}</p>
-            </div>
-            <button
-              aria-label="Dismiss success message"
-              onClick={() => setSuccessMessage("")}
-              type="button"
-            >
-              <TutorIcon name="close" size={16} />
-            </button>
-          </div>
-        )}
       </div>
 
-      {/* Section 01: Socratic Session Architect */}
+      {/* Section 01: Configure Study Session */}
       <section className="tutor-panel" aria-labelledby="tutor-setup-heading">
         <div className="tutor-section-heading">
           <div>
             <span className="tutor-section-number">01</span>
             <div>
-              <p className="tutor-section-kicker">Session Architect</p>
-              <h2 id="tutor-setup-heading">Configure Socratic study session</h2>
+              <h2 id="tutor-setup-heading">Configure your study session</h2>
             </div>
           </div>
           <div className="tutor-heading-actions">
@@ -573,10 +541,10 @@ export default function Tutor({
             </div>
           </div>
 
-          {/* Teaching Mode Selector Cards */}
+          {/* Teaching Mode Selector Cards - 3D Interactive Flip System */}
           <div className="tutor-modes-selector">
             <span className="tutor-modes-selector-label">
-              <TutorIcon name="brain" size={15} /> Select Pedagogical Mode
+              <TutorIcon name="brain" size={15} /> Choose Study Style
             </span>
             <div className="tutor-modes-grid" role="radiogroup">
               {Object.values(TUTOR_MODES).map((item) => {
@@ -584,20 +552,53 @@ export default function Tutor({
                 return (
                   <button
                     aria-checked={isSelected}
-                    className={`tutor-mode-card ${isSelected ? "tutor-mode-card-active" : ""}`}
+                    className={`tutor-mode-flip-card tutor-mode-theme-${item.id} ${
+                      isSelected ? "tutor-mode-flip-card-active" : ""
+                    }`}
                     key={item.id}
                     onClick={() => setMode(item.id)}
                     role="radio"
                     type="button"
                   >
-                    <div className="tutor-mode-card-header">
-                      <strong>
-                        <TutorIcon name={item.icon} size={17} />
-                        {item.label}
-                      </strong>
-                      <span className="tutor-mode-kicker">{item.kicker}</span>
+                    <div className="tutor-mode-flip-inner">
+                      {/* FRONT FACE: Simple model name & vibrant theme color */}
+                      <div className="tutor-mode-flip-front">
+                        <div className="tutor-mode-front-top">
+                          <span className="tutor-mode-icon-circle">
+                            <TutorIcon name={item.icon} size={20} />
+                          </span>
+                          {isSelected ? (
+                            <span className="tutor-mode-badge-active">
+                              <span className="tutor-mode-active-dot" /> Active
+                            </span>
+                          ) : (
+                            <span className="tutor-mode-flip-hint">
+                              Hover to preview ↺
+                            </span>
+                          )}
+                        </div>
+                        <div className="tutor-mode-front-bottom">
+                          <strong className="tutor-mode-front-name">{item.label}</strong>
+                          <span className="tutor-mode-front-kicker">{item.kicker}</span>
+                        </div>
+                      </div>
+
+                      {/* BACK FACE: Flips on hover to explain what the model does simply */}
+                      <div className="tutor-mode-flip-back">
+                        <div className="tutor-mode-back-top">
+                          <span className="tutor-mode-back-kicker">{item.kicker}</span>
+                          <span className="tutor-mode-back-icon">
+                            <TutorIcon name={item.icon} size={15} />
+                          </span>
+                        </div>
+                        <p className="tutor-mode-back-description">{item.description}</p>
+                        <div className="tutor-mode-back-bottom">
+                          <span className="tutor-mode-back-cta">
+                            {isSelected ? "✓ Selected Model" : "Click to Select"}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <p>{item.description}</p>
                   </button>
                 );
               })}
@@ -606,18 +607,18 @@ export default function Tutor({
         </form>
       </section>
 
-      {/* Section 02: Intelligent Socratic Dialogue Workspace */}
+      {/* Section 02: Interactive Study Workspace */}
       <section className="tutor-panel" aria-labelledby="tutor-workspace-heading">
         <div className="tutor-section-heading">
           <div>
             <span className="tutor-section-number">02</span>
             <div>
-              <p className="tutor-section-kicker">Pedagogical Dialogue</p>
-              <h2 id="tutor-workspace-heading">Active Socratic Workspace</h2>
+              <p className="tutor-section-kicker">Study Conversation</p>
+              <h2 id="tutor-workspace-heading">Interactive Study Workspace</h2>
             </div>
           </div>
           <span className="tutor-security-label">
-            <TutorIcon name="shield" size={15} /> Zero-hallucination grounding
+            <TutorIcon name="shield" size={15} /> Grounded in course material
           </span>
         </div>
 
@@ -626,12 +627,31 @@ export default function Tutor({
           <div className={`tutor-chat-card ${isChatMaximized ? "tutor-chat-card-maximized" : ""}`}>
             <div className="tutor-chat-header">
               <div className="tutor-session-status">
-                <span className="tutor-pulse-dot" aria-hidden="true" />
-                <strong>
-                  {currentSession
-                    ? currentSession.topic_focus || activeDocName
-                    : "Socratic AI Tutor Ready"}
-                </strong>
+                <div className="tutor-header-profile-badge">
+                  <div className="tutor-header-avatar-circle">
+                    <img
+                      src="/images/headers/tutor-portrait.png"
+                      alt="LearnMate AI Study Coach"
+                      className="tutor-header-avatar-img"
+                    />
+                    <span className="tutor-floating-status-dot" aria-hidden="true" />
+                  </div>
+                  <div className="tutor-header-text-block">
+                    <div className="tutor-header-title-row">
+                      <strong>
+                        {currentSession
+                          ? currentSession.topic_focus || activeDocName
+                          : "Study Coach Ready"}
+                      </strong>
+                      <span className="tutor-online-pill">
+                        <span className="tutor-pulse-dot" aria-hidden="true" /> Live
+                      </span>
+                    </div>
+                    <span className="tutor-header-subtitle">
+                      Course Grounded · Verified Citations
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <div className="tutor-header-badges">
@@ -689,18 +709,23 @@ export default function Tutor({
             </div>
 
             <div className="tutor-messages-container" role="log">
-              {/* Empty State (Clean Constellation - No Floating Robot) */}
+              {/* Empty State (Floating AI Study Coach Avatar) */}
               {!currentSession && !sessionLoading && (
                 <div className="tutor-empty-state">
                   <div className="tutor-empty-visual" aria-hidden="true">
-                    <span className="tutor-empty-icon-core">
-                      <TutorIcon name="brain" size={32} />
-                    </span>
+                    <div className="tutor-empty-floating-avatar">
+                      <img
+                        src="/images/headers/tutor-portrait.png"
+                        alt="LearnMate AI Study Coach"
+                        className="tutor-empty-avatar-img"
+                      />
+                      <span className="tutor-empty-avatar-sparkle">✨</span>
+                    </div>
                   </div>
-                  <p className="tutor-section-kicker">Dialogue Ready</p>
-                  <h3>Socratic Dialogue Grounded in Course Evidence</h3>
+                  <p className="tutor-section-kicker">Ready to Learn</p>
+                  <h3>Interactive Study Grounded in Your Course Notes</h3>
                   <p>
-                    Select an uploaded course lecture above and click <strong>“Start New Session”</strong> to engage in interactive, step-by-step Socratic inquiry with verified page citations.
+                    Select an uploaded course lecture above and click <strong>“Start New Session”</strong> to explore concepts step-by-step with verified citations from your slides.
                   </p>
                   {documents.length > 0 ? (
                     <button
@@ -739,7 +764,17 @@ export default function Tutor({
                       }`}
                       aria-hidden="true"
                     >
-                      <TutorIcon name={isStudent ? "user" : "brain"} size={18} />
+                      {isStudent ? (
+                        <span className="tutor-avatar-student-initial">
+                          {user?.full_name ? user.full_name.charAt(0).toUpperCase() : "U"}
+                        </span>
+                      ) : (
+                        <img
+                          src="/images/headers/tutor-portrait.png"
+                          alt="LearnMate AI Tutor"
+                          className="tutor-avatar-tutor-img"
+                        />
+                      )}
                     </div>
 
                     <div className="tutor-bubble-content">
@@ -792,7 +827,11 @@ export default function Tutor({
               {loading && (
                 <div className="tutor-bubble-wrapper tutor-bubble-tutor">
                   <div className="tutor-avatar tutor-avatar-tutor" aria-hidden="true">
-                    <TutorIcon name="brain" size={18} />
+                    <img
+                      src="/images/headers/tutor-portrait.png"
+                      alt="LearnMate AI Tutor"
+                      className="tutor-avatar-tutor-img"
+                    />
                   </div>
                   <div className="tutor-thinking-card">
                     <div className="tutor-typing-dots" aria-hidden="true">
@@ -826,9 +865,9 @@ export default function Tutor({
                 {suggestedFollowups.length > 0 && (
                   <div className="tutor-followup-cluster">
                     <span className="tutor-followup-label">
-                      <TutorIcon name="lightbulb" size={14} /> Quick Follow-ups:
+                      <TutorIcon name="lightbulb" size={14} /> Recommended:
                     </span>
-                    {suggestedFollowups.map((suggestion, idx) => (
+                    {suggestedFollowups.slice(0, 3).map((suggestion, idx) => (
                       <button
                         className="tutor-followup-pill"
                         disabled={loading}
@@ -836,7 +875,7 @@ export default function Tutor({
                         onClick={() => handleSendMessage(suggestion)}
                         type="button"
                       >
-                        “{suggestion}”
+                        {suggestion}
                       </button>
                     ))}
                   </div>
@@ -859,7 +898,7 @@ export default function Tutor({
                   }}
                   placeholder={
                     currentSession
-                      ? "Ask a conceptual question or respond to the Socratic prompt..."
+                      ? "Ask a question about your course notes or lecture slides..."
                       : "Start a study session above to chat with the AI Tutor..."
                   }
                   ref={textareaRef}
@@ -896,7 +935,7 @@ export default function Tutor({
             </div>
 
             <p className="tutor-evidence-desc">
-              Passages retrieved via the <strong>Retrieval Agent</strong> semantic search directly from your course PDF.
+              Key passages retrieved directly from your course slides to support the tutor's explanations.
             </p>
 
             <div className="tutor-citations-feed">
