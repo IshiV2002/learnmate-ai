@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { getDocumentContent } from "../../services/api.js";
 import MaterialIcon from "./MaterialIcon.jsx";
@@ -76,7 +77,7 @@ function DocumentViewerModal({ document, onClose }) {
     return null;
   }
 
-  return (
+  return createPortal(
     <div className="vault-modal-layer document-viewer-layer">
       <button
         aria-label="Close document viewer"
@@ -161,7 +162,7 @@ function DocumentViewerModal({ document, onClose }) {
           {documentUrl && (
             <iframe
               className="document-viewer-frame"
-              src={`${documentUrl}#view=FitH`}
+              src={`${documentUrl}#page=1&view=Fit`}
               title={`Preview of ${filename}`}
             />
           )}
@@ -172,7 +173,8 @@ function DocumentViewerModal({ document, onClose }) {
           Only your signed-in account can request this file. Images are displayed as the PDF copy created during OCR processing.
         </footer>
       </section>
-    </div>
+    </div>,
+    window.document.body,
   );
 }
 
