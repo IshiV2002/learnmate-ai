@@ -26,10 +26,35 @@ test("summarises real account activity", () => {
     pages: 20,
     generatedQuizzes: 3,
     quizzesTaken: 2,
+    completedQuizzes: 2,
+    incompleteQuizzes: 0,
+    pendingQuizzes: 1,
     averageScore: 70,
     tutorSessions: 1,
     recommendations: 2,
   });
+});
+
+test("deduplicates redundant quiz attempts and only counts fully completed quizzes", () => {
+  const attempts = [
+    // Duplicate pair of completed quiz
+    { attempt_id: "att_1", quiz_id: "quiz_a", score: 3, total_questions: 3, is_completed: true, created_at: "2026-10-10T12:00:00.000Z" },
+    { attempt_id: "att_2", quiz_id: "quiz_a", score: 3, total_questions: 3, is_completed: true, created_at: "2026-10-10T12:00:00.050Z" },
+    // Incomplete quiz (answered 2 of 5 questions)
+    { attempt_id: "att_3", quiz_id: "quiz_b", score: 1, total_questions: 5, questions_answered: 2, is_completed: false, created_at: "2026-10-10T13:00:00.000Z" },
+  ];
+
+  const stats = getAccountStats({
+    quizzes: [{ quiz_id: "quiz_a" }, { quiz_id: "quiz_b" }, { quiz_id: "quiz_c" }],
+    attempts,
+  });
+
+  // Only 1 completed quiz should be counted in quizzesTaken
+  assert.equal(stats.quizzesTaken, 1);
+  assert.equal(stats.completedQuizzes, 1);
+  assert.equal(stats.incompleteQuizzes, 1);
+  assert.equal(stats.pendingQuizzes, 2);
+  assert.equal(stats.generatedQuizzes, 3);
 });
 
 test("handles missing scores and creates useful new-student suggestions", () => {

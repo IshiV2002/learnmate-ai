@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import TutorIcon from "./TutorIcon.jsx";
 import { formatSessionDate, getModeMeta } from "./tutorUtils.js";
 
@@ -42,7 +43,7 @@ export default function SessionHistoryModal({
     return topic.includes(term) || mode.includes(term);
   });
 
-  return (
+  return createPortal(
     <div className="tutor-modal-layer">
       <button
         aria-label="Close session history modal"
@@ -59,10 +60,10 @@ export default function SessionHistoryModal({
       >
         <div className="tutor-history-header">
           <div>
-            <span className="tutor-dialog-eyebrow">Workspace Dialogue Records</span>
-            <h2 id="history-modal-title">Tutoring History ({sessions.length})</h2>
+            <span className="tutor-dialog-eyebrow">Past Sessions</span>
+            <h2 id="history-modal-title">Study History ({sessions.length})</h2>
             <p id="history-modal-description">
-              Revisit past Socratic sessions, continue active dialogue threads, or manage your history.
+              Review your previous study sessions or continue where you left off.
             </p>
           </div>
           <button
@@ -104,11 +105,11 @@ export default function SessionHistoryModal({
               <span className="tutor-history-empty-icon">
                 <TutorIcon name="history" size={28} />
               </span>
-              <h3>{searchTerm ? "No matching sessions found" : "No tutoring sessions yet"}</h3>
+              <h3>{searchTerm ? "No matching sessions found" : "No study sessions yet"}</h3>
               <p>
                 {searchTerm
                   ? "Try searching for a different keyword or clear the filter."
-                  : "Start a new lecture-grounded session to begin building your Socratic study history."}
+                  : "Start a study session above to begin building your learning history."}
               </p>
             </div>
           ) : (
@@ -188,6 +189,7 @@ export default function SessionHistoryModal({
           </button>
         </div>
       </section>
-    </div>
+    </div>,
+    document.body
   );
 }

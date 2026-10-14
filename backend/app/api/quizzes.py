@@ -1,3 +1,5 @@
+import json
+from datetime import datetime
 from threading import Lock
 from typing import Any
 from fastapi import APIRouter, HTTPException, Query, status
@@ -128,19 +130,58 @@ async def list_my_quiz_attempts(
             detail="Could not list quiz attempts.",
         ) from error
 
-    return [
-        {
-            "attempt_id": attempt.attempt_id,
-            "document_id": attempt.document_id,
-            "quiz_id": attempt.quiz_id,
-            "quiz_title": attempt.quiz_title,
-            "total_questions": attempt.total_questions,
-            "score": attempt.score,
-            "time_spent_seconds": attempt.time_spent_seconds,
-            "created_at": attempt.created_at,
-        }
-        for attempt in attempts
-    ]
+    # Deduplicate redundant attempts submitted within 5 seconds for the same quiz
+    deduped_attempts = []
+    seen_keys = set()
+    for attempt in attempts:
+        try:
+            dt = datetime.fromisoformat(attempt.created_at.replace("Z", "+00:00"))
+            ts_bucket = int(dt.timestamp() // 5)
+        except Exception:
+            ts_bucket = attempt.created_at[:16]
+        dedupe_key = (attempt.quiz_id, attempt.score, ts_bucket)
+        if dedupe_key in seen_keys:
+            continue
+        seen_keys.add(dedupe_key)
+        deduped_attempts.append(attempt)
+
+    results = []
+    for attempt in deduped_attempts:
+        questions_answered = 0
+        if attempt.submission_data_json:
+            try:
+                details = json.loads(attempt.submission_data_json)
+                for item in details:
+                    selected = (item.get("selected_answer") or "").strip()
+                    if selected and selected != "(No Answer)":
+                        questions_answered += 1
+            except Exception:
+                questions_answered = attempt.total_questions
+        else:
+            questions_answered = attempt.total_questions
+
+        is_completed = (
+            questions_answered >= attempt.total_questions
+            and attempt.total_questions > 0
+        )
+
+        results.append(
+            {
+                "attempt_id": attempt.attempt_id,
+                "document_id": attempt.document_id,
+                "quiz_id": attempt.quiz_id,
+                "quiz_title": attempt.quiz_title,
+                "total_questions": attempt.total_questions,
+                "questions_answered": questions_answered,
+                "is_completed": is_completed,
+                "status": "completed" if is_completed else "incomplete",
+                "score": attempt.score,
+                "time_spent_seconds": attempt.time_spent_seconds,
+                "created_at": attempt.created_at,
+            }
+        )
+
+    return results
 
 
 @router.get(

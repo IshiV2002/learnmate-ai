@@ -39,32 +39,32 @@ export function getTutorStats(pastSessions = [], documents = []) {
 export const TUTOR_MODES = {
   socratic: {
     id: "socratic",
-    label: "Socratic Discovery",
-    shortLabel: "Socratic",
+    label: "Guided Study",
+    shortLabel: "Guided Study",
     icon: "brain",
-    kicker: "Guided Inquiry",
+    kicker: "Step-by-step guidance",
     description:
-      "Guides with probing, thoughtful questions to help you discover principles from lecture evidence.",
+      "Explores course topics with you step-by-step, helping you understand core principles through conversation.",
     badgeClass: "tutor-mode-badge-socratic",
   },
   step_by_step: {
     id: "step_by_step",
-    label: "Step-by-Step Breakdown",
+    label: "Step-by-Step Explanations",
     shortLabel: "Step-by-Step",
     icon: "ladder",
-    kicker: "Structured Analysis",
+    kicker: "Clear breakdown",
     description:
-      "Deconstructs complex concepts into structured numbered steps with intuitive analogies.",
+      "Breaks difficult course concepts down into simple, easy-to-follow steps with examples.",
     badgeClass: "tutor-mode-badge-step",
   },
   concept_check: {
     id: "concept_check",
-    label: "Concept Check Challenge",
-    shortLabel: "Concept Check",
+    label: "Quick Concept Check",
+    shortLabel: "Quick Quiz",
     icon: "target",
-    kicker: "Active Retrieval",
+    kicker: "Knowledge check",
     description:
-      "Delivers a concise recap followed by targeted comprehension challenges to solidify recall.",
+      "Gives you a clear summary and tests your understanding with quick practice questions.",
     badgeClass: "tutor-mode-badge-check",
   },
 };

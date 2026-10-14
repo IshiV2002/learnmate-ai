@@ -58,7 +58,7 @@ class RecommendationAgent:
         submission: QuizSubmissionRequest,
     ) -> RecommendationResponse:
         """Process quiz results, generate explainable recommendations, and persist to database."""
-        attempt_id = f"att_{uuid.uuid4().hex[:12]}"
+        attempt_id = submission.attempt_id or f"att_{uuid.uuid4().hex[:12]}"
         recommendation_id = f"rec_{uuid.uuid4().hex[:12]}"
         now_timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -120,23 +120,24 @@ class RecommendationAgent:
                 )
             )
 
-            # 5. Persist Quiz Attempt to SQLite
-            total_correct = sum(1 for q in submission.questions if q.is_correct)
-            quiz_record = QuizAttemptRecord(
-                attempt_id=attempt_id,
-                student_id=submission.student_id,
-                document_id=submission.document_id,
-                quiz_id=submission.quiz_id,
-                quiz_title=submission.quiz_title,
-                total_questions=len(submission.questions),
-                score=total_correct,
-                time_spent_seconds=submission.time_spent_seconds,
-                submission_data_json=json.dumps(
-                    [q.model_dump() for q in submission.questions]
-                ),
-                created_at=now_timestamp,
-            )
-            self.database.save_quiz_attempt(quiz_record)
+            # 5. Persist Quiz Attempt to SQLite only if not already saved by Quiz Agent
+            if not submission.attempt_id:
+                total_correct = sum(1 for q in submission.questions if q.is_correct)
+                quiz_record = QuizAttemptRecord(
+                    attempt_id=attempt_id,
+                    student_id=submission.student_id,
+                    document_id=submission.document_id,
+                    quiz_id=submission.quiz_id,
+                    quiz_title=submission.quiz_title,
+                    total_questions=len(submission.questions),
+                    score=total_correct,
+                    time_spent_seconds=submission.time_spent_seconds,
+                    submission_data_json=json.dumps(
+                        [q.model_dump() for q in submission.questions]
+                    ),
+                    created_at=now_timestamp,
+                )
+                self.database.save_quiz_attempt(quiz_record)
 
             # 6. Persist Recommendation Record to SQLite
             rec_record = RecommendationRecord(

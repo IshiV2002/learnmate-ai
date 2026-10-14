@@ -9,6 +9,73 @@ export function getAttemptPercentage(attempt) {
   return Math.round((score / totalQuestions) * 100);
 }
 
+/**
+ * Checks if a quiz attempt is successfully completed with all questions answered.
+ */
+export function isAttemptCompleted(attempt) {
+  if (!attempt || typeof attempt !== "object") return false;
+
+  // Explicit completion flag from API
+  if (typeof attempt.is_completed === "boolean") {
+    return attempt.is_completed;
+  }
+  if (attempt.status === "completed") {
+    return true;
+  }
+  if (attempt.status === "incomplete") {
+    return false;
+  }
+
+  // Answer count vs total questions check
+  if (typeof attempt.questions_answered === "number" && typeof attempt.total_questions === "number") {
+    return attempt.questions_answered >= attempt.total_questions && attempt.total_questions > 0;
+  }
+
+  // Fallback: If score and total_questions are valid finite numbers > 0
+  const total = Number(attempt.total_questions);
+  return Number.isFinite(total) && total > 0;
+}
+
+/**
+ * Deduplicates quiz attempts by removing redundant duplicates submitted within a short window.
+ */
+export function deduplicateAttempts(attempts = []) {
+  if (!Array.isArray(attempts)) return [];
+
+  const seen = new Set();
+  const deduped = [];
+
+  for (const attempt of attempts) {
+    if (!attempt || typeof attempt !== "object") continue;
+
+    // Use attempt_id first
+    if (attempt.attempt_id && seen.has(attempt.attempt_id)) {
+      continue;
+    }
+    if (attempt.attempt_id) {
+      seen.add(attempt.attempt_id);
+    }
+
+    // Check cluster key: quiz_id + score + 10-second timestamp bucket
+    const quizId = attempt.quiz_id || "";
+    const score = attempt.score !== undefined ? attempt.score : "";
+    const timeMs = Date.parse(attempt.created_at || "") || 0;
+    const timeBucket = Math.floor(timeMs / 10000); // 10-second bucket
+
+    const clusterKey = `${quizId}_${score}_${timeBucket}`;
+    if (seen.has(clusterKey)) {
+      continue;
+    }
+    if (quizId) {
+      seen.add(clusterKey);
+    }
+
+    deduped.push(attempt);
+  }
+
+  return deduped;
+}
+
 export function getAccountStats({
   attempts = [],
   documents = [],
@@ -16,8 +83,11 @@ export function getAccountStats({
   recommendations = [],
   tutorSessions = [],
 } = {}) {
-  const safeAttempts = Array.isArray(attempts) ? attempts : [];
-  const percentages = safeAttempts
+  const safeAttempts = deduplicateAttempts(Array.isArray(attempts) ? attempts : []);
+  const completedAttempts = safeAttempts.filter(isAttemptCompleted);
+  const incompleteAttempts = safeAttempts.filter((a) => !isAttemptCompleted(a));
+
+  const percentages = completedAttempts
     .map(getAttemptPercentage)
     .filter((percentage) => percentage !== null);
 
@@ -28,7 +98,13 @@ export function getAccountStats({
       0,
     ),
     generatedQuizzes: Array.isArray(quizzes) ? quizzes.length : 0,
-    quizzesTaken: safeAttempts.length,
+    quizzesTaken: completedAttempts.length,
+    completedQuizzes: completedAttempts.length,
+    incompleteQuizzes: incompleteAttempts.length,
+    pendingQuizzes: Math.max(
+      0,
+      (Array.isArray(quizzes) ? quizzes.length : 0) - completedAttempts.length,
+    ),
     averageScore:
       percentages.length > 0
         ? Math.round(

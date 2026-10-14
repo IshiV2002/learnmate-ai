@@ -222,6 +222,9 @@ class QuizSubmissionRequest(BaseModel):
     time_spent_seconds: int = Field(
         default=0, ge=0, description="Total duration in seconds"
     )
+    attempt_id: str | None = Field(
+        default=None, description="Optional existing quiz attempt ID to prevent duplicates"
+    )
     questions: list[QuestionMistakeDetail] = Field(
         ..., min_length=1, description="List of questions and answers"
     )

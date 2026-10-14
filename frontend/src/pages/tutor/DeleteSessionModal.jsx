@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import TutorIcon from "./TutorIcon.jsx";
 
 export default function DeleteSessionModal({
@@ -29,9 +30,9 @@ export default function DeleteSessionModal({
 
   if (!session) return null;
 
-  const title = session.topic_focus || "this tutoring session";
+  const title = session.topic_focus || "this study session";
 
-  return (
+  return createPortal(
     <div className="tutor-modal-layer">
       <button
         aria-label="Close delete confirmation"
@@ -50,10 +51,10 @@ export default function DeleteSessionModal({
         <span className="tutor-delete-dialog-icon" aria-hidden="true">
           <TutorIcon name="trash" size={24} />
         </span>
-        <p className="tutor-dialog-eyebrow">Remove dialogue history</p>
+        <p className="tutor-dialog-eyebrow">Delete Session</p>
         <h2 id="delete-session-title">Delete “{title}”?</h2>
         <p id="delete-session-description">
-          This permanently removes this Socratic dialogue session and its entire message history from your workspace.
+          This permanently removes this study session and its chat history from your workspace.
         </p>
         <div className="tutor-dialog-actions">
           <button
@@ -76,6 +77,7 @@ export default function DeleteSessionModal({
           </button>
         </div>
       </section>
-    </div>
+    </div>,
+    document.body
   );
 }
